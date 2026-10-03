@@ -1,0 +1,63 @@
+/* /public/css/admin-archive.css */
+
+/* Stile per i box dei documenti archiviati */
+.doc-list-item {
+    display: flex;
+    align-items: center;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 15px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.doc-list-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px var(--shadow-color-light);
+    border-color: #3b82f6;
+}
+
+.doc-list-item a.doc-link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    flex-grow: 1;
+}
+
+.doc-icon {
+    font-size: 2rem;
+    color: #64748b;
+    margin-right: 15px;
+}
+
+.doc-filename {
+    font-weight: 600;
+    color: var(--text-color);
+    display: block;
+    margin-bottom: 2px;
+}
+
+.doc-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Modale Storico Log */
+#archived-log-list li {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-light-color);
+    font-size: 0.95rem;
+}
+#archived-log-list li:last-child {
+    border-bottom: none;
+}
+#archived-log-list li p {
+    margin: 0 0 4px 0;
+    line-height: 1.4;
+}
+#archived-log-list li small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+}

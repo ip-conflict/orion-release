@@ -1,0 +1,314 @@
+/* /public/css/dashboard-admin */
+
+/* Le variabili colore (--bg-color, --surface-color, --link-color, ecc.) sono
+   definite in /css/theme.css, caricato prima di questo file su ogni pagina:
+   qui non le si ridefinisce più, per evitare che due fogli di stile abbiano
+   ciascuno la propria versione delle stesse variabili con valori diversi. */
+
+
+/* Stili Generali per le Pagine Admin */
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+.admin-header {
+    background-color: var(--surface-color);
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px var(--shadow-color-light);
+    transition: background-color var(--transition-speed), border-color var(--transition-speed);
+}
+
+.admin-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--header-text-color);
+    transition: color var(--transition-speed);
+}
+
+.admin-header nav a {
+    text-decoration: none;
+    color: var(--link-color);
+    font-weight: 500;
+}
+
+.admin-main {
+    padding: 2rem;
+}
+
+.admin-layout {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.actions-panel, .settings-panel {
+    background-color: var(--surface-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px var(--shadow-color-medium);
+    transition: background-color var(--transition-speed);
+}
+
+.actions-panel h3 {
+    margin-top: 0;
+    border-bottom: 1px solid var(--border-light-color);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    transition: border-color var(--transition-speed);
+}
+
+.actions-panel a.button-secondary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    text-decoration: none;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    transition: background-color 0.2s ease;
+    color: var(--text-color); /* Eredita colore testo del tema */
+}
+
+.actions-panel a.button-secondary:hover {
+    background-color: var(--button-secondary-hover-bg);
+}
+
+
+/* Stili per il Form delle Impostazioni */
+.settings-panel h2 {
+    margin-top: 0;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="file"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-sizing: border-box; /* Assicura che il padding non aumenti la larghezza */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background-color: var(--bg-color); /* Sfondo input coerente */
+    color: var(--text-color); /* Testo input coerente */
+}
+
+.form-group input:focus {
+    border-color: var(--link-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    outline: none;
+}
+
+.input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.input-group input {
+    flex-grow: 1;
+}
+
+.button-icon {
+    flex-shrink: 0;
+    padding: 0 1rem;
+    font-size: 1.2rem;
+    background-color: var(--button-secondary-hover-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-color);
+}
+
+.form-actions {
+    margin-top: 2rem;
+    border-top: 1px solid var(--border-light-color);
+    padding-top: 1.5rem;
+    transition: border-color var(--transition-speed);
+}
+
+.feedback-message {
+    margin-left: 1rem;
+    font-style: italic;
+}
+.feedback-success { color: #27ae60; }
+.feedback-error { color: #c0392b; }
+.feedback-info { color: #2980b9; }
+
+
+/* Stili specifici per il MODALE della MAPPA (per evitare conflitti) */
+
+/* Overlay scuro che copre tutta la pagina */
+#mapPickerModal.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1050; /* Sopra tutto il resto */
+}
+
+/* Contenitore del modale */
+#mapPickerModal .modal-content {
+    background-color: var(--surface-color);
+    padding: 0; /* Rimuovi padding per header/footer a tutta larghezza */
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px; /* Più largo per la mappa */
+    display: flex;
+    flex-direction: column;
+    color: var(--text-color); /* Assicura che il testo nel modale sia leggibile */
+}
+
+/* Header del Modale */
+#mapPickerModal .modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#mapPickerModal .modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+#mapPickerModal .close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: var(--text-color);
+    opacity: 0.7;
+    cursor: pointer;
+    padding: 0 0.5rem;
+}
+
+/* Corpo del Modale */
+#mapPickerModal .modal-body {
+    padding: 1.5rem;
+    flex-grow: 1; /* Permette al corpo di espandersi */
+}
+
+#mapPickerModal .modal-body p {
+    margin-top: 0;
+    color: var(--text-color);
+    opacity: 0.9;
+}
+
+/* Footer del Modale */
+#mapPickerModal .modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    text-align: right;
+    background-color: var(--bg-color); /* Leggero stacco per il footer */
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+#mapPickerModal .modal-footer .button-secondary {
+    margin-right: 0.5rem;
+}
+
+/* --- Stili Toggle Switch Moderno --- */
+        .modern-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+            margin: 0;
+        }
+        .modern-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            margin: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border-color, #cbd5e1);
+            transition: .3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            border-radius: 34px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        /* Colore quando attivo (Verde) */
+        .modern-toggle input:checked + .toggle-slider {
+            background-color: #10b981; 
+        }
+        /* Movimento del pallino */
+        .modern-toggle input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        /* Effetto Focus */
+        .modern-toggle input:focus + .toggle-slider {
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+        }
+
+        /* --- Stili per le Card delle Opzioni Interne --- */
+        .option-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-color);
+            padding: 15px 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .option-card:hover {
+            border-color: #10b981;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+        }
+
+/* Esito dell'importazione utenti */
+.esito-import { margin-top: 15px; font-size: 0.9rem; }
+.esito-import h3 { font-size: 1rem; margin: 16px 0 8px; }
+.esito-import-sintesi { font-weight: 600; }
+.esito-import-errore { color: #ef4444; font-weight: 600; }
+.tabella-esito-import { width: 100%; border-collapse: collapse; }
+.tabella-esito-import th, .tabella-esito-import td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
+.righe-saltate-import { margin: 0; padding-left: 20px; }
+.righe-saltate-import li { margin-bottom: 4px; }

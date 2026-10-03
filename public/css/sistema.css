@@ -1,0 +1,291 @@
+/* ==========================================================================
+   ORION - Pagina Sistema
+   ==========================================================================
+   Backup, ripristino e aggiornamenti. È la pagina che si apre nel momento
+   peggiore - dati persi, qualcosa da rimettere a posto - quindi conta che si
+   legga in fretta: pochi riquadri, un'azione principale per riquadro, e i
+   pericoli scritti prima del pulsante che li causa, non dopo.
+   ========================================================================== */
+
+.pannello {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 26px 28px;
+    margin-bottom: 24px;
+}
+
+.pannello h2 {
+    margin: 0 0 6px 0;
+    font-size: 1.25rem;
+}
+
+.pannello .spiegazione,
+.pannello .avvertenza {
+    margin: 10px 0 0 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+/* L'avvertenza non è un errore: è una cosa da sapere. Un riquadro rosso qui
+   griderebbe insieme a tutto il resto, e a quel punto non griderebbe più
+   niente. */
+.pannello .avvertenza {
+    border-left: 3px solid #f59e0b;
+    padding-left: 12px;
+    margin-top: 14px;
+}
+
+.pannello .gruppo-azioni {
+    margin-top: 20px;
+}
+
+/* --- Stato ------------------------------------------------------------- */
+.griglia-stato {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.voce-stato {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.voce-stato .etichetta {
+    display: block;
+    font-size: 0.78rem;
+    text-transform: none;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.voce-stato .valore {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-color);
+    overflow-wrap: anywhere;
+}
+
+.voce-stato .valore.allarme { color: #dc2626; }
+.voce-stato .valore.attenzione { color: #b45309; }
+
+/* --- Passi di un'operazione -------------------------------------------- */
+.passi {
+    list-style: none;
+    margin: 16px 0 0 0;
+    padding: 0;
+}
+
+.passi li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light-color, var(--border-color));
+    font-size: 0.95rem;
+}
+
+.passi li:last-child { border-bottom: none; }
+
+.passi li::before {
+    content: '·';
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 14px;
+}
+
+.passi li.fatto::before   { content: '✓'; color: #15803d; }
+.passi li.errore::before  { content: '✕'; color: #dc2626; }
+.passi li.saltato::before { content: '–'; }
+.passi li.corso::before   { content: '…'; }
+
+.esito {
+    margin: 16px 0 0 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+}
+
+.esito.fatto   { color: var(--success-text); }
+.esito.errore  { color: var(--danger-text); }
+
+/* --- Riquadro del ripristino ------------------------------------------- */
+.riquadro-pericolo {
+    background: rgba(220, 38, 38, 0.06);
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 16px 0;
+}
+
+.riquadro-pericolo p {
+    margin: 0 0 10px 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-color);
+}
+
+.riquadro-pericolo p:last-child { margin-bottom: 0; }
+
+.riga-backup-scelto {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.modal-body .campo {
+    display: block;
+    margin-top: 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.modal-body .campo input {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.modal-body .riga-opzione {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
+    font-size: 0.92rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.modal-body .riga-opzione small {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.errore {
+    margin-top: 14px;
+    color: #dc2626;
+    font-size: 0.9rem;
+}
+
+.nota {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.attesa { color: var(--text-muted); }
+
+/* Il file da caricare passa da un input nascosto: quello di serie non si può
+   vestire come gli altri pulsanti, e due pulsanti diversi affiancati sembrano
+   due cose diverse. */
+.carica-archivio { display: inline-flex; cursor: pointer; }
+.carica-archivio .button-style { cursor: pointer; }
+
+@media (max-width: 640px) {
+    .pannello { padding: 20px 16px; }
+}
+
+/* --- Versione e aggiornamenti ------------------------------------------ */
+/* L'origine degli aggiornamenti la si tocca una volta sola, quindi sta
+   chiusa: chi apre questa pagina di solito vuole solo sapere se c'è una
+   versione nuova. */
+#origine-avanzata {
+    margin-top: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: var(--bg-color);
+}
+
+#origine-avanzata summary {
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+#origine-avanzata .campo {
+    display: block;
+    margin-top: 14px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+#origine-avanzata .campo input,
+#origine-avanzata .campo select {
+    display: block;
+    width: 100%;
+    max-width: 420px;
+    margin-top: 6px;
+    padding: 9px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-color);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+
+.pannello .riga-opzione {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 0.93rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.pannello .riga-opzione small {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.83rem;
+    line-height: 1.5;
+}
+
+/* Le note di versione arrivano da chi pubblica l'aggiornamento: vanno
+   mostrate come sono state scritte, a capo compresi, e senza farle uscire
+   dal riquadro. */
+.note-versione {
+    margin-top: 20px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.note-versione h3 {
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+}
+
+.note-versione pre {
+    margin: 0;
+    max-height: 260px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+}

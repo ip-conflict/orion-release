@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Squadre - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+    
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt" style="width: 20px;"></i> Centro Operativo</a></li>
+                <!-- Nascosti di partenza e svelati solo agli amministratori dal
+                     codice della pagina: senza questi identificativi un volontario
+                     vedeva due voci che, cliccandole, lo rimbalzavano indietro. -->
+                <li id="sidebar-settings" style="display: none;"><a href="/admin/dashboard-admin.html"><i class="fas fa-cogs" style="width: 20px;"></i> Impostazioni</a></li>
+                <li id="sidebar-users" style="display: none;"><a href="/admin/admin.html"><i class="fas fa-users" style="width: 20px;"></i> Gestione Utenti</a></li>
+                <li id="sidebar-archive" style="display: none;"><a href="/admin/archive.html"><i class="fas fa-archive" style="width: 20px;"></i> Archivio Emergenze</a></li>
+                <li id="sidebar-sistema" style="display: none;"><a href="/admin/sistema.html"><i class="fas fa-shield-halved" style="width: 20px;"></i> Sistema</a></li>
+                <li><a href="/admin/squadre.html" class="active"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a></li>
+            
+                <li id="sidebar-magazzino" style="display: none;"><a href="/magazzino.html"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a></li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <div>
+                    <h1 style="margin: 0; font-size: 2rem;">Gestione Squadre</h1>
+                    <p style="margin: 5px 0 0 0; color: var(--text-muted);">Organizza i team e assegna i volontari</p>
+                </div>
+                <button id="admin-new-team-btn" class="button-style">
+                    Nuova squadra
+                </button>
+            </header>
+
+            <section class="admin-panel">
+                <div class="table-container">
+                    <table class="admin-table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">Nome Squadra</th>
+                                <th style="width: 45%;">Descrizione</th>
+                                <th style="width: 20%;">Membri</th>
+                                <th style="width: 15%; text-align: right;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-squadre-tbody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Caricamento squadre...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="adminCreateSquadraModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 850px; border-top: 5px solid #28a745;"> 
+            <span id="closeAdminCreateSquadraModal" class="close" title="Chiudi">&times;</span>
+            <h2 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">Crea Nuova squadra</h2>
+            <hr>
+            <form id="adminCreateSquadraForm">
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <label for="admin-create-squadra-prefisso">Nome radio della squadra <span class="obbligatorio">*</span></label>
+                        <select id="admin-create-squadra-prefisso" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                            <option value="" disabled selected>-- Seleziona Nome --</option>
+                        </select>
+                    </div>
+                    <div style="flex: 2;">
+                        <label for="admin-create-squadra-nome">Descrizione (Opzionale)</label>
+                        <input type="text" id="admin-create-squadra-nome" placeholder="Es. Squadra specializzata AIB..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"> 
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 15px 0; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Gestione Membri</h4>
+                
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px; background: var(--secondary-bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; flex-direction: column;">
+                        <h5 style="margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px;"><i class="fas fa-user-plus" style="color: #28a745;"></i> Volontari Disponibili</h5>
+                        <div style="position: relative; margin-bottom: 10px;">
+                            <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                            <input type="text" id="admin-create-member-search" placeholder="Cerca nome o cognome..." style="width: 100%; padding: 8px 10px 8px 35px; border-radius: 50px; border: 1px solid var(--border-color); font-size: 0.85rem; box-sizing: border-box; outline: none;">
+                        </div>
+                        <ul id="admin-create-membri-disponibili" style="list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; height: 250px; display: flex; flex-direction: column; gap: 6px;"></ul>
+                    </div>
+
+                    <div style="flex: 1; min-width: 300px; background: var(--secondary-bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; flex-direction: column;">
+                        <h5 style="margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px;"><i class="fas fa-users" style="color: #007bff;"></i> Membri in Squadra</h5>
+                        <ul id="admin-create-membri-selezionati" style="list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; height: 250px; display: flex; flex-direction: column; gap: 6px;"></ul>
+                    </div>
+                </div>
+
+                <div style="text-align: right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                     <button type="button" id="cancelAdminCreateSquadraBtn" class="button-style button-secondary">Annulla</button>
+                     <button class="button-style" type="submit" style="margin-left: 10px">Crea squadra</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="adminEditSquadraModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 850px; border-top: 5px solid #007bff;">
+            <span id="closeAdminEditSquadraModal" class="close" title="Chiudi">&times;</span>
+            <h2 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">Modifica <span id="admin-edit-team-prefix-display"></span></h2>
+            <hr>
+            <form id="adminEditSquadraForm">
+                <input type="hidden" id="admin-edit-team-id-hidden">
+
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <label for="admin-edit-squadra-prefisso">Nome radio della squadra <span class="obbligatorio">*</span></label>
+                        <select id="admin-edit-squadra-prefisso" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                            <option value="" disabled>-- Seleziona Nome --</option>
+                        </select>
+                    </div>
+                    <div style="flex: 2;">
+                        <label for="admin-edit-squadra-nome">Descrizione (Opzionale)</label>
+                        <input type="text" id="admin-edit-squadra-nome" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 15px 0; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Gestione Membri</h4>
+                
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px; background: var(--secondary-bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; flex-direction: column;">
+                        <h5 style="margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px;"><i class="fas fa-user-plus" style="color: #28a745;"></i> Volontari Disponibili</h5>
+                        <div style="position: relative; margin-bottom: 10px;">
+                            <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                            <input type="text" id="admin-edit-member-search" placeholder="Cerca nome o cognome..." style="width: 100%; padding: 8px 10px 8px 35px; border-radius: 50px; border: 1px solid var(--border-color); font-size: 0.85rem; box-sizing: border-box; outline: none;">
+                        </div>
+                        <ul id="admin-edit-membri-disponibili" style="list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; height: 250px; display: flex; flex-direction: column; gap: 6px;"></ul>
+                    </div>
+
+                    <div style="flex: 1; min-width: 300px; background: var(--secondary-bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: flex; flex-direction: column;">
+                        <h5 style="margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px;"><i class="fas fa-users" style="color: #007bff;"></i> Membri in Squadra</h5>
+                        <ul id="admin-edit-membri-attuali" style="list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; height: 250px; display: flex; flex-direction: column; gap: 6px;"></ul>
+                    </div>
+                </div>
+
+                <div style="text-align: right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                     <button type="button" id="cancelAdminEditSquadraBtn" class="button-style button-secondary">Annulla</button>
+                     <button class="button-style" type="submit" style="margin-left: 10px">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="admin-team-detail-panel" style="display: none;">
+        <div class="panel-header">
+            <h3>Dettaglio Squadra: <span id="team-detail-prefix"></span> <small id="team-detail-optional-name" style="font-weight:normal;"></small></h3>
+            <button id="close-team-detail-btn" title="Chiudi Dettagli">&times;</button>
+        </div>
+        <div class="panel-content">
+            <h4>Membri</h4>
+            <ul id="team-detail-member-list" style="list-style: none; padding: 0; margin: 0; max-height: 15vh; overflow-y: auto;">
+                <li>Caricamento...</li>
+            </ul>
+            </div>
+    </div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script>
+    <script src="/websocket.js"></script>
+    <script type="module" src="/js/admin-squadre.js"></script> 
+</body>
+</html>

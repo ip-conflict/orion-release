@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+  <link rel="stylesheet" href="/css/centro-operativo.css">
+  <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <form id="login-form">
+        <img id="login-logo" src="" alt="Logo" style="display: none; max-width: 150px; margin: 0 auto 1rem auto;">
+        <h2 id="association-name-display">Login</h2>
+        <input type="text" id="username" placeholder="Username o Email" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <button class="button-style" type="submit">Accedi</button>
+        
+        <div style="margin-top: 15px;">
+            <a href="#" id="show-forgot-password" style="color: var(--link-color); font-size: 0.9em; text-decoration: none;">Hai dimenticato la password?</a>
+        </div>
+        <p id="login-message"></p>
+      </form>
+
+      <form id="forgot-password-form" style="display: none;">
+        <h2>Recupero Password</h2>
+        <p style="margin-bottom: 15px; font-size: 0.9em;">Inserisci il tuo username o la tua email. Ti invieremo un link per reimpostare la password.</p>
+        <input type="text" id="forgot-identificativo" placeholder="Username o Email" required />
+        <button class="button-style" type="submit">Invia il link</button>
+        
+        <div style="margin-top: 15px;">
+            <a href="#" id="show-login" style="color: var(--link-color); font-size: 0.9em; text-decoration: none;">Torna al Login</a>
+        </div>
+        <p id="forgot-message" style="margin-top: 15px; font-weight: bold;"></p>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/login.js"></script>
+</body>
+</html>

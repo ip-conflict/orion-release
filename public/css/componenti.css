@@ -1,0 +1,266 @@
+/* ==========================================================================
+   ORION - Componenti condivisi
+   ==========================================================================
+   Pulsanti, pastiglie di stato e schede: un aspetto solo per tutta
+   l'applicazione.
+
+   Prima di questo file l'aspetto base dei pulsanti stava in
+   centro-operativo.css, che però non tutte le pagine caricano: il risultato
+   era che lo stesso <button class="button-style"> si vedeva in tre modi
+   diversi a seconda della pagina, e chi ne aggiungeva uno nuovo lo
+   riverniciava a mano nell'HTML. Da lì i quaranta pulsanti con lo stile
+   scritto dentro l'attributo style, i gradienti sparsi e i raggi a pillola.
+
+   CRITERI, in ordine di importanza:
+
+   1. SOBRIO. Niente gradienti, niente ombre colorate, niente pulsanti a
+      pillola. Superfici piatte, un accento solo, raggi contenuti.
+   2. UN PULSANTE PRINCIPALE PER SCHERMATA. Se tutto è colorato, niente è
+      importante: il pieno colorato si usa per l'azione che conclude, il
+      contorno per tutto il resto.
+   3. NIENTE ICONE NEI PULSANTI CON TESTO. L'icona resta dove È il comando:
+      pulsanti quadrati nelle tabelle, chiudi di una finestra. Accanto a una
+      parola non aggiunge niente e fa rumore.
+   4. LE MISURE SONO POCHE. Tre altezze (normale, piccolo, grande) e basta:
+      una scala di venti misure è come non averne nessuna.
+
+   I colori vengono da theme.css, che ha già chiaro e scuro. Qui non si
+   scrive nessun colore fisso tranne quelli semantici (rosso del pericolo),
+   che sono scelti per funzionare su entrambi i fondi.
+   ========================================================================== */
+
+/* L'attributo hidden vale "display: none", ma qualunque regola di display lo
+   batte. Vale per tutte le pagine, così nascondere qualcosa basta a
+   nasconderlo senza doversi ricordare una regola ogni volta. */
+[hidden] { display: none !important; }
+
+/* ==========================================================================
+   Pulsanti
+   ========================================================================== */
+
+/* La base: vale per .button-style (la classe che il markup usa già ovunque),
+   per .btn e per i <button> che non hanno nessuna classe. */
+/* L'asterisco dei campi obbligatori: rosso leggibile in entrambi i temi. */
+.obbligatorio { color: var(--danger-text); }
+
+.button-style,
+.btn,
+button.btn {
+    /* inline-flex e non inline-block: allinea il testo al centro anche quando
+       dentro c'è un'icona, senza bisogno di correzioni a mano. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    padding: 9px 16px;
+    min-height: 38px;
+
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+    text-align: center;
+
+    background-color: var(--button-bg);
+    color: var(--button-text);
+
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.button-style:hover,
+.btn:hover {
+    background-color: var(--button-hover-bg);
+}
+
+/* Il contorno visibile da tastiera: chi naviga col tab deve sapere dov'è.
+   :focus-visible e non :focus, altrimenti l'anello compare anche col clic
+   del mouse, dove nessuno lo vuole. */
+.button-style:focus-visible,
+.btn:focus-visible,
+button:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.button-style:disabled,
+.btn:disabled,
+.button-style[disabled],
+.btn[disabled] {
+    background-color: var(--button-disabled-bg);
+    border-color: transparent;
+    color: var(--button-disabled-text);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* --- Varianti ---------------------------------------------------------- */
+
+/* Secondario: l'azione che c'è ma non conclude niente. Contorno, non pieno. */
+.button-style.button-secondary,
+.btn-secondario {
+    background-color: transparent;
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
+.button-style.button-secondary:hover,
+.btn-secondario:hover {
+    background-color: var(--list-item-hover-bg);
+    border-color: var(--text-muted);
+}
+
+/* Discreto: azioni di contorno che non meritano nemmeno un bordo, come
+   "Annulla" dentro una finestra. */
+.btn-discreto {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+}
+
+.btn-discreto:hover {
+    background-color: var(--list-item-hover-bg);
+    color: var(--text-color);
+}
+
+/* Pericolo: elimina, dismetti, revoca. Il colore è l'avviso, quindi resta
+   pieno solo quando è l'azione principale di una finestra di conferma;
+   altrove basta il testo rosso su contorno. */
+.btn-pericolo {
+    background-color: transparent;
+    border-color: var(--border-color);
+    color: #dc2626;
+}
+
+.btn-pericolo:hover {
+    background-color: rgba(220, 38, 38, 0.08);
+    border-color: #dc2626;
+}
+
+.btn-pericolo-pieno {
+    background-color: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+
+.btn-pericolo-pieno:hover {
+    background-color: #b91c1c;
+    border-color: #b91c1c;
+}
+
+/* --- Misure ------------------------------------------------------------ */
+
+.button-style.button-small,
+.btn-piccolo {
+    padding: 6px 12px;
+    min-height: 32px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+}
+
+/* Grande: il pulsante che chiude un'operazione in fondo a una schermata. */
+.btn-grande {
+    width: 100%;
+    padding: 13px 20px;
+    min-height: 46px;
+    font-size: 1rem;
+    border-radius: 8px;
+}
+
+/* --- Pulsanti che sono solo un'icona -----------------------------------
+   Qui l'icona È il comando (modifica, elimina, allegato in una riga di
+   tabella) e ci sta: il titolo racconta cosa fa a chi passa sopra e a chi
+   legge con lo schermo. */
+.btn-icona {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-icona:hover {
+    background-color: var(--list-item-hover-bg);
+    color: var(--text-color);
+    border-color: var(--text-muted);
+}
+
+.btn-icona.pericolo:hover {
+    color: #dc2626;
+    border-color: #dc2626;
+    background-color: rgba(220, 38, 38, 0.08);
+}
+
+/* Gruppo di pulsanti affiancati, con la stessa distanza ovunque. */
+.gruppo-azioni {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gruppo-azioni.a-destra { justify-content: flex-end; }
+
+/* ==========================================================================
+   Pastiglie di stato
+   ========================================================================== */
+.pastiglia {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.pastiglia.ok      { background: rgba(22, 163, 74, 0.12);  color: #15803d; border-color: rgba(22, 163, 74, 0.25); }
+.pastiglia.attesa  { background: rgba(245, 158, 11, 0.14); color: #b45309; border-color: rgba(245, 158, 11, 0.28); }
+.pastiglia.grave   { background: rgba(220, 38, 38, 0.12);  color: #b91c1c; border-color: rgba(220, 38, 38, 0.25); }
+.pastiglia.neutra  { background: var(--list-item-hover-bg); color: var(--text-muted); border-color: var(--border-color); }
+
+/* Sul fondo scuro i colori pieni sopra diventano illeggibili: si alza il
+   testo e si abbassa il fondo, tenendo lo stesso significato. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pastiglia.ok     { color: #4ade80; }
+    :root:not([data-theme="light"]) .pastiglia.attesa { color: #fbbf24; }
+    :root:not([data-theme="light"]) .pastiglia.grave  { color: #f87171; }
+}
+
+:root[data-theme="dark"] .pastiglia.ok     { color: #4ade80; }
+:root[data-theme="dark"] .pastiglia.attesa { color: #fbbf24; }
+:root[data-theme="dark"] .pastiglia.grave  { color: #f87171; }
+
+/* ==========================================================================
+   Sul telefono
+   ========================================================================== */
+@media (max-width: 640px) {
+    /* I bersagli restano grandi: si usa col guanto e di corsa. */
+    .button-style,
+    .btn {
+        min-height: 42px;
+        padding: 10px 16px;
+    }
+
+    .btn-icona {
+        width: 38px;
+        height: 38px;
+    }
+}

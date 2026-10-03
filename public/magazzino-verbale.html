@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Verbale di consegna</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <style>
+        /* Il verbale è un foglio da firmare: la pagina è fatta per la carta.
+         * La barra dei comandi sparisce in stampa, il resto è il documento. */
+        body {
+            margin: 0;
+            padding: 24px 16px;
+            background: var(--bg-color, #f4f5f7);
+            color: var(--text-color, #111);
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+
+        .barra {
+            max-width: 210mm;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .barra h1 { margin: 0; font-size: 1.15rem; flex: 1; min-width: 12rem; }
+        .barra button, .barra a {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .barra button { background: #2563eb; color: #fff; }
+        .barra a { background: transparent; color: inherit; border-color: var(--border-color, #ccc); }
+
+        .foglio {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 18mm 16mm;
+            background: #fff;
+            color: #111;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+            box-sizing: border-box;
+        }
+
+        .intestazione { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #111; padding-bottom: 10px; }
+        .intestazione img { height: 56px; width: auto; object-fit: contain; }
+        .intestazione .associazione { font-size: 1.05rem; font-weight: 700; }
+        .intestazione .titolo { font-size: 1.35rem; font-weight: 800; margin-top: 2px; }
+
+        .dati { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 18px; margin: 16px 0; }
+        .dati div span { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+        .dati div strong { font-size: 0.98rem; }
+
+        table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 0.92rem; }
+        th, td { border: 1px solid #bbb; padding: 7px 9px; text-align: left; vertical-align: top; }
+        th { background: #f1f1f1; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .03em; }
+        td.numero { text-align: right; white-space: nowrap; }
+
+        .dichiarazione { font-size: 0.92rem; line-height: 1.5; }
+        .note { font-size: 0.9rem; margin-top: 8px; white-space: pre-line; }
+
+        .conferma {
+            margin-top: 14px;
+            padding: 10px 12px;
+            border: 1px solid #16a34a;
+            border-radius: 6px;
+            background: #f0fdf4;
+            font-size: 0.92rem;
+        }
+
+        .firme { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 40px; }
+        .firma { border-top: 1px solid #111; padding-top: 6px; font-size: 0.85rem; }
+        .firma small { display: block; color: #555; }
+        .luogo { margin-top: 28px; font-size: 0.9rem; }
+
+        .errore { max-width: 210mm; margin: 40px auto; text-align: center; }
+
+        /* Il foglio firmato: sta sopra il modulo, solo a schermo. Quando c'è,
+         * è lui il verbale; il modulo sotto serve a ristamparlo. */
+        .firmato {
+            max-width: 210mm;
+            margin: 0 auto 16px;
+            padding: 14px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color, #ccc);
+            background: var(--surface-color, #fff);
+            box-sizing: border-box;
+        }
+        .firmato h2 { margin: 0 0 6px; font-size: 1rem; }
+        .firmato p { margin: 0 0 10px; font-size: 0.9rem; line-height: 1.45; }
+        .firmato .anteprima img { max-width: 100%; max-height: 70vh; display: block; border: 1px solid #ddd; border-radius: 4px; }
+        .firmato .comandi { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .firmato .comandi label, .firmato .comandi a {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .firmato .comandi label { background: #2563eb; color: #fff; }
+        .firmato .comandi a { border: 1px solid var(--border-color, #ccc); color: inherit; }
+        .firmato .esito { font-size: 0.88rem; }
+        .firmato .esito.errore-invio { color: #dc2626; }
+
+        @media (max-width: 560px) {
+            .foglio { padding: 16px; }
+            .firme { grid-template-columns: 1fr; }
+        }
+
+        @media print {
+            @page { size: A4; margin: 14mm; }
+            body { padding: 0; background: #fff; }
+            .barra, .firmato { display: none; }
+            .foglio { box-shadow: none; padding: 0; max-width: none; border-radius: 0; }
+            th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="barra">
+        <h1 id="titolo-barra">Verbale di consegna</h1>
+        <a id="link-indietro" href="/magazzino.html">Torna indietro</a>
+        <button type="button" id="btn-stampa">Stampa</button>
+    </div>
+
+    <div id="errore" class="errore" hidden></div>
+
+    <section id="blocco-firmato" class="firmato" hidden>
+        <h2>Foglio firmato</h2>
+        <p id="spiega-firmato"></p>
+        <div id="anteprima-firmato" class="anteprima"></div>
+        <div class="comandi" id="comandi-firmato" hidden>
+            <!-- Sul telefono il selettore offre la fotocamera: si scatta il foglio e basta. -->
+            <label for="file-firmato" id="etichetta-file-firmato">Allega la foto del foglio firmato</label>
+            <input type="file" id="file-firmato" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+            <span id="esito-firmato" class="esito"></span>
+        </div>
+    </section>
+
+    <article id="foglio" class="foglio" hidden>
+        <header class="intestazione">
+            <img id="logo" src="/logo.png" alt="" hidden>
+            <div>
+                <div class="associazione" id="associazione"></div>
+                <div class="titolo"><span id="titolo-tipo">Verbale di consegna</span> n. <span id="numero"></span></div>
+            </div>
+        </header>
+
+        <section class="dati">
+            <div><span id="etichetta-destinatario">Consegnato a</span><strong id="destinatario"></strong></div>
+            <div><span>Data</span><strong id="data"></strong></div>
+            <div><span id="etichetta-emesso-da">Consegnato da</span><strong id="emesso-da"></strong></div>
+            <div id="campo-stato"><span>Stato</span><strong id="stato"></strong></div>
+        </section>
+
+        <table>
+            <thead>
+                <tr><th>Oggetto</th><th>Taglia / matricola</th><th>Quantità</th></tr>
+            </thead>
+            <tbody id="righe"></tbody>
+        </table>
+
+        <p class="dichiarazione" id="dichiarazione">
+            Chi firma dichiara di aver ricevuto il materiale elencato, integro e funzionante,
+            di custodirlo con cura e di usarlo solo per le attività dell'associazione.
+            Eventuali danni, smarrimenti o scadenze vanno segnalati al magazzino.
+        </p>
+        <p class="note" id="note" hidden></p>
+
+        <div class="conferma" id="conferma" hidden></div>
+
+        <div class="luogo">Luogo e data: ______________________________</div>
+        <div class="firme">
+            <div class="firma"><span id="titolo-firma-consegna">Chi consegna</span><small id="firma-consegna"></small></div>
+            <div class="firma"><span id="titolo-firma-riceve">Chi riceve</span><small id="firma-riceve"></small></div>
+        </div>
+    </article>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/magazzino-verbale.js"></script>
+</body>
+</html>

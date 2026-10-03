@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mio Profilo</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/profile.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body>
+
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px;">
+                <h2>Profilo</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="/centro-operativo.html" style="color: var(--link-color);">
+                        <i class="fas fa-arrow-left" style="width: 20px; text-align: center; margin-right: 8px;"></i> Centro Operativo
+                    </a>
+                </li>
+                <li style="margin-top: 20px;">
+                    <a href="#" id="nav-libretto" class="active">
+                        <i class="fas fa-id-card" style="width: 20px; text-align: center; margin-right: 8px;"></i> Fascicolo
+                    </a>
+                </li>
+                <li>
+                    <a href="#" id="nav-password">
+                        <i class="fas fa-lock" style="width: 20px; text-align: center; margin-right: 8px;"></i> Sicurezza
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            
+            <section id="section-libretto" style="border: none; padding-bottom: 0;">
+                <header class="content-header" style="margin-bottom: 30px;">
+                    <h1 style="margin-top: 0; font-size: 2rem;">Il Mio Fascicolo</h1>
+                </header>
+
+                <!-- Le consegne da confermare stanno in cima: sono l'unica cosa
+                     della pagina che aspetta una risposta. -->
+                <div id="box-da-confermare" class="box-da-confermare" hidden>
+                    <h3>Materiale da confermare</h3>
+                    <p>Il magazzino ti ha consegnato questo materiale. Controlla che sia tutto e conferma di averlo ricevuto.</p>
+                    <div id="elenco-da-confermare"></div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                    
+                    <div class="card" style="text-align: center; padding: 20px; background: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);">
+                        
+                        <div style="position: relative; width: 140px; height: 140px; margin: 0 auto 15px auto; border-radius: 50%; overflow: hidden; border: 4px solid var(--primary-color); background-color: var(--bg-color);">
+                            <img id="profile-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cbd5e1'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>" alt="Foto Profilo" style="width: 100%; height: 100%; object-fit: cover;">
+                            <label for="photo-upload" style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; cursor: pointer; padding: 6px 0; font-size: 0.8rem; font-weight: bold; transition: background 0.2s;">Cambia
+                            </label>
+                            <input type="file" id="photo-upload" accept="image/jpeg, image/png, image/webp" style="display: none;">
+                        </div>
+                        
+                        <h2 id="profile-fullname" style="margin: 10px 0 5px 0; color: var(--text-color);">Caricamento...</h2>
+                        <span id="profile-role" class="pastiglia neutra">Ruolo</span>
+
+                        <hr style="margin: 20px 0; border-color: var(--border-light-color);">
+
+                        <div id="blocco-qr-profilo">
+                        <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--text-color);">Tesserino Elettronico</h3>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 15px;">Mostra questo codice ai coordinatori in emergenza per verificare le tue abilitazioni.</p>
+                        
+                        <div id="qrcode-container" style="background: white; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 15px; border: 1px solid #ddd; min-width: 150px; min-height: 150px;">
+                            </div>
+                        
+                        <br>
+                        </div>
+                        <button id="btn-print-badge" class="button-style button-secondary btn-grande" style="margin-top: 15px">
+                            Stampa il fascicolo
+                        </button>
+                    </div>
+
+                    <div class="card" style="padding: 20px; background: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);">
+                        <h3 style="margin-top: 0; border-bottom: 2px solid var(--border-light-color); padding-bottom: 10px;">
+                            Dati Anagrafici
+                        </h3>
+                        
+                        <form id="profile-anagrafica-form">
+                            <div class="form-group">
+                                <label>Codice Fiscale</label>
+                                <input type="text" id="prof_cf" placeholder="16 caratteri alfanumerici" maxlength="16" style="text-transform: uppercase; font-family: monospace;">
+                            </div>
+                            <div class="form-group">
+                                <label>Telefono / Cellulare</label>
+                                <input type="text" id="prof_telefono" placeholder="Es. 333 1234567">
+                            </div>
+                            <div class="form-group">
+                                <label>Indirizzo di Residenza</label>
+                                <input type="text" id="prof_indirizzo" placeholder="Es. Via Roma, 1">
+                            </div>
+                            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label>Città</label>
+                                    <input type="text" id="prof_citta" placeholder="Città">
+                                </div>
+                                <div class="form-group">
+                                    <label>CAP</label>
+                                    <input type="text" id="prof_cap" placeholder="32100" maxlength="5">
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 20px; text-align: right;">
+                                <button type="submit" id="btn-save-profile" class="button-style">
+                                    Salva
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="alerts-grid">
+                    <div class="modern-alert-card" style="border-left-color: #10b981; margin: 0;">
+                        <div class="alert-card-header">
+                            <div class="alert-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-text);"><i class="fas fa-heartbeat"></i></div>
+                            <div class="alert-info">
+                                <h3 style="color: var(--text-color);">Visite Mediche</h3>
+                            </div>
+                        </div>
+                        <ul id="my-medical-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;">
+                            <li style="text-align: center; justify-content: center; border: none;"><i class="fas fa-spinner fa-spin"></i> Caricamento...</li>
+                        </ul>
+                    </div>
+
+                    <div class="modern-alert-card" style="border-left-color: #8b5cf6; margin: 0;">
+                        <div class="alert-card-header">
+                            <div class="alert-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;"><i class="fas fa-graduation-cap"></i></div>
+                            <div class="alert-info">
+                                <h3 style="color: var(--text-color);">Corsi e Attestati</h3>
+                            </div>
+                        </div>
+                        <ul id="my-courses-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;">
+                            <li style="text-align: center; justify-content: center; border: none;"><i class="fas fa-spinner fa-spin"></i> Caricamento...</li>
+                        </ul>
+                    </div>
+
+                    <!-- I DPI compaiono solo se il modulo Magazzino è acceso:
+                         altrimenti sarebbe un riquadro sempre vuoto. -->
+                    <div class="modern-alert-card" id="card-miei-dpi" style="border-left-color: #0ea5e9; margin: 0;" hidden>
+                        <div class="alert-card-header">
+                            <div class="alert-icon" style="background: rgba(14, 165, 233, 0.1); color: #0ea5e9;"><i class="fas fa-helmet-safety"></i></div>
+                            <div class="alert-info">
+                                <h3 style="color: var(--text-color);">DPI in dotazione</h3>
+                            </div>
+                        </div>
+                        <ul id="my-dpi-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;">
+                            <li style="text-align: center; justify-content: center; border: none;"><i class="fas fa-spinner fa-spin"></i> Caricamento...</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="section-password" style="display: none; border: none; max-width: 600px;">
+                <header class="content-header" style="margin-bottom: 30px;">
+                    <h1 style="margin-top: 0; font-size: 2rem;">Sicurezza</h1>
+                </header>
+                
+                <form id="change-password-form" style="background: var(--surface-color); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);">
+                    <div class="form-group">
+                        <label for="current-password">Password Attuale:</label>
+                        <input type="password" id="current-password" required autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">Nuova Password:</label>
+                        <input type="password" id="new-password" required autocomplete="new-password" minlength="12"> 
+                        <div class="history-date-text" style="margin-top: 8px; line-height: 1.4; opacity: 0.8; font-size: 0.9em;">
+                            Requisiti: Min. 12 caratteri, maiuscola, minuscola, numero, carattere speciale.<br>
+                            Esempi: <code>Pr0t3z10n3C1v1l3!</code>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="confirm-password">Conferma Nuova Password:</label>
+                        <input type="password" id="confirm-password" required autocomplete="new-password">
+                    </div>
+                    <div style="margin-top: 25px; text-align: right;">
+                        <button type="submit" class="button-style">
+                            Cambia la password
+                        </button>
+                    </div>
+                    <div id="change-pwd-feedback" style="margin-top: 15px; font-weight: bold; text-align: center;"></div>
+                </form>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/vendor/qrcode/qrcode.min.js"></script>
+    <script src="/vendor/pdfmake/pdfmake.min.js"></script>
+    <script src="/vendor/pdfmake/vfs_fonts.js"></script>
+    
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script>
+    <script src="/js/profile.js" defer></script>
+</body>
+</html>

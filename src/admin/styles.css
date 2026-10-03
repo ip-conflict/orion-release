@@ -1,0 +1,170 @@
+/* Stile generale della pagina admin */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4; /* Colore di sfondo chiaro */
+    margin: 0;
+    padding: 0;
+}
+
+/* Header con fascia colorata */
+.header {
+    background: linear-gradient(to bottom, #ffd518 50%, #062d81 50%); /* Giallo sopra e Blu sotto */
+    color: #000000; /* Colore del testo */
+    padding: 20px;
+    text-align: center;
+    border-bottom: 5px solid #0033a0; /* Bordo blu sotto l'header */
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.header h2 {
+    margin: 0;
+    padding-top: 20px;
+    font-size: 28px;
+    color: #ffffff;
+}
+
+.header p {
+    margin: 10px 0 0;
+    font-size: 18px;
+    font-weight: normal;
+}
+
+/* Contenitore della sezione Gestione Utenti */
+
+.table-container {
+    background: #ffffff; /* Sfondo bianco */
+    border-radius: 2px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Ombra leggera */
+    margin: 10px auto;
+    padding: 5px; /* Ridotto per una tabella più compatta */
+    border: 1px solid #ddd; /* Bordi leggeri */
+    max-width: 1200px;
+}
+
+/* Stile della tabella */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 4px; /* Ridotto per celle più piccole */
+    text-align: left;
+    border-bottom: 1px solid #ddd; /* Bordi più sottili */
+    font-size: 14px; /* Dimensione del font più piccola */
+}
+
+th {
+    background-color: #f5f5f5; /* Grigio chiaro */
+    font-size: 16px; /* Dimensione del font per intestazioni leggermente più grande */
+}
+
+td {
+    background-color: #ffffff; /* Bianco */
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9; /* Grigio molto chiaro per righe pari */
+}
+
+tr:hover td {
+    background-color: #f1f1f1; /* Grigio chiaro per hover */
+}
+
+/* Stile generale dei bottoni */
+button {
+    background-color: #0033a0; /* Blu Protezione Civile */
+    color: #ffffff; /* Bianco */
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+button:hover {
+    background-color: #002080; /* Blu scuro per hover */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Stile per i pulsanti "Modifica" */
+button.edit {
+    background-color: #0033a0; /* Blu per il pulsante Modifica */
+}
+
+button.edit:hover {
+    background-color: #002080; /* Blu scuro per hover */
+}
+
+/* Stile per i pulsanti "Elimina" */
+button.delete {
+    background-color: #cf2d1b; /* Rosso per il pulsante Elimina */
+}
+
+button.delete:hover {
+    background-color: #a1190a; /* Rosso scuro per hover */
+}
+
+
+
+/* Stile degli input */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea {
+    width: 100%;
+    padding: 8px; /* Ridotto per campi di input più compatti */
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px; /* Ridotto per margini più piccoli */
+}
+
+input[type="file"] {
+    margin-bottom: 10px; /* Ridotto per margini più piccoli */
+}
+
+form {
+    margin-bottom: 10px; /* Ridotto per margini più piccoli */
+}
+
+label {
+    display: block;
+    margin-bottom: 6px; /* Ridotto per margini più piccoli */
+    font-weight: bold;
+    color: #333333; /* Grigio scuro per il testo */
+}
+
+.error {
+    color: red;
+    font-size: 12px; /* Dimensione del font per messaggi di errore più piccola */
+}
+
+.success {
+    color: green;
+    font-size: 12px; /* Dimensione del font per messaggi di successo più piccola */
+}
+
+/* Aggiungi questo stile nel tuo file CSS */
+.editable-field {
+    background-color: #f0f8ff; /* Azzurro chiaro per sfondo */
+    border: 1px solid #007bff; /* Bordo blu */
+    color: #000; /* Colore testo nero */
+    padding: 5px;
+    border-radius: 4px;
+    outline: none;
+    transition: background-color 0.3s ease;
+}
+
+.editable-field:focus {
+    background-color: #e6f7ff; /* Cambia il colore di sfondo quando l'input è focalizzato */
+}
+
+.editable-field.select {
+    width: 150px; /* Larghezza sufficiente per visualizzare il ruolo completo */
+}

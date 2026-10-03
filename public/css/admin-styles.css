@@ -1,0 +1,714 @@
+/* /public/css/admin-styles.css */
+/* Stili comuni per le pagine dell'area Admin */
+
+/* Layout Base Admin */
+.admin-header {
+    background-color: var(--header-bg, #f8f9fa);
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.admin-header h1 {
+    margin: 0;
+    font-size: 1.5em;
+    color: var(--text-color);
+}
+.admin-header nav a {
+    color: var(--link-color, #007bff);
+    text-decoration: none;
+    margin-left: 15px;
+    font-size: 0.95em;
+}
+.admin-header nav a:hover {
+    text-decoration: underline;
+}
+
+.admin-main {
+    padding: 20px;
+    max-width: 1400px; /* O larghezza desiderata */
+    margin: 20px auto; /* Centra e dà spazio sopra/sotto */
+    background-color: var(--secondary-bg-color, #f8f9fa); /* Sfondo leggermente diverso dal body? */
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.admin-main section {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px dashed var(--border-color, #eee);
+}
+.admin-main section:last-of-type {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+.section-header h2 {
+    margin: 0;
+    font-size: 1.4em;
+}
+
+hr.admin-hr {
+    border: none;
+    border-top: 1px dashed var(--border-color);
+    margin: 25px 0;
+}
+
+/* Stili Tabella Utenti */
+.table-wrapper {
+    overflow-x: auto; /* Scroll orizzontale se tabella troppo larga */
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--bg-color); /* Sfondo tabella */
+}
+
+#user-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+
+#user-table th,
+#user-table td {
+    padding: 10px 15px; /* Aumentato padding */
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+#user-table thead th {
+    background-color: var(--secondary-bg-color);
+    font-weight: 600; /* Semi-bold */
+    position: sticky;
+    top: 0;
+    z-index: 1; /* Sopra contenuto scrollabile */
+}
+
+#user-table tbody tr:nth-child(even) {
+     /* Stile zebra opzionale, potrebbe confliggere con temi */
+    /* background-color: #f9f9f9; */
+}
+
+#user-table tbody tr:hover {
+    background-color: var(--list-item-hover-bg);
+}
+
+#user-table td[data-field="id"] { width: 1%; font-weight: bold;} /* Stringi colonna ID */
+#user-table td[data-field="role"] { text-transform: capitalize; } /* Metti ruolo maiuscolo */
+
+#user-table .action-buttons { /* Se aggiungiamo questa classe alla cella <td> Azioni */
+    text-align: right;
+    white-space: nowrap;
+    width: 1%;
+}
+#user-table .button-style.button-small {
+    padding: 4px 8px;
+    font-size: 0.9em;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+/* Colori specifici per Edit/Delete (Usa classi .edit / .delete definite nel JS o HTML?) */
+ /* Assumiamo .button-style venga aggiunto ai bottoni */
+ #user-table button.edit-user-btn { /* Diamo classe specifica a bottone edit */
+     background-color: var(--status-active-color, #0d6efd); /* Blu info */
+     border-color: var(--status-active-color, #0d6efd);
+ }
+  #user-table button.edit-user-btn:hover { background-color: #0b5ed7; }
+
+ #user-table button.delete-user-btn { /* Diamo classe specifica a bottone delete */
+      background-color: var(--status-error-color, #dc3545); /* Rosso danger */
+      border-color: var(--status-error-color, #dc3545);
+ }
+ #user-table button.delete-user-btn:hover { background-color: #bb2d3b; }
+
+
+/* Stili Sezione Import */
+.import-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 5px;
+    background-color: var(--bg-color);
+    max-width: 600px;
+}
+.import-container input[type="file"] {
+    border: none; padding: 0; flex-grow: 1;
+}
+#import-feedback { font-size: 0.9em; }
+
+/* Stili Modali Admin (aggiungono/sovrascrivono base da styles.css) */
+.modal-content { /* Stile generale per contenuto modali admin */
+    background-color: var(--modal-bg, #fff);
+    padding: 25px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    max-width: 600px; /* Larghezza default modali form */
+    width: 90%;
+}
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.4em;
+    text-align: center;
+    color: var(--text-color);
+}
+.modal-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 20px 0;
+}
+.modal-content .close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 2em;
+    font-weight: bold;
+    line-height: 1;
+    color: #888;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+.modal-content .close:hover { color: var(--status-error-color, #dc3545); }
+
+
+/* Layout Form nei Modali */
+.form-row {
+    display: flex;
+    flex-wrap: wrap; /* Va a capo su schermi piccoli */
+    gap: 20px; /* Spazio tra colonne */
+    margin-bottom: 15px;
+}
+.form-row .form-group {
+    flex: 1; /* Occupa spazio uguale */
+    min-width: 200px; /* Larghezza minima prima di andare a capo */
+    margin-bottom: 0; /* Rimuovi margine inferiore se dentro form-row */
+}
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600; /* Semi-bold */
+    font-size: 0.95em;
+}
+
+/* Input, Select, Textarea nei Modali Admin */
+.modal-content input[type="text"],
+.modal-content input[type="email"],
+.modal-content input[type="password"],
+.modal-content select,
+.modal-content textarea { /* Stili comuni input/select/textarea */
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--form-input-border);
+    border-radius: 4px;
+    background-color: var(--form-input-bg);
+    color: var(--text-color);
+    font-size: 1em;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+.modal-content input:focus,
+.modal-content select:focus,
+.modal-content textarea:focus {
+     outline: none;
+     border-color: var(--form-input-focus-border);
+     box-shadow: 0 0 0 3px var(--form-input-focus-shadow);
+}
+
+/* Azioni nel Modale (bottoni) */
+.modal-actions {
+    text-align: right;
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+.modal-actions button {
+    padding: 10px 20px;
+    margin-left: 10px;
+    font-size: 1em;
+}
+ /* Stile bottone Annulla (usa button[type=button]) */
+ .modal-actions button[type="button"] {
+     background-color: var(--button-cancel-bg);
+     color: #ffffff; /* bianco sul grigio, in entrambi i temi */
+ }
+ .modal-actions button[type="button"]:hover {
+     background-color: var(--button-cancel-hover-bg);
+ }
+ /* Stile bottone Submit (usa button[type=submit]) */
+ .modal-actions button[type="submit"] {
+      background-color: var(--button-bg);
+      color: var(--button-text);
+  }
+ .modal-actions button[type="submit"]:hover {
+      background-color: var(--button-hover-bg);
+  }
+
+
+/* Override Dark Mode per Admin Styles (se non coperti da variabili) */
+ @media (prefers-color-scheme: dark) {
+    #user-table thead th {
+         background-color: #2c2c2c; /* Sfondo più scuro per header tabella */
+    }
+    #user-table tbody tr:nth-child(even) {
+         /* Rimuovi stile zebra alternativo o usa colori dark */
+         background-color: transparent;
+    }
+    .import-container {
+         background-color: var(--bg-color);
+         border-color: var(--border-color);
+    }
+     .modal-content .close { color: #bbb; }
+     .modal-content .close:hover { color: var(--status-error-color); }
+ }
+
+/* Badge Stato Utente */
+/* Le pastiglie dicono uno stato: si leggono, non si gridano. Il MAIUSCOLO
+ * su ogni riga di un elenco stanca l'occhio e rallenta la lettura. */
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+.status-badge.active {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.status-badge.inactive {
+    background-color: var(--danger-soft-bg);
+    color: var(--danger-text);
+    border: 1px solid var(--danger-text);
+}
+
+/* Stili Bottoni Sospendi/Riattiva */
+/* Sospendi e riattiva: il segno resta colorato, il fondo no. */
+#user-table button.suspend-btn { color: #b45309; }
+#user-table button.suspend-btn:hover { border-color: #b45309; background: rgba(245, 158, 11, 0.1); color: #b45309; }
+
+#user-table button.reactivate-btn { color: #15803d; }
+#user-table button.reactivate-btn:hover { border-color: #15803d; background: rgba(22, 163, 74, 0.1); color: #15803d; }
+
+/* Adatta i bottoni disabilitati */
+#user-table .button-style:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(100%);
+}
+
+/* FIX: Forza il rendering corretto delle icone FontAwesome/LineAwesome nei bottoni */
+#user-table .button-style i,
+#user-table .button-style i.fas,
+#user-table .button-style i.las {
+    font-weight: 900 !important; /* Obbligatorio per le icone "Solid" */
+    font-style: normal !important;
+    font-variant: normal !important;
+    text-rendering: auto !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Fix per allineare bene le icone dentro i bottoni piccoli */
+#user-table .button-style.button-small {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+}
+
+/* =========================================
+   MODULO SEGRETERIA E LAYOUT (TEMA AUTOMATICO)
+========================================= */
+
+/* Allineamento base per Sidebar e Contenuto */
+.admin-sidebar {
+    background-color: var(--surface-color);
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+}
+.sidebar-menu { list-style: none; padding: 0; margin: 0; }
+.sidebar-menu li { margin-bottom: 10px; }
+.sidebar-menu a {
+    display: block; padding: 10px; color: var(--text-color);
+    text-decoration: none; border-radius: 6px;
+}
+.sidebar-menu a:hover, .sidebar-menu a.active {
+    background-color: var(--button-secondary-hover-bg);
+}
+
+.admin-content {
+    padding: 20px;
+    background-color: var(--bg-color);
+    overflow-y: auto;
+}
+
+/* Box di Allarme Dashboard */
+.dashboard-alerts { margin-bottom: 30px; }
+.alert-box {
+    padding: 15px 20px; margin-bottom: 15px; border-radius: 8px;
+    background-color: var(--surface-color); /* Si scurisce da solo! */
+    border: 1px solid var(--border-color);
+}
+.alert-box h3 { margin-top: 0; margin-bottom: 8px; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
+.alert-danger { border-left: 5px solid #ef4444; }
+.alert-danger h3 { color: #ef4444; }
+.alert-warning { border-left: 5px solid #f59e0b; }
+.alert-warning h3 { color: #f59e0b; }
+
+/* Badge di stato */
+.status-badge { padding: 5px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
+.status-badge.active { background-color: var(--success-soft-bg); color: var(--success-text); border: 1px solid var(--success-text); }
+.status-badge.suspended { background-color: var(--danger-soft-bg); color: var(--danger-text); border: 1px solid var(--danger-text); }
+
+/* =========================================
+   FIX LAYOUT: TABELLE, RICERCA E MODALI
+========================================= */
+
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+.search-bar { display: flex; gap: 10px; }
+.search-bar input {
+    padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);
+    background-color: var(--bg-color); color: var(--text-color);
+}
+
+.table-container { overflow-x: auto; width: 100%; border-radius: 8px; box-shadow: 0 1px 3px var(--shadow-color-medium); }
+.admin-table { width: 100%; border-collapse: collapse; text-align: left; background-color: var(--surface-color); }
+.admin-table th, .admin-table td { padding: 12px 15px; border-bottom: 1px solid var(--border-light-color); color: var(--text-color); }
+.admin-table th { background-color: var(--bg-color); font-weight: bold; border-bottom: 2px solid var(--border-color); }
+
+/* Modale Galleggiante (Sfondo e Contenitore) */
+.modal {
+    display: none; position: fixed; z-index: 1000; left: 0; top: 0;
+    width: 100%; height: 100%; overflow: auto; 
+    background-color: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+}
+.modal-content {
+    background-color: var(--surface-color); /* Adatta automaticamente al tema */
+    color: var(--text-color);
+    margin: 5% auto; padding: 25px; border-radius: 8px;
+    width: 90%; max-width: 600px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    position: relative;
+    border: 1px solid var(--border-color);
+}
+
+/* Stile Input e Calendari Intelligenti */
+.form-group input, .form-group select {
+    width: 100%; padding: 10px; margin-top: 5px;
+    border: 1px solid var(--border-color); border-radius: 6px; box-sizing: border-box;
+    background-color: var(--bg-color); color: var(--text-color);
+    color-scheme: light dark; /* Il browser cambia l'icona del calendario se il sistema è dark! */
+    transition: border-color 0.2s;
+}
+.form-group input[type="file"] { border: 1px dashed var(--border-color); padding: 8px; cursor: pointer; }
+
+/* Tasti Modale (Chiusura e Cestino) */
+.close-modal, .close-modal-courses, .close-edit-modal {
+    color: var(--text-color); float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; opacity: 0.6;
+}
+.close-modal:hover, .close-modal-courses:hover, .close-edit-modal:hover { opacity: 1; color: #ef4444; }
+
+.btn-delete-record { color: #ef4444; cursor: pointer; margin-left: 10px; border: none; background: none; font-size: 1.1rem; }
+.btn-delete-record:hover { color: #b91c1c; }
+
+/* Storico Visite e Corsi */
+#current-medical-list, #current-courses-list {
+    background-color: var(--bg-color); border: 1px solid var(--border-light-color);
+}
+.history-date-text {
+    font-size: 0.95rem; margin-top: 4px;
+    color: var(--text-color); opacity: 0.8; /* Si adatta senza forzare colori grigi */
+}
+
+/* Checkbox eliminazione file */
+.checkbox-danger-label {
+    display: flex; align-items: center; gap: 8px; font-weight: normal; color: #ef4444; 
+    cursor: pointer; margin-top: 10px; padding: 8px; border-radius: 4px; 
+    background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+
+/* Pulsanti dentro alle tabelle.
+ *
+ * Erano pillole maiuscole con gradiente e ombra colorata, una tinta diversa
+ * per ogni azione: in una riga di elenco quattro pastiglie colorate fanno più
+ * rumore del dato che dovrebbero accompagnare. Ora sono quadrati con il
+ * contorno: si vedono, non urlano, e il colore torna a voler dire qualcosa
+ * quando compare (il rosso dell'eliminare). */
+.admin-table .button-small,
+#user-table .button-style.button-small {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    box-shadow: none;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-table .button-small:hover,
+#user-table .button-style.button-small:hover {
+    background: var(--list-item-hover-bg);
+    color: var(--text-color);
+    border-color: var(--text-muted);
+    transform: none;
+    box-shadow: none;
+    filter: none;
+}
+
+/* Le azioni che tolgono qualcosa restano riconoscibili dal colore del segno,
+ * non da un fondo pieno. */
+.admin-table .button-small.danger,
+.admin-table .button-small.delete-btn,
+#user-table button.delete-user-btn {
+    color: #dc2626;
+}
+
+.admin-table .button-small.danger:hover,
+.admin-table .button-small.delete-btn:hover,
+#user-table button.delete-user-btn:hover {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+}
+
+/* 5. Profondità delle ombre corretta per il Tema Scuro */
+@media (prefers-color-scheme: dark) {
+    .admin-table .button-small { box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+    .admin-table .button-small:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
+}
+
+
+.btn-icon-action {
+    background: none !important;
+    border: none !important;
+    cursor: pointer;
+    font-size: 1.15rem; /* Grandezza uniforme per tutte */
+    padding: 4px; /* Area cliccabile maggiorata */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.2s; /* Effetto elastico al passaggio del mouse */
+}
+
+/* Colori specifici (Normali e Hover) */
+.btn-view-record { color: #10b981 !important; } /* Verde Smeraldo per l'allegato */
+.btn-view-record:hover { color: #059669 !important; transform: scale(1.2); }
+
+.btn-edit-record { color: #3b82f6 !important; } /* Blu per la modifica */
+.btn-edit-record:hover { color: #2563eb !important; transform: scale(1.2); }
+
+.btn-delete-record { color: #ef4444 !important; } /* Rosso per il cestino */
+.btn-delete-record:hover { color: #dc2626 !important; transform: scale(1.2); }
+
+/* Leggero aggiustamento di luminosità sul tema scuro */
+@media (prefers-color-scheme: dark) {
+    .btn-view-record { color: #34d399 !important; }
+    .btn-edit-record { color: #60a5fa !important; }
+    .btn-delete-record { color: #f87171 !important; }
+}
+
+.admin-table td small {
+    color: var(--text-color) !important;
+    opacity: 0.7;
+    font-weight: 500;
+}
+
+/* Quando il sistema passa in Dark Mode, forziamo un grigio-azzurro luminoso */
+@media (prefers-color-scheme: dark) {
+    .admin-table td small {
+        color: #94a3b8 !important;
+        opacity: 1; /* Togliamo la trasparenza per massima leggibilità */
+    }
+}
+
+/* =========================================
+   PULSANTI DELLE FINESTRE
+   =========================================
+   L'aspetto lo decide componenti.css. Qui restano solo due regole: quella
+   che chiude una finestra pesa come l'azione che conclude, quella che
+   annulla no. Prima erano due pillole maiuscole, una verde e una grigia,
+   che pesavano uguale: chi guardava non sapeva quale premere. */
+
+.modal-content .gruppo-azioni,
+.modal-content .azioni-modale {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Chi non ha ancora la classe: si riconosce dal tipo. */
+.modal-content button[type="button"]:not([class*="btn"]):not([class*="button-style"]) {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+
+.modal-content button[type="button"]:not([class*="btn"]):not([class*="button-style"]):hover {
+    background: var(--list-item-hover-bg);
+}
+
+/* =========================================
+   MODERN ALERTS DASHBOARD (CARD & LISTA)
+========================================= */
+
+.alerts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.modern-alert-card {
+    background-color: var(--surface-color);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 6px var(--shadow-color-light);
+    border-left: 6px solid;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.modern-alert-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px var(--shadow-color-medium);
+}
+
+.danger-alert { border-left-color: #ef4444; }
+.warning-alert { border-left-color: #f59e0b; }
+
+.alert-card-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.alert-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+.danger-alert .alert-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.warning-alert .alert-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+
+.alert-info h3 { margin: 0; font-size: 1.1rem; color: var(--text-color); }
+.alert-info p { margin: 4px 0 0 0; font-size: 0.9rem; color: var(--text-muted, #64748b); }
+
+/* Sezione Espandibile per la Lista Nomi */
+.alert-card-actions {
+    border-top: 1px solid var(--border-light-color);
+    padding-top: 12px;
+}
+
+.btn-toggle-list {
+    background: none; border: none;
+    color: var(--link-color, #3b82f6);
+    cursor: pointer; font-weight: 600; font-size: 0.9rem;
+    padding: 0; display: flex; align-items: center; gap: 6px;
+    transition: color 0.2s;
+}
+.btn-toggle-list:hover { filter: brightness(1.2); }
+
+.alert-names-list {
+    display: none; /* Nascosta di default */
+    list-style: none; padding: 0; margin: 12px 0 0 0;
+    max-height: 150px; overflow-y: auto; /* Scroll interno se ci sono troppi nomi */
+    background: var(--bg-color);
+    border-radius: 6px; border: 1px solid var(--border-light-color);
+}
+.alert-names-list.show { display: block; } /* Si attiva al click */
+
+.alert-names-list li {
+    padding: 8px 12px; border-bottom: 1px solid var(--border-light-color);
+    font-size: 0.85rem; color: var(--text-color);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.alert-names-list li:last-child { border-bottom: none; }
+
+/* Fra le voci comuni della barra laterale e quelle della pagina. */
+.sidebar-menu .separatore-menu {
+    height: 1px;
+    margin: 14px 4px;
+    background: var(--border-color);
+}
+
+/* Sul telefono la barra laterale diventa una fila in cima che scorre di lato:
+ * affiancata al contenuto gli lasciava metà dello schermo, e le pagine (il
+ * magazzino per primo, che si usa soprattutto dal telefono) diventavano una
+ * colonna di parole una sotto l'altra. */
+@media (max-width: 800px) {
+    .admin-layout {
+        display: block !important;
+    }
+    .admin-sidebar {
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 10px 12px;
+    }
+    .admin-sidebar .sidebar-header {
+        margin-bottom: 8px !important;
+    }
+    .admin-sidebar .sidebar-header h2 { font-size: 1.1rem; }
+    .sidebar-menu {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+    .sidebar-menu li { margin: 0 !important; flex: 0 0 auto; }
+    .sidebar-menu a { white-space: nowrap; padding: 8px 10px; }
+    .sidebar-menu .separatore-menu {
+        width: 1px;
+        height: auto;
+        margin: 6px 4px;
+    }
+    .admin-content {
+        padding: 16px !important;
+        min-width: 0;
+    }
+}

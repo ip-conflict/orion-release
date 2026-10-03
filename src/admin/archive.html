@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archivio Emergenze - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/admin-archive.css">
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt" style="width: 20px;"></i> Centro Operativo</a></li>
+                <li id="sidebar-settings"><a href="/admin/dashboard-admin.html"><i class="fas fa-cogs" style="width: 20px;"></i> Impostazioni</a></li>
+                <li id="sidebar-segreteria" style="display: none;"><a href="/admin-segreteria.html"><i class="fas fa-folder-open" style="width: 20px;"></i> Segreteria</a></li>
+                <li id="sidebar-magazzino" style="display: none;"><a href="/magazzino.html"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a></li>
+                <li id="sidebar-users"><a href="/admin/admin.html"><i class="fas fa-users" style="width: 20px;"></i> Gestione Utenti</a></li>
+                <li id="sidebar-teams"><a href="/admin/squadre.html"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a></li>
+                <li id="sidebar-archive"><a href="/admin/archive.html" class="active"><i class="fas fa-archive" style="width: 20px;"></i> Archivio Emergenze</a></li>
+                <li id="sidebar-sistema" style="display: none;"><a href="/admin/sistema.html"><i class="fas fa-shield-halved" style="width: 20px;"></i> Sistema</a></li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <div>
+                    <h1 style="margin: 0; font-size: 2rem;">Archivio Emergenze</h1>
+                    <p style="margin: 5px 0 0 0; color: var(--text-muted);">Consulta lo storico delle emergenze chiuse e delle segnalazioni</p>
+                </div>
+            </header>
+
+            <section class="admin-panel" style="margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px var(--shadow-color-light); border: 1px solid var(--border-color);">
+                <h2 style="margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                    Seleziona Emergenza
+                </h2>
+                <div class="form-group" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                    <select id="closed-emergency-select" style="flex-grow: 1; max-width: 500px; margin: 0; padding: 12px; border-radius: 8px;">
+                        <option value="">-- Seleziona un'emergenza archiviata --</option>
+                    </select>
+                    <span id="emergency-details-display" style="color: var(--text-muted); font-size: 0.9rem; font-weight: 600;"></span>
+
+                    <!-- Resoconto completo dell'intervento in un unico file di testo:
+                         serve per la relazione da consegnare dopo l'emergenza. -->
+                    <a id="download-resoconto-link" class="button-style button-small" href="#" style="display: none;">
+                        Scarica Resoconto
+                    </a>
+
+                    <button type="button" id="delete-selected-emergency-btn" class="button-style button-small btn-pericolo" style="display: none">
+                        Elimina per sempre
+                    </button>
+                </div>
+            </section>
+
+            <section id="archived-docs-section" style="display: none; margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px var(--shadow-color-light); border: 1px solid var(--border-color);">
+                <h2 style="margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                    Documenti Emergenza
+                </h2>
+                <div id="archived-docs-list-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
+                </div>
+            </section>
+
+            <section id="archived-reports-section" class="admin-panel" style="display: none;">
+                <div class="table-container" id="archived-reports-table-wrapper" style="max-height: 60vh; overflow-y: auto; background: var(--surface-color); border-radius: 12px; box-shadow: 0 4px 6px var(--shadow-color-light); border: 1px solid var(--border-color);">
+                    <table id="archived-report-table" class="admin-table">
+                        <thead style="background: var(--bg-color);">
+                            <tr>
+                                <th>#</th>
+                                <th>Titolo</th>
+                                <th>Stato Finale</th>
+                                <th>Priorità</th>
+                                <th>Squadre</th>
+                                <th>Ult. Aggiornamento</th>
+                                <th style="text-align: right;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="archived-report-list-body">
+                            <tr><td colspan="7" style="text-align: center; padding: 20px;">Seleziona un'emergenza per vedere le segnalazioni.</td></tr>
+                        </tbody>
+                    </table>
+                </div> 
+            </section> 
+        </main> 
+    </div>
+
+    <div id="archived-report-detail-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 850px; max-height: 85vh; display: flex; flex-direction: column; border-top: 5px solid #64748b; border-radius: 12px; padding: 0;">
+             
+             <div style="padding: 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                 <h2 style="margin: 0; display: flex; align-items: center; gap: 10px; font-size: 1.4rem;">
+                    Segnalazione Archiviata #<span id="archived-detail-report-id"></span>
+                 </h2>
+                 <span id="closeArchivedDetailModalBtn" class="close" title="Chiudi" style="position: static; font-size: 1.8rem;">&times;</span>
+             </div>
+             
+             <div class="modal-scrollable-content" style="flex-grow: 1; overflow-y: auto; padding: 20px;">
+                  <div id="archived-detail-main" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; font-size: 0.95rem;">
+                    <div style="grid-column: span 2;"><strong>Titolo:</strong> <span id="archived-detail-title"></span></div>
+                    <div><strong>Segnalante:</strong> <span id="archived-detail-reporter-name"></span></div>
+                    <div><strong>Contatto:</strong> <span id="archived-detail-reporter-contact"></span></div>
+                    <div><strong>Stato Finale:</strong> <span id="archived-detail-status"></span></div>
+                    <div><strong>Priorità:</strong> <span id="archived-detail-priority"></span></div>
+                    <div style="grid-column: span 2;"><strong>Luogo:</strong> <span id="archived-detail-location"></span></div>
+                    <div style="grid-column: span 2;"><strong>Coordinate:</strong> <span id="archived-detail-coords"></span></div>
+                    
+                    <div style="grid-column: span 2;">
+                        <strong>Descrizione:</strong>
+                        <div class="description-box" id="archived-detail-description" style="background: var(--bg-color); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 5px; white-space: pre-wrap;"></div>
+                    </div>
+                    
+                    <div style="grid-column: span 2;">
+                        <strong>Pericolo Ambientale:</strong>
+                        <div class="description-box hazard-box" id="archived-detail-env-hazard" style="background: var(--danger-soft-bg); color: var(--danger-text); padding: 12px; border-radius: 8px; border: 1px solid var(--danger-text); margin-top: 5px; white-space: pre-wrap; font-weight: 600;"></div>
+                    </div>
+                    
+                    <div><strong>Creato da:</strong> <span id="archived-detail-creator"></span></div>
+                    <div><strong>Ultimo Agg.:</strong> <span id="archived-detail-updated-at"></span></div>
+                    <div style="grid-column: span 2;"><strong>Squadre Assegnate:</strong> <span id="archived-detail-teams"></span></div>
+               </div>
+               
+               <div id="archived-detail-images-section">
+                    <h4 style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Immagini Allegate</h4>
+                    <div id="archived-detail-image-gallery" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+                         <span>Nessuna immagine.</span>
+                    </div>
+               </div>
+               
+               <div id="archived-detail-log-section" style="margin-top: 25px;">
+                    <h4 style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Storico Aggiornamenti</h4>
+                    <ul id="archived-log-list" style="list-style: none; padding: 0; margin: 0; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; max-height: 250px; overflow-y: auto;">
+                         <li style="padding: 10px; border-bottom: 1px dotted var(--border-color);">Caricamento...</li>
+                    </ul>
+               </div>
+          </div> 
+          
+          <div style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); border-radius: 0 0 12px 12px; display: flex; justify-content: flex-end; gap: 10px;">
+               <button type="button" id="cancelArchivedDetailModalBtn" class="button-style button-secondary">Chiudi</button>
+               <a href="#" id="archived-print-link" class="button-style button-secondary" target="_blank">
+                    Stampa Report
+               </a>
+          </div>
+        </div>
+    </div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script> 
+    <script src="/js/admin-archive.js"></script> 
+</body>
+</html>

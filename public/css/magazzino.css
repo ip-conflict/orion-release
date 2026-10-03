@@ -1,0 +1,949 @@
+/* public/css/magazzino.css
+ *
+ * Il magazzino lo usano volontari con il telefono in mano, spesso all'aperto e
+ * di corsa. Quindi: pochi elementi per schermata, bersagli grandi da toccare,
+ * niente tabelle strette da far scorrere di lato.
+ *
+ * I colori vengono da theme.css, che ha già la versione chiara e quella scura:
+ * qui non si scrive nessun colore fisso, altrimenti di notte si legge bianco su
+ * bianco. */
+
+/* L'attributo hidden vale "display: none", ma qualunque altra regola di display
+ * lo batte, e qui ce ne sono molte (flex sulle righe, flex sulle etichette dei
+ * campi, flex sulla modale). Senza questa riga: la modale chiusa resta stesa
+ * sopra la pagina e si mangia ogni clic, e la scheda di un bene mostra
+ * "Quantità in magazzino" su un pezzo unico e i chilometri su una motosega.
+ * Vale per tutta la pagina di proposito: nascondere qualcosa deve bastare a
+ * nasconderlo, senza doversi ricordare di aggiungere una regola ogni volta. */
+[hidden] { display: none !important; }
+
+.sottotitolo {
+    margin: 4px 0 0;
+    opacity: 0.75;
+    font-size: 0.9rem;
+}
+
+/* --- Le schede --- */
+.schede-magazzino {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 20px 0 24px;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 12px;
+}
+
+/* Linguette di solo testo. Erano riquadri con un'icona grande sopra la
+ * parola: occupavano il triplo dello spazio per dire la stessa cosa, e
+ * un'icona accanto a "Rientro" non aggiunge niente a "Rientro". */
+.schede-magazzino .scheda {
+    position: relative;
+    padding: 10px 16px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.schede-magazzino .scheda:hover {
+    background: var(--list-item-hover-bg);
+    color: var(--text-color);
+}
+
+/* L'attiva si riconosce dal testo pieno e dal filo sotto, non da un
+ * rettangolo colorato: in una barra di cinque voci è più che sufficiente. */
+.schede-magazzino .scheda.attiva {
+    color: var(--text-color);
+    background: var(--list-item-hover-bg);
+    box-shadow: inset 0 -2px 0 var(--primary-color, #2563eb);
+}
+
+/* Il pallino sulla scheda delle scadenze: si vede da lontano che c'è
+ * qualcosa da guardare, senza dover aprire. */
+.schede-magazzino .pallino {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #dc2626;
+}
+
+/* --- Passi --- */
+.passo {
+    margin-bottom: 26px;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-bg, transparent);
+}
+
+.passo h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    font-size: 1.05rem;
+}
+
+.numero-passo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--primary-color, #2563eb);
+    color: var(--button-text, #fff);
+    font-size: 0.85rem;
+}
+
+.campo-grande {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    box-sizing: border-box;
+}
+
+.riga-opzione {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.riga-opzione {
+    margin-bottom: 14px;
+}
+
+.nota {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    opacity: 0.78;
+}
+
+/* --- Elenchi di beni --- */
+.elenco-beni {
+    display: grid;
+    /* 340 e non 280: una riga può contenere spunta, testo, etichetta e campo
+       della quantità, e in 280 pixel la colonna del testo si schiacciava fino
+       ad andare a capo una parola per volta. */
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.riga-bene {
+    display: flex;
+    align-items: center;
+    /* Se lo spazio non basta, il campo della quantità scende sotto invece di
+       rubare larghezza al nome dell'oggetto: il nome è la cosa che si legge. */
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-color);
+    cursor: pointer;
+}
+
+.riga-bene:hover {
+    border-color: var(--primary-color, #2563eb);
+}
+
+.riga-bene.scelta {
+    border-color: var(--primary-color, #2563eb);
+    box-shadow: inset 0 0 0 1px var(--primary-color, #2563eb);
+}
+
+.riga-bene input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.riga-bene .dettagli {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.riga-bene .etichetta-famiglia,
+.riga-bene input[type="number"] {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.riga-bene .nome-bene {
+    font-weight: 600;
+    display: block;
+}
+
+.riga-bene .sottotesto {
+    font-size: 0.82rem;
+    opacity: 0.72;
+}
+
+.riga-bene input[type="number"] {
+    width: 80px;
+    margin-left: 0;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* Cosa ne è di quello che non torna: finché non si sceglie, si vede. */
+.riga-bene select.scelta-resto {
+    flex: 0 1 auto;
+    max-width: 14rem;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+.riga-bene select.scelta-resto.da-scegliere { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b; }
+
+.etichetta-famiglia {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+.riepilogo {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+    font-size: 0.92rem;
+}
+
+/* Il bottone che chiude l'operazione. Il colore se lo dà da solo: la classe
+ * "primary" arriva dal foglio dell'amministrazione, dove vale solo dentro le
+ * tabelle, e qui restava un bottone grigio in fondo a tre passi numerati -
+ * cioè l'unica cosa da premere, resa invisibile. */
+.bottone-grande {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.02rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    background: var(--primary-color, #2563eb);
+    color: #fff;
+    cursor: pointer;
+}
+
+.bottone-grande:hover:not(:disabled) {
+    filter: brightness(1.08);
+}
+
+/* Disattivato deve sembrare disattivato: finché non si è scelto niente, il
+ * bottone non promette nulla. */
+.bottone-grande:disabled {
+    background: var(--border-color);
+    color: var(--text-color);
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* --- Chi ha cosa --- */
+.elenco-detentori {
+    margin-top: 16px;
+}
+
+.gruppo-detentore {
+    margin-bottom: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.gruppo-detentore h3 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 0.98rem;
+    background: var(--card-bg, rgba(127, 127, 127, 0.08));
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.gruppo-detentore ul {
+    margin: 0;
+    padding: 10px 16px 14px 32px;
+}
+
+.gruppo-detentore li {
+    padding: 3px 0;
+}
+
+/* --- Avvisi (scadenze e da recuperare) --- */
+.elenco-avvisi {
+    margin: 12px 0 28px;
+}
+
+.riga-avviso {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-left: 4px solid var(--border-color);
+    border-radius: 0 8px 8px 0;
+    background: var(--card-bg, rgba(127, 127, 127, 0.06));
+    margin-bottom: 8px;
+}
+
+.riga-avviso.scaduto { border-left-color: #dc2626; }
+.riga-avviso.vicino  { border-left-color: #f59e0b; }
+
+.riga-avviso .quando {
+    margin-left: auto;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+.titolo-blocco {
+    margin: 26px 0 6px;
+    font-size: 1.1rem;
+}
+
+.avviso {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    border-left: 4px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.avviso.errore {
+    border-left-color: #dc2626;
+    background: rgba(220, 38, 38, 0.12);
+}
+
+.avviso.fatto {
+    border-left-color: #16a34a;
+    background: rgba(22, 163, 74, 0.12);
+}
+
+.vuoto {
+    padding: 20px;
+    text-align: center;
+    opacity: 0.7;
+}
+
+/* --- Inventario --- */
+.barra-inventario {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.barra-inventario .campo-grande { flex: 1; min-width: 200px; }
+
+.barra-inventario select {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.impostazioni {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 640px;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.impostazioni label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.92rem;
+}
+
+.impostazioni label.riga-opzione {
+    flex-direction: row;
+    align-items: center;
+}
+
+.impostazioni select,
+.impostazioni input[type="number"] {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* --- Modale --- */
+.modale {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.contenuto-modale {
+    position: relative;
+    width: 100%;
+    max-width: 760px;
+    padding: 26px;
+    border-radius: 14px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.chiudi-modale {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    border: none;
+    background: none;
+    font-size: 1.7rem;
+    line-height: 1;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.griglia-campi {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+/* Etichetta sopra, campo sotto, ma l'etichetta resta una riga di testo: con
+ * flex-direction: column l'asterisco degli obbligatori diventava un elemento a
+ * sé e finiva su una riga tutta sua, sotto la parola. */
+.griglia-campi label,
+.griglia-scadenze label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.griglia-campi label > input,
+#campo-nota-carico > input,
+.griglia-campi label > select,
+.griglia-campi label > textarea,
+.griglia-scadenze label > input {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    box-sizing: border-box;
+}
+
+.griglia-campi .campo-largo { grid-column: 1 / -1; }
+
+.griglia-campi input,
+#campo-nota-carico input,
+.griglia-campi select,
+.griglia-campi textarea,
+.griglia-scadenze input {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-weight: 400;
+    font-family: inherit;
+}
+
+.griglia-scadenze {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.obbligatorio { color: var(--danger-text); }
+
+.azioni-modale {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.elenco-storia {
+    max-height: 320px;
+    overflow-y: auto;
+    font-size: 0.88rem;
+}
+
+.elenco-storia div {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Sul telefono le schede diventano una fila che scorre e i passi si
+ * allargano: è lo schermo su cui il magazzino si usa di più. */
+@media (max-width: 700px) {
+    .schede-magazzino {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 10px;
+    }
+    .schede-magazzino .scheda {
+        padding: 10px 12px;
+        font-size: 0.88rem;
+        white-space: nowrap;
+    }
+    .passo { padding: 14px; }
+    .elenco-beni { grid-template-columns: 1fr; }
+}
+
+/* Modulo spento: una schermata che spiega, non una pagina rotta. */
+.modulo-spento {
+    max-width: 520px;
+    margin: 60px auto;
+    padding: 36px 28px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+}
+
+.modulo-spento i {
+    font-size: 2.4rem;
+    opacity: 0.45;
+    margin-bottom: 14px;
+}
+
+.modulo-spento h2 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+}
+
+.modulo-spento p {
+    margin: 0 0 10px;
+    line-height: 1.55;
+}
+
+/* La riga "fuori da più di N giorni" è una frase, non tre campi impilati:
+ * spezzarla su tre righe la rende illeggibile. */
+.impostazioni label.riga-numero {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.impostazioni label.riga-numero input[type="number"] {
+    width: 80px;
+}
+
+/* Bottone di un'azione secondaria: colorato quanto basta a trovarlo, largo
+ * quanto il suo testo e non quanto il pannello. */
+.bottone-azione {
+    align-self: flex-start;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 8px;
+    background: var(--primary-color, #2563eb);
+    color: var(--button-text, #fff);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bottone-azione:hover { filter: brightness(1.08); }
+
+/* I bottoni della modale: quello che salva è l'azione principale della
+ * finestra e non può essere grigio quanto "Annulla". */
+.azioni-modale .button-style {
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.azioni-modale button[type="submit"] {
+    border: none;
+    background: var(--primary-color, #2563eb);
+    color: var(--button-text, #fff);
+}
+
+.azioni-modale button[type="submit"]:hover { filter: brightness(1.08); }
+
+/* --- Pulsante "Nuovo bene" ---
+ * È l'unica azione che crea qualcosa in questa schermata: deve leggersi come
+ * tale. Prima ereditava un bordo grigio dal foglio dell'amministrazione e
+ * spariva accanto alla casella di ricerca. */
+.bottone-nuovo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+    transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.bottone-nuovo:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.38);
+}
+
+.bottone-nuovo:active { transform: translateY(0); }
+
+.bottone-nuovo i { font-size: 0.9rem; }
+
+/* Azione di contorno: si vede, ma non compete con quella principale. */
+.bottone-contorno {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.bottone-contorno:hover { border-color: var(--primary-color, #2563eb); }
+
+/* --- Movimenti sulla scheda di un bene --- */
+#azioni-bene, #manutenzioni-bene, #storia-bene {
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.pulsanti-movimento {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.azione-movimento, .azione-etichetta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.azione-movimento:hover, .azione-etichetta:hover { border-color: var(--primary-color, #2563eb); }
+.azione-etichetta { text-decoration: none; }
+
+/* La dismissione toglie un bene dagli elenchi per sempre: il pulsante lo dice
+ * prima che qualcuno lo prema, non dopo. */
+.azione-movimento.pericolo { color: var(--danger-text); }
+.azione-movimento.pericolo:hover { border-color: #dc2626; background: rgba(220, 38, 38, 0.06); }
+.azione-movimento.scelta { border-color: var(--primary-color, #2563eb); box-shadow: inset 0 0 0 1px var(--primary-color, #2563eb); }
+
+.riquadro-movimento {
+    margin: 12px 0 18px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg, rgba(127, 127, 127, 0.05));
+}
+
+.campi-movimento {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.campi-movimento label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.campi-movimento .campo-largo { grid-column: 1 / -1; }
+
+.campi-movimento input,
+.campi-movimento select {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-weight: 400;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.riquadro-movimento .azioni-modale { border-top: none; padding-top: 0; }
+
+/* --- Storico delle manutenzioni --- */
+.riga-intervento {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.88rem;
+}
+
+.riga-intervento .data { font-weight: 600; white-space: nowrap; }
+.riga-intervento .allegato { margin-left: auto; white-space: nowrap; }
+.riga-intervento .allegato a { color: var(--primary-color, #2563eb); }
+
+/* La periodicità sta accanto alla data di scadenza, non in un campo lontano:
+ * "scade il 5 ottobre, ogni 12 mesi" è una frase sola. */
+.scadenza-con-periodo {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+}
+
+/* min-width: 0 su entrambi, altrimenti i campi nativi tengono la loro
+ * larghezza minima e la riga sborda dal bordo della finestra. */
+.scadenza-con-periodo input[type="date"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.scadenza-con-periodo input[type="number"] {
+    flex: 0 1 84px;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.scadenza-con-periodo .ogni {
+    font-size: 0.78rem;
+    font-weight: 400;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
+/* --- Verbali, registro, cataloghi --- */
+/* Il pallino dei verbali da confermare è un promemoria, non un allarme. */
+.schede-magazzino .pallino-info { background: #f59e0b; }
+
+.avviso .azione-avviso {
+    margin-left: 10px;
+    font-weight: 700;
+    color: inherit;
+    text-decoration: underline;
+    white-space: nowrap;
+}
+
+.stato-verbale {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    border: 1px solid var(--border-color);
+}
+.stato-verbale.da_confermare { border-color: var(--warning-text); color: var(--warning-text); background: var(--warning-soft-bg); }
+.stato-verbale.confermato { border-color: var(--success-text); color: var(--success-text); background: var(--success-soft-bg); }
+.stato-verbale.firmato_cartaceo { border-color: var(--info-text); color: var(--info-text); background: var(--info-soft-bg); }
+
+a.riga-bene { color: inherit; text-decoration: none; }
+
+.elenco-registro { margin: 12px 0 28px; }
+
+.riga-registro {
+    display: grid;
+    grid-template-columns: 9.5rem 7.5rem 1fr;
+    gap: 4px 14px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9rem;
+}
+.riga-registro .quando { opacity: 0.75; white-space: nowrap; }
+.riga-registro .tipo { font-weight: 600; }
+.riga-registro .chi { grid-column: 3; font-size: 0.82rem; opacity: 0.72; }
+
+@media (max-width: 640px) {
+    .riga-registro { grid-template-columns: 1fr auto; }
+    .riga-registro .cosa, .riga-registro .chi { grid-column: 1 / -1; }
+}
+
+.riga-aggiunta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    max-width: 640px;
+    margin: 10px 0 12px;
+}
+.riga-aggiunta input[type="text"] { flex: 1 1 220px; }
+.riga-aggiunta input[type="text"],
+.riga-aggiunta select,
+.voce-catalogo input[type="text"],
+.voce-catalogo select {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 0.95rem;
+}
+
+.elenco-cataloghi { max-width: 640px; margin-bottom: 28px; }
+.elenco-cataloghi h3 { margin: 16px 0 6px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
+
+.voce-catalogo {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+.voce-catalogo .nome { flex: 1 1 160px; min-width: 0; font-weight: 600; }
+.voce-catalogo .nome small { display: block; font-weight: 400; opacity: 0.7; }
+.voce-catalogo.a-riposo .nome { opacity: 0.6; }
+.voce-catalogo input[type="text"] { flex: 1 1 160px; }
+.voce-catalogo button {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.voce-catalogo button.pericolo { color: var(--danger-text); border-color: var(--danger-text); }
+.voce-catalogo button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.mostra-altri { grid-column: 1 / -1; justify-self: start; margin-top: 10px; }
+
+/* --- DPI a taglie --- */
+.testata-modelli { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+.testata-modelli .titolo-blocco { margin: 0; }
+.testata-modelli .gruppo-azioni { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.elenco-modelli {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+    margin: 8px 0 12px;
+}
+.scheda-modello {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: var(--bg-color);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.scheda-modello.nascosto { opacity: 0.55; }
+.scheda-modello .intestazione { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.scheda-modello .nome { font-weight: 700; }
+.scheda-modello .sotto { font-size: 0.82rem; opacity: 0.72; }
+.scheda-modello .totale { font-size: 0.85rem; white-space: nowrap; font-weight: 600; }
+.taglie-modello { display: flex; flex-wrap: wrap; gap: 6px; }
+.taglia-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 46px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+.taglia-chip strong { font-size: 0.9rem; }
+.taglia-chip.vuota { opacity: 0.45; }
+.taglia-chip.scarsa { border-color: #f59e0b; }
+.taglia-chip .fuori { font-size: 0.68rem; opacity: 0.75; }
+.taglia-chip:hover { border-color: var(--primary-color, #2563eb); }
+.scheda-modello .azioni { display: flex; gap: 8px; }
+.scheda-modello .azioni button, .scheda-modello .azioni a {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.scheda-modello .azioni button.principale { background: var(--primary-color, #2563eb); border-color: transparent; color: var(--button-text, #fff); }
+
+.scorciatoie-taglie { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.scorciatoie-taglie button {
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-color);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+.griglia-quantita {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.griglia-quantita label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; font-weight: 600; }
+.griglia-quantita input {
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    width: 100%;
+    box-sizing: border-box;
+}
+.griglia-quantita .attuale { font-weight: 400; opacity: 0.65; font-size: 0.72rem; }

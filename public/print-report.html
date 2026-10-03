@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stampa Segnalazione</title>
+    <link rel="stylesheet" href="/css/print-report.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="watermark" id="print-watermark"></div>
+
+    <div class="print-container">
+        <div class="print-header-modern">
+            <img id="print-app-logo" src="/logo.png" alt="Logo" class="print-logo" style="display: none;">
+            <div class="print-header-text">
+                <h1 id="print-association-name">Protezione Civile</h1>
+                <h2>Rapporto di Intervento / Segnalazione #<span id="print-report-id">[ID]</span></h2>
+            </div>
+        </div>
+
+        <div class="print-meta-bar">
+            <div><strong>Emergenza:</strong> <span id="print-emergency-name">N/D</span></div>
+            <div><strong>Generato il:</strong> <span id="print-generation-date">Caricamento...</span></div>
+        </div>
+
+        <h3 class="section-title">Dati Principali</h3>
+        <div class="info-grid">
+            <div class="info-box span-2">
+                <div class="info-label">Titolo Segnalazione</div>
+                <div class="info-value" id="print-title">Caricamento...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Stato</div>
+                <div class="info-value"><span id="print-status" class="badge">...</span></div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Priorità</div>
+                <div class="info-value"><span id="print-priority" class="badge">...</span></div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Localizzazione e Contatti</h3>
+        <div class="info-grid">
+            <div class="info-box span-2">
+                <div class="info-label">Indirizzo / Luogo dell'Intervento</div>
+                <div class="info-value" id="print-location">...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Coordinate GPS</div>
+                <div class="info-value" id="print-coords">...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Nome Segnalante</div>
+                <div class="info-value" id="print-reporter-name">...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Recapito Segnalante</div>
+                <div class="info-value" id="print-reporter-contact">...</div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Dettagli Operativi</h3>
+        <div class="info-grid">
+            <div class="info-box span-2">
+                <div class="info-label">Descrizione dell'Evento</div>
+                <div class="info-value description-box" id="print-description">...</div>
+            </div>
+            <div class="info-box span-2" id="hazard-container" style="display: none;">
+                <div class="info-label" style="color: #b91c1c;">Pericoli Ambientali Segnalati</div>
+                <div class="info-value description-box hazard-box" id="print-environmental-hazard">N/D</div>
+            </div>
+            <div class="info-box span-2">
+                <div class="info-label">Squadre Assegnate</div>
+                <div class="info-value" id="print-assigned-teams">...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Creato Da</div>
+                <div class="info-value" id="print-creator">...</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Ultimo Aggiornamento</div>
+                <div class="info-value" id="print-updated-at">...</div>
+            </div>
+        </div>
+
+        <div class="image-gallery" id="print-images-section" style="display: none;"> 
+            <h3 class="section-title">Immagini Allegate</h3>
+            <div id="print-image-gallery" class="gallery-grid"></div>
+        </div>
+
+        <div class="updates-log" id="print-log-section">
+            <h3 class="section-title">Diario Operativo / Aggiornamenti</h3>
+            <ul id="print-log-list" class="modern-log-list">
+                <li>Caricamento aggiornamenti...</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="/js/apiHelper.js"></script> 
+    <script src="/js/print-report.js" defer></script>
+</body>
+</html>

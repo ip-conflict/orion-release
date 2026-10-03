@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/centro-operativo.css">
+    <link rel="stylesheet" href="/css/sistema.css">
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt" style="width: 20px;"></i> Centro Operativo</a></li>
+                <li><a href="/admin/dashboard-admin.html"><i class="fas fa-cogs" style="width: 20px;"></i> Impostazioni</a></li>
+                <li><a href="/admin/admin.html"><i class="fas fa-users" style="width: 20px;"></i> Gestione Utenti</a></li>
+                <li><a href="/admin/squadre.html"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a></li>
+                <li><a href="/admin/archive.html"><i class="fas fa-archive" style="width: 20px;"></i> Archivio Emergenze</a></li>
+                <li><a href="/admin/sistema.html" class="active"><i class="fas fa-shield-halved" style="width: 20px;"></i> Sistema</a></li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="margin-bottom: 30px;">
+                <h1 style="margin: 0; font-size: 2rem;">Sistema</h1>
+                <p style="margin: 5px 0 0 0; color: var(--text-muted);">Backup, ripristino e stato dell'installazione.</p>
+            </header>
+
+            <!-- Operazione in corso o appena conclusa -->
+            <section id="riquadro-operazione" class="pannello" hidden>
+                <h2 id="titolo-operazione">Operazione in corso</h2>
+                <ol id="passi-operazione" class="passi"></ol>
+                <p id="esito-operazione" class="esito"></p>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-chiudi-operazione" class="button-style button-secondary" hidden>Ho capito</button>
+                </div>
+            </section>
+
+            <!-- Stato -->
+            <section class="pannello">
+                <h2>Stato</h2>
+                <div id="stato-sistema" class="griglia-stato">
+                    <p class="attesa">Caricamento...</p>
+                </div>
+            </section>
+
+            <!-- Versione e aggiornamenti -->
+            <section class="pannello">
+                <h2>Versione e aggiornamenti</h2>
+                <div id="stato-versione" class="griglia-stato">
+                    <p class="attesa">Caricamento...</p>
+                </div>
+
+                <div id="requisiti-aggiornamento"></div>
+
+                <label class="riga-opzione" style="margin-top: 18px;">
+                    <input type="checkbox" id="aggiornamenti-attivo">
+                    <span>
+                        Controlla se esistono versioni più recenti
+                        <small>Da spento l'applicazione non contatta nessun servizio esterno. Da acceso, quando premi "Controlla adesso", chiede al servizio indicato qui sotto qual è l'ultima versione pubblicata.</small>
+                    </span>
+                </label>
+
+                <details id="origine-avanzata">
+                    <summary>Da dove prendere gli aggiornamenti</summary>
+                    <label class="campo">
+                        Origine
+                        <select id="aggiornamenti-origine">
+                            <option value="github">Progetto su GitHub</option>
+                            <option value="manifesto">Indirizzo mio (manifesto JSON)</option>
+                        </select>
+                    </label>
+                    <label class="campo" id="campo-repo">
+                        Progetto
+                        <input type="text" id="aggiornamenti-repo" placeholder="ip-conflict/orion-release" spellcheck="false">
+                    </label>
+                    <label class="campo" id="campo-manifesto">
+                        Indirizzo del manifesto
+                        <input type="text" id="aggiornamenti-manifesto" placeholder="https://..." spellcheck="false">
+                    </label>
+                </details>
+
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-salva-aggiornamenti" class="button-style button-secondary">Salva</button>
+                    <button type="button" id="btn-controlla" class="button-style button-secondary">Controlla adesso</button>
+                    <button type="button" id="btn-aggiorna" class="button-style" hidden>Aggiorna</button>
+                    <span id="stato-controllo" class="nota"></span>
+                </div>
+
+                <div id="note-versione" class="note-versione" hidden>
+                    <h3>Cosa cambia</h3>
+                    <pre id="testo-note"></pre>
+                </div>
+            </section>
+
+            <!-- Backup -->
+            <section class="pannello">
+                <h2>Backup</h2>
+                <p class="spiegazione">
+                    Ogni notte il sistema salva il database e copia i file caricati. L'applicazione
+                    ne fa uno anche alla chiusura di ogni emergenza e quando si accorge che l'ultimo
+                    è troppo vecchio, per esempio dopo una notte a macchina spenta.
+                </p>
+                <p class="avvertenza">
+                    Questi backup stanno sulla stessa macchina dell'applicazione: proteggono da un
+                    errore o da una cancellazione, non dalla rottura del server. Scaricane una copia
+                    ogni tanto e tienila altrove.
+                </p>
+
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-backup-adesso" class="button-style">Fai un backup adesso</button>
+                    <label class="carica-archivio">
+                        <input type="file" id="file-archivio" accept=".gz,application/gzip" hidden>
+                        <span class="button-style button-secondary" id="btn-carica">Carica un backup da un file</span>
+                    </label>
+                    <span id="stato-caricamento" class="nota"></span>
+                </div>
+
+                <div class="table-container" style="margin-top: 20px;">
+                    <table class="admin-table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Quando</th>
+                                <th>Origine</th>
+                                <th>Dimensione</th>
+                                <th style="text-align: right;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="elenco-backup">
+                            <tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--text-muted);">Caricamento...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Conferma del ripristino -->
+    <div id="modale-ripristino" class="modal-overlay" hidden>
+        <div class="modal-content" style="background: var(--surface-color); border-radius: 12px; max-width: 620px;">
+            <div class="modal-header" style="background: var(--bg-color); padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: var(--text-color);">Ripristinare questo backup?</h3>
+                <button id="chiudi-modale-ripristino" class="close-modal-btn" aria-label="Chiudi">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p class="riga-backup-scelto" id="backup-scelto"></p>
+
+                <div class="riquadro-pericolo">
+                    <p><strong>Tutto quello che è stato fatto dopo questo backup andrà perso</strong>:
+                       segnalazioni, emergenze, utenti creati, documenti registrati.</p>
+                    <p>Prima di cominciare viene salvato un backup dei dati attuali, così si può
+                       tornare indietro. Il ripristino avviene in una transazione sola: se qualcosa
+                       va storto, il database resta com'è adesso.</p>
+                    <p>Al termine l'applicazione si riavvia e dovrai rifare l'accesso, perché anche
+                       le password tornano quelle del backup.</p>
+                </div>
+
+                <label class="riga-opzione" id="riga-file-caricati">
+                    <input type="checkbox" id="ripristina-file">
+                    <span>
+                        Ripristina anche i file caricati (foto, certificati, documenti)
+                        <small id="data-copia-file"></small>
+                    </span>
+                </label>
+
+                <label class="campo">
+                    La tua password
+                    <input type="password" id="password-conferma" autocomplete="current-password">
+                </label>
+
+                <label class="campo">
+                    Scrivi <code>RIPRISTINA</code> per confermare
+                    <input type="text" id="parola-conferma" autocomplete="off" spellcheck="false">
+                </label>
+
+                <p id="errore-ripristino" class="errore" hidden></p>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
+                <button id="annulla-ripristino" class="button-style btn-discreto">Annulla</button>
+                <button id="conferma-ripristino" class="button-style btn-pericolo-pieno" style="margin-left: 10px;">Ripristina</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conferma dell'aggiornamento -->
+    <div id="modale-aggiornamento" class="modal-overlay" hidden>
+        <div class="modal-content" style="background: var(--surface-color); border-radius: 12px; max-width: 620px;">
+            <div class="modal-header" style="background: var(--bg-color); padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: var(--text-color);">Aggiornare ORION?</h3>
+                <button id="chiudi-modale-aggiornamento" class="close-modal-btn" aria-label="Chiudi">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p class="riga-backup-scelto" id="versione-scelta"></p>
+
+                <div class="riquadro-pericolo">
+                    <p>L'aggiornamento sostituisce i file del programma e aggiorna il database.
+                       <strong>I dati non si perdono</strong>: prima parte un backup, e le
+                       migrazioni vengono applicate prima di toccare qualunque file, così se il
+                       database le rifiuta l'installazione resta quella di adesso.</p>
+                    <p>Viene messa da parte anche una copia del codice attuale, per poter tornare
+                       indietro.</p>
+                    <p>Durante l'operazione l'applicazione non è utilizzabile: fallo quando non c'è
+                       un'emergenza in corso.</p>
+                </div>
+
+                <label class="campo">
+                    La tua password
+                    <input type="password" id="password-aggiornamento" autocomplete="current-password">
+                </label>
+
+                <label class="campo">
+                    Scrivi <code>AGGIORNA</code> per confermare
+                    <input type="text" id="parola-aggiornamento" autocomplete="off" spellcheck="false">
+                </label>
+
+                <p id="errore-aggiornamento" class="errore" hidden></p>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
+                <button id="annulla-aggiornamento" class="button-style btn-discreto">Annulla</button>
+                <button id="conferma-aggiornamento" class="button-style" style="margin-left: 10px;">Aggiorna adesso</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script>
+    <script src="/js/sistema.js"></script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Etichette magazzino</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <style>
+        /* Le etichette si stampano su fogli adesivi: la pagina è fatta per la
+         * carta, non per lo schermo. Tutto quello che non finisce sull'adesivo
+         * (barra dei comandi, avvisi) sparisce in stampa. */
+        body {
+            margin: 0;
+            padding: 24px;
+            background: var(--bg-color, #fff);
+            color: var(--text-color, #111);
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+
+        .barra {
+            display: flex;
+            align-items: center;
+            gap: 10px 14px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .barra h1 { margin: 0; font-size: 1.3rem; flex: 1; min-width: 12rem; }
+
+        .barra button, .barra a.bottone {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .barra a.secondario, .barra button.secondario {
+            background: transparent;
+            color: var(--text-color, #111);
+            border: 1px solid var(--border-color, #ccc);
+        }
+
+        .opzioni {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 18px;
+            align-items: flex-end;
+            padding: 12px 0 16px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color, #ccc);
+        }
+        .opzioni label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; font-weight: 600; }
+        .opzioni select, .opzioni input { padding: 6px 8px; font-size: 0.9rem; }
+        .opzioni input[type="number"] { width: 5.5rem; }
+        .opzioni .correzione { display: flex; gap: 6px; }
+
+        .avviso {
+            margin: 0 0 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            border: 1px solid var(--border-color, #ccc);
+        }
+        .avviso.attenzione { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+
+        /* Formato libero: una griglia che si adatta al foglio, da ritagliare. */
+        .foglio.libero {
+            display: grid;
+            /* 270 e non 190: con un QR da 90 pixel accanto, in 190 il nome
+               dell'oggetto andava a capo dopo due parole e l'etichetta
+               diventava illeggibile proprio nella parte che serve leggere. */
+            grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+            gap: 10px;
+        }
+
+        /* Fogli adesivi: una pagina A4 in millimetri, con le etichette dove
+         * sono le fustelle. Le misure le scrive lo script per ogni formato. */
+        .pagina {
+            width: 210mm;
+            height: 297mm;
+            box-sizing: border-box;
+            background: #fff;
+            margin: 0 auto 16px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .2);
+            display: grid;
+            overflow: hidden;
+        }
+        .foglio:not(.libero) { overflow-x: auto; }
+        .cella { box-sizing: border-box; overflow: hidden; }
+        .cella.saltata {
+            background: repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #fff 6px, #fff 12px);
+        }
+
+        /* L'etichetta: QR grande abbastanza da leggersi con un telefono da
+         * mezzo metro, e accanto il nome dell'oggetto, perché un adesivo con
+         * solo un quadrato nero non dice niente a chi apre l'armadio. */
+        .etichetta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border: 1px dashed #999;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            cursor: pointer;
+        }
+        .pagina .etichetta {
+            height: 100%;
+            box-sizing: border-box;
+            border: 1px dashed #d1d5db;
+            border-radius: 0;
+            gap: 2.5mm;
+            padding: 2mm 2.5mm;
+        }
+        .etichetta.esclusa { opacity: 0.25; }
+
+        .etichetta .qr { flex: 0 0 auto; line-height: 0; }
+        .etichetta .qr img { display: block; image-rendering: pixelated; }
+
+        .etichetta .testo { min-width: 0; flex: 1; }
+
+        .etichetta .nome {
+            font-weight: 700;
+            font-size: 0.88rem;
+            line-height: 1.25;
+            overflow-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .etichetta .dettaglio {
+            font-size: 0.7rem;
+            opacity: 0.75;
+            margin-top: 2px;
+            overflow-wrap: anywhere;
+        }
+
+        /* Il codice si legge a voce e si ribatte a mano quando l'adesivo è
+         * graffiato: va stampato, non nascosto dentro al QR. */
+        .etichetta .codice {
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin-top: 4px;
+        }
+
+        /* Etichette piccole: il nome su due righe e il codice, il resto no. */
+        .pagina.piccole .etichetta .nome { font-size: 7.5pt; -webkit-line-clamp: 3; line-height: 1.15; }
+        .pagina.piccole .etichetta .dettaglio { display: none; }
+        .pagina.piccole .etichetta .nome[data-taglia]::after { content: " · " attr(data-taglia); }
+        .pagina.piccole .etichetta .codice { font-size: 7pt; letter-spacing: 0.04em; margin-top: 1mm; }
+        .pagina.medie .etichetta .nome { font-size: 9pt; }
+        .pagina.medie .etichetta .dettaglio { font-size: 7pt; }
+        .pagina.medie .etichetta .codice { font-size: 8pt; }
+
+        .vuoto { padding: 40px; text-align: center; opacity: 0.7; }
+
+        @media print {
+            body { padding: 0; background: #fff; color: #000; }
+            .barra, .opzioni, .avviso, .solo-schermo { display: none !important; }
+            .foglio.libero { gap: 4mm; }
+            .etichetta { border-color: #bbb; cursor: auto; }
+            .etichetta.esclusa { display: none; }
+            /* Sulle fustelle il bordo non serve: l'adesivo ha già il suo. */
+            .pagina .etichetta { border: none; }
+            .pagina { margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
+            .pagina:last-child { break-after: auto; page-break-after: auto; }
+            .cella.saltata { background: none; }
+        }
+    </style>
+    <!-- Il margine di stampa cambia col formato: lo riscrive lo script. -->
+    <style id="stile-pagina">@media print { @page { size: A4; margin: 8mm; } }</style>
+</head>
+<body>
+    <div class="barra">
+        <h1>Etichette da stampare</h1>
+        <span id="conteggio" style="font-size: 0.9rem; opacity: 0.75;"></span>
+        <a href="/magazzino.html" class="bottone secondario">Torna al magazzino</a>
+        <button type="button" id="btn-stampa">Stampa</button>
+    </div>
+
+    <div class="opzioni">
+        <label>
+            Formato
+            <select id="formato"></select>
+        </label>
+        <label id="campo-dimensione">
+            Dimensione QR
+            <select id="dimensione">
+                <option value="70">Piccola</option>
+                <option value="90" selected>Media</option>
+                <option value="120">Grande</option>
+            </select>
+        </label>
+        <label>
+            Copie di ognuna
+            <input type="number" id="copie" min="1" max="50" value="1">
+        </label>
+        <label id="campo-salta" title="Un foglio già usato in parte: le prime etichette sono già state staccate.">
+            Salta le prime
+            <input type="number" id="salta" min="0" value="0">
+        </label>
+        <label id="campo-correzione" title="Se la stampante sposta tutto di qualche millimetro, correggi qui (valori negativi = verso sinistra / verso l'alto).">
+            Correzione (mm)
+            <span class="correzione">
+                <input type="number" id="correzione-x" step="0.5" value="0" aria-label="Correzione orizzontale in millimetri">
+                <input type="number" id="correzione-y" step="0.5" value="0" aria-label="Correzione verticale in millimetri">
+            </span>
+        </label>
+        <button type="button" id="btn-includi-tutte" class="button-style button-secondary" hidden>Rimetti tutte</button>
+    </div>
+
+    <p id="avviso-indirizzo" class="avviso attenzione" hidden></p>
+    <p id="avviso-formato" class="avviso" hidden></p>
+    <p class="avviso">
+        Tocca un'etichetta per toglierla dal foglio (e toccala di nuovo per rimetterla).
+    </p>
+
+    <div id="foglio" class="foglio libero"></div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/vendor/qrcode/qrcode.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/magazzino-etichette.js"></script>
+</body>
+</html>

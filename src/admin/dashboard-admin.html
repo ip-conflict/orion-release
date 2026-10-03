@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impostazioni - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/centro-operativo.css">
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt" style="width: 20px;"></i> Centro Operativo</a></li>
+                <li id="sidebar-settings"><a href="/admin/dashboard-admin.html" class="active"><i class="fas fa-cogs" style="width: 20px;"></i> Impostazioni</a></li>
+                <li id="sidebar-segreteria" style="display: none;"><a href="/admin-segreteria.html"><i class="fas fa-folder-open" style="width: 20px;"></i> Segreteria</a></li>
+                <li id="sidebar-magazzino" style="display: none;"><a href="/magazzino.html"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a></li>
+                <li id="sidebar-users"><a href="/admin/admin.html"><i class="fas fa-users" style="width: 20px;"></i> Gestione Utenti</a></li>
+                <li id="sidebar-teams"><a href="/admin/squadre.html"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a></li>
+                <li id="sidebar-archive"><a href="/admin/archive.html"><i class="fas fa-archive" style="width: 20px;"></i> Archivio Emergenze</a></li>
+                <li id="sidebar-sistema" style="display: none;"><a href="/admin/sistema.html"><i class="fas fa-shield-halved" style="width: 20px;"></i> Sistema</a></li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="margin-bottom: 30px;">
+                <h1 style="margin: 0; font-size: 2rem;">Pannello Amministrazione</h1>
+                <p style="margin: 5px 0 0 0; color: var(--text-muted);">Personalizza le configurazioni di base del sistema</p>
+            </header>
+
+            <div style="display: flex; justify-content: flex-start;">
+                
+                <div class="settings-panel" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 25px;">Configurazione Generale</h2>
+                    
+                    <form id="settings-form">
+                        
+                        <div class="form-group" style="padding: 25px; background: rgba(16, 185, 129, 0.03); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                        Modulo Segreteria
+                                    </h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Attiva il fascicolo sanitario, la gestione corsi e il registro DPI.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-segreteria" name="segreteria_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <div id="segreteria-constraints" style="display: none; margin-top: 25px; padding-top: 25px; border-top: 1px dashed rgba(16, 185, 129, 0.3);">
+                                <p style="margin: 0 0 15px 0; font-size: 0.95rem; font-weight: 600; color: var(--text-color); display: flex; align-items: center; gap: 8px;">Vincoli per l'inserimento in Squadra Operativa
+                                </p>
+                                
+                                <label class="option-card" style="cursor: pointer;">
+                                    <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Blocco Visita Medica</span>
+                                        <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Impedisci l'inserimento se la <strong style="color: var(--danger-text);">Visita Medica</strong> del volontario è scaduta o assente.</span>
+                                    </div>
+                                    <div class="modern-toggle">
+                                        <input type="checkbox" id="block-on-medical">
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+                                
+                                <label class="option-card" style="cursor: pointer;">
+                                    <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Blocco Corso Base</span>
+                                        <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Impedisci l'inserimento se il <strong style="color: var(--warning-text);">Corso Base Sicurezza</strong> del volontario è scaduto o assente.</span>
+                                    </div>
+                                    <div class="modern-toggle">
+                                        <input type="checkbox" id="block-on-course">
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+
+                                <div style="margin-top: 15px; padding: 12px 15px; background: rgba(59, 130, 246, 0.05); border-left: 4px solid #3b82f6; border-radius: 6px;">
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Se questi blocchi sono disattivati, il sistema mostrerà solo un avviso visivo senza fermare l'operatore. <br>
+                                        <strong>Nota:</strong> Gli utenti <em>"Esterni"</em> sono sempre esenti da questi controlli.
+                                    </p>
+                                </div>
+                                <hr style="border-color: rgba(16, 185, 129, 0.2); margin: 20px 0;">
+                                <p style="margin: 0 0 15px 0; font-size: 0.95rem; font-weight: 600; color: var(--text-color); display: flex; align-items: center; gap: 8px;">Notifiche Scadenze (Corsi e Visite)
+                                </p>
+
+                                <label class="option-card" style="cursor: pointer;">
+                                    <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Notifica il Volontario</span>
+                                        <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Invia un'email (e un avviso sull'app) all'interessato nei giorni di preavviso scelti qui sotto.</span>
+                                    </div>
+                                    <div class="modern-toggle">
+                                        <input type="checkbox" id="notify-user">
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+
+                                <div style="margin: 5px 0 15px 0;">
+                                    <label for="notify-notice-days" style="font-size: 0.85rem; font-weight: 600;">Giorni di preavviso</label>
+                                    <input type="text" id="notify-notice-days" placeholder="30, 15, 0" inputmode="numeric" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); margin-top: 5px; box-sizing: border-box;">
+                                    <small style="color: var(--text-muted); display: block; margin-top: 5px;">Quanti giorni prima della scadenza avvisare, separati da virgola. 0 vuol dire il giorno stesso.</small>
+                                </div>
+
+                                <div id="custom-msg-container" style="margin: 5px 0 20px 0; padding: 15px; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+                                    <label for="custom-user-email-template" style="font-size: 0.9rem; font-weight: 600; color: var(--text-color); display: block; margin-bottom: 8px;">Messaggio per il Volontario</label>
+                                    <textarea id="custom-user-email-template" rows="4" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box; font-family: inherit;"></textarea>
+                                    <p style="margin: 8px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">
+                                        <strong>Variabili supportate:</strong> <code>{NOME}</code>, <code>{COGNOME}</code>, <code>{REQUISITO}</code>, <code>{SCADENZA}</code>
+                                    </p>
+                                </div>
+                                <label class="option-card" style="cursor: pointer;">
+                                    <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Report Mensile Segreteria</span>
+                                        <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Invia ad amministratori e segreteria un riepilogo ogni 1° del mese con lo storico (-3 mesi) e le previsioni (+3 mesi).</span>
+                                    </div>
+                                    <div class="modern-toggle">
+                                        <input type="checkbox" id="notify-admins">
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+
+                                <div style="margin-top: 15px;">
+                                    <label for="notify-custom-emails" style="font-size: 0.85rem; font-weight: 600;">Indirizzi Email Aggiuntivi (Opzionale)</label>
+                                    <input type="text" id="notify-custom-emails" placeholder="es. comando@comune.it, capo.squadra@email.it" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); margin-top: 5px; box-sizing: border-box;">
+                                    <small style="color: var(--text-muted); display: block; margin-top: 5px;">Separati da virgola. Riceveranno lo stesso riepilogo mensile.</small>
+                                </div>
+                                <div style="margin-top: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                    <button type="button" id="btn-report-ora" class="button-style button-secondary">Invia ora il riepilogo</button>
+                                    <small style="color: var(--text-muted);">Usa le impostazioni salvate: se le hai appena cambiate, prima salva.</small>
+                                </div>
+                                <div id="report-ora-esito" style="margin-top: 10px; font-size: 0.9rem;"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                        Modulo Magazzino
+                                    </h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Attiva la gestione di DPI, attrezzature e veicoli: consegne, rientri, scadenze e verbali.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-magazzino" name="magazzino_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <div id="magazzino-note" style="display: none; margin-top: 25px; padding-top: 25px; border-top: 1px dashed rgba(59, 130, 246, 0.3);">
+                                <div style="padding: 12px 15px; background: rgba(59, 130, 246, 0.05); border-left: 4px solid #3b82f6; border-radius: 6px;">
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">Chi tiene l'inventario deve avere il ruolo <strong>Magazziniere</strong>, che si assegna da
+                                        <em>Gestione Utenti</em>. Consegne e rientri invece li registra qualunque operatore: in
+                                        emergenza non si aspetta il magazziniere per prendere una pala.<br>
+                                        Le opzioni di funzionamento (blocco dei mezzi scaduti, conferma dei DPI, avvisi sul materiale
+                                        non rientrato), le categorie e le ubicazioni stanno nella scheda <strong>Impostazioni</strong> della pagina Magazzino.
+                                    </p>
+                                </div>
+                                <div style="margin-top: 15px; padding: 12px 15px; background: rgba(245, 158, 11, 0.06); border-left: 4px solid #f59e0b; border-radius: 6px;">
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Spegnendo il modulo la pagina sparisce dal menu e nessuno può più registrare movimenti,
+                                        <strong>ma niente viene cancellato</strong>: beni, giacenze e registro restano dove sono e
+                                        tornano appena lo si riaccende.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div>
+                                <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                    Tesserino QR Pubblico
+                                </h3>
+                                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Di default il QR del tesserino mostra i dati del volontario solo quando c'è un'emergenza aperta.</p>
+                            </div>
+                            <label class="option-card" style="cursor: pointer; margin-top: 15px;">
+                                <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                    <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Usa i QR dei volontari</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Spento, il QR sparisce dai profili, dal fascicolo della segreteria, dall'app e dai tesserini stampati da quel momento; quelli già stampati non aprono più nulla. Riacceso, tornano a funzionare gli stessi.</span>
+                                </div>
+                                <div class="modern-toggle">
+                                    <input type="checkbox" id="badge-qr-enabled">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                            <label class="option-card" id="riga-badge-always-on" style="cursor: pointer; margin-top: 15px;">
+                                <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                    <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Forza sempre attivo</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Attiva la verifica QR anche senza emergenza in corso (es. esercitazioni, fiere, controlli su strada). Ricordati di disattivarlo quando non serve più.</span>
+                                </div>
+                                <div class="modern-toggle">
+                                    <input type="checkbox" id="badge-qr-always-on">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div>
+                                <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                    App Android
+                                </h3>
+                                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">L'app ORION per Android arriva con il server. Chi accede al web da un telefono Android se la vede proporre dopo l'accesso (non gli esterni).</p>
+                            </div>
+                            <label class="option-card" style="cursor: pointer; margin-top: 15px;">
+                                <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                    <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Disponibile al personale</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Spenta, l'app non si scarica più dal server, il web non la propone e non propone aggiornamenti. Chi l'ha già installata continua a usarla.</span>
+                                </div>
+                                <div class="modern-toggle">
+                                    <input type="checkbox" id="app-android-enabled">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="association-name" style="color: var(--text-color); font-weight: 600;">Nome Associazione</label>
+                            <input type="text" id="association-name" name="association_name" placeholder="Es. Protezione Civile del Comune" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+
+                        <div class="form-group" style="padding: 15px; background: var(--bg-color); border: 1px dashed var(--border-color); border-radius: 8px;">
+                            <label for="app-logo" style="color: var(--text-color); font-weight: 600;">Carica Nuovo Logo (max 5MB)</label>
+                            <input type="file" id="app-logo" name="logoFile" accept="image/png, image/jpeg, image/gif" style="margin-top: 10px;">
+                            <small id="logo-upload-feedback" class="feedback-message" style="display: block; margin-top: 8px;"></small>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(15, 80, 94, 0.03); border: 1px solid rgba(15, 80, 94, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                Tesserino di Riconoscimento
+                            </h3>
+                            <p style="margin: 0 0 20px 0; font-size: 0.85rem; color: var(--text-muted);">Dati usati per impaginare il tesserino fisico (formato CR80) stampabile dalla scheda del volontario in Segreteria.</p>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                <div>
+                                    <label for="card-district-label" style="font-size: 0.9rem; font-weight: 600; color: var(--text-color); display: block; margin-bottom: 6px;">Distretto / Codice Gruppo</label>
+                                    <input type="text" id="card-district-label" name="card_district_label" placeholder="Es. Distretto BL 7" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                                </div>
+                                <div>
+                                    <label for="card-regional-entity-name" style="font-size: 0.9rem; font-weight: 600; color: var(--text-color); display: block; margin-bottom: 6px;">Nome Ente Sovraordinato</label>
+                                    <input type="text" id="card-regional-entity-name" name="card_regional_entity_name" placeholder="Es. REGIONE DEL VENETO" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                                </div>
+                            </div>
+
+                            <label for="app-logo2" style="color: var(--text-color); font-weight: 600; font-size: 0.9rem;">Logo Ente Sovraordinato (max 5MB)</label>
+                            <p style="margin: 4px 0 8px 0; font-size: 0.8rem; color: var(--text-muted);">Es. lo stemma/roundel ufficiale della Regione, usato due volte sul tesserino (logo circolare e accanto al nome dell'ente). Carica un PNG già ritagliato/trasparente per un risultato pulito.</p>
+                            <input type="file" id="app-logo2" name="logoFile2" accept="image/png, image/jpeg, image/gif">
+                            <small id="logo2-upload-feedback" class="feedback-message" style="display: block; margin-top: 8px;"></small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="map-center-lat" style="color: var(--text-color); font-weight: 600;">Centro Mappa di Default (Lat, Lon)</label>
+                            <div class="input-group" style="display: flex; gap: 10px;">
+                                <input type="text" id="map-center-lat" name="map_center_lat" placeholder="Latitudine" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                <input type="text" id="map-center-lon" name="map_center_lon" placeholder="Longitudine" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                <button type="button" id="map-picker-btn" class="button-style button-secondary" title="Scegli sulla mappa">
+                                    Mappa
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="map-zoom" style="color: var(--text-color); font-weight: 600;">Livello Zoom Iniziale (1-18)</label>
+                            <input type="number" id="map-zoom" name="map_zoom_level" min="1" max="18" placeholder="Es. 13" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+                        
+                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
+
+                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Centro Operativo</h3>
+
+                        <div class="form-group">
+                            <label for="minuti-attesa-critica" style="color: var(--text-color); font-weight: 600;">Minuti prima di segnalare una richiesta senza squadra</label>
+                            <input type="number" id="minuti-attesa-critica" name="minuti_attesa_critica" min="1" max="240" placeholder="Es. 15" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                            <small style="display: block; margin-top: 6px; color: var(--text-muted); font-size: 0.85rem;">
+                                Passato questo tempo, una segnalazione ancora senza squadra assegnata si accende in rosso nella coda del centro operativo. Se in sala operativa il rosso diventa rumore di fondo, alzate il valore. Le segnalazioni contrassegnate come "non richiede squadra" non si accendono mai. Vuoto = 15 minuti.
+                            </small>
+                        </div>
+
+                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
+
+                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Configurazione Email (SMTP)</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">Necessario per inviare notifiche e link di attivazione automatica.</p>
+
+                        <div class="form-group">
+                            <label for="smtp-host">Host SMTP</label>
+                            <input type="text" id="smtp-host" name="smtp_host" placeholder="Es. smtp.gmail.com" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+
+                        <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                            <div style="flex: 1;">
+                                <label for="smtp-port" style="display: block; font-weight: 600; margin-bottom: 5px;">Porta</label>
+                                <input type="number" id="smtp-port" name="smtp_port" placeholder="Es. 465 o 587" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label for="smtp-secure" style="display: block; font-weight: 600; margin-bottom: 5px;">Sicurezza SSL/TLS</label>
+                                <select id="smtp-secure" name="smtp_secure" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                                    <option value="true">Sì</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="smtp-user">Email Mittente / Username</label>
+                            <input type="email" id="smtp-user" name="smtp_user" placeholder="Es. associazione@dominio.it" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="smtp-pass">Password Email</label>
+                            <input type="password" id="smtp-pass" name="smtp_pass" placeholder="Password o App Password" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+
+                        <div class="form-actions" style="margin-top: 30px; text-align: right; border-top: 1px solid var(--border-light-color); padding-top: 20px;">
+                            <span id="settings-feedback" class="feedback-message" style="margin-right: 15px; font-weight: 600;"></span>
+                            <button type="submit" class="button-style">
+                                Salva
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+                <div class="settings-panel" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Registro Operazioni</h2>
+                    <p style="margin: 0 0 20px 0; color: var(--text-muted); font-size: 0.9rem;">
+                        Chi ha creato, modificato o eliminato squadre, utenti, emergenze, documenti e impostazioni.
+                    </p>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px;">
+                        <input type="text" id="audit-filter-username" placeholder="Filtra per utente..."
+                               style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); min-width: 200px;">
+                        <select id="audit-filter-action"
+                               style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                            <option value="">Tutte le operazioni</option>
+                            <option value="squadra.creata">Squadra creata</option>
+                            <option value="squadra.modificata">Squadra modificata</option>
+                            <option value="squadra.eliminata">Squadra eliminata</option>
+                            <option value="utente.creato">Utente creato</option>
+                            <option value="utente.modificato">Utente modificato</option>
+                            <option value="utente.eliminato">Utente eliminato</option>
+                            <option value="utente.sospeso">Utente sospeso</option>
+                            <option value="utente.riattivato">Utente riattivato</option>
+                            <option value="utente.password_resettata">Password resettata</option>
+                            <option value="utenti.importati">Utenti importati</option>
+                            <option value="emergenza.aperta">Emergenza aperta</option>
+                            <option value="emergenza.chiusa">Emergenza chiusa</option>
+                            <option value="emergenza.eliminata">Emergenza eliminata</option>
+                            <option value="documento.eliminato">Documento eliminato</option>
+                            <option value="impostazioni.modificate">Impostazioni modificate</option>
+                            <option value="libretto.visita_eliminata">Visita eliminata</option>
+                            <option value="libretto.corso_eliminato">Corso eliminato</option>
+                        </select>
+                        <button type="button" id="audit-refresh" class="button-style button-secondary">
+                            Aggiorna
+                        </button>
+                        <span id="audit-count" style="color: var(--text-muted); font-size: 0.9rem;"></span>
+                    </div>
+
+                    <div class="table-container" style="max-height: 460px; overflow-y: auto;">
+                        <table class="admin-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="white-space: nowrap;">Data e ora</th>
+                                    <th>Utente</th>
+                                    <th>Operazione</th>
+                                    <th>Oggetto</th>
+                                    <th>Dettagli</th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-log-body">
+                                <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Caricamento...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button type="button" id="audit-load-more" class="button-style button-secondary" style="display: none">
+                            Mostra altre voci
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <div id="mapPickerModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content large" style="border-radius: 12px; overflow: hidden; background: var(--surface-color);">
+            <div class="modal-header" style="background: var(--bg-color); padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: var(--text-color);">Posiziona il Marker</h3>
+                <button id="closeMapPickerModal" class="close-modal-btn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 15px;">
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Clicca sulla mappa o trascina il marker per definire il centro di default per tutti gli operatori.</p>
+                <div id="picker-map" style="height: 400px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></div>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
+                <button id="cancelMapSelectionBtn" class="button-style button-secondary">Annulla</button>
+                <button id="confirmMapSelectionBtn" class="button-style" style="margin-left: 10px">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/leaflet/leaflet.js"></script>
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script>
+    <script src="/js/dashboard-admin.js"></script>
+
+</body>
+</html>

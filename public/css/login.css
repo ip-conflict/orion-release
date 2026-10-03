@@ -1,0 +1,206 @@
+/* /public/css/login.css */
+
+/* Stile Body: Centra il contenuto e usa sfondo variabile */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh; 
+    /* Usa uno sfondo leggermente diverso per distinguerla? O lo stesso */
+    background-color: var(--secondary-bg-color, #f0f0f0); 
+    padding: 1rem; 
+    box-sizing: border-box;
+    font-family: sans-serif; /* Assicurati sia lo stesso delle altre pagine */
+}
+
+/* Contenitore principale (potrebbe non servire con body flex) */
+.login-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Box effettivo del login */
+.login-box {
+    background-color: var(--bg-color, #ffffff); 
+    color: var(--text-color, #212529); 
+    padding: 2.5rem 3rem; 
+    border-radius: 10px; 
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1); /* Ombra base */
+    border: 1px solid var(--border-color, #dee2e6); 
+    width: 100%;
+    max-width: 420px; 
+    text-align: center;
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+}
+
+/* Stile specifico dark mode per ombra (aggiunto qui per specificità) */
+@media (prefers-color-scheme: dark) {
+  .login-box {
+     /* Ombra leggermente più visibile in dark mode */
+     box-shadow: 0 5px 25px rgba(0, 0, 0, 0.4); 
+  }
+}
+
+/* Titolo H2 */
+#login-form h2 {
+    color: var(--text-color, #212529); 
+    margin-top: 0;
+    margin-bottom: 2rem; 
+    font-size: 2em; 
+    font-weight: 600;
+}
+
+/* Stile inputs */
+#login-form input[type="text"],
+#login-form input[type="password"] {
+    width: 100%;
+    padding: 1rem; 
+    margin-bottom: 1.5rem; 
+    border: 1px solid var(--form-input-border, #ced4da);
+    background-color: var(--form-input-bg, #ffffff);
+    color: var(--text-color, #212529);
+    border-radius: 5px;
+    box-sizing: border-box; 
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+/* Stile focus input */
+#login-form input[type="text"]:focus,
+#login-form input[type="password"]:focus {
+    outline: none;
+    border-color: var(--form-input-focus-border, #80bdff);
+    box-shadow: 0 0 0 3px var(--form-input-focus-shadow, rgba(0, 123, 255, 0.25));
+}
+
+/* Stile Placeholder */
+#login-form input::placeholder {
+   /* Usa un grigio leggermente più chiaro del testo normale */
+   /* Potrebbe essere necessario un colore specifico per dark mode */
+   color: #999; 
+   opacity: 0.8;
+}
+@media (prefers-color-scheme: dark) {
+    #login-form input::placeholder {
+       color: #bbb; /* Più chiaro per dark mode */
+    }
+}
+
+/* Stile bottone */
+#login-form button {
+    width: 100%;
+    padding: 0.9rem 1.5rem;
+    background-color: var(--button-bg, #007bff);
+    color: var(--button-text, #ffffff);
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+    margin-top: 1rem; 
+}
+
+#login-form button:hover {
+    background-color: var(--button-hover-bg, #0056b3);
+}
+
+/* Stile messaggio di login (feedback/errori) */
+#login-message {
+    margin-top: 1.5rem; 
+    min-height: 1.2em; /* Mantiene lo spazio anche se vuoto */
+    font-weight: bold;
+    /* Colore verrà impostato da JS, ma definiamo un colore base e per errori */
+    color: var(--text-color); 
+    transition: color 0.3s ease;
+}
+#login-message.error { /* Classe aggiunta da JS */
+     color: var(--status-error-color, #dc3545);
+}
+#login-message.success { /* Classe aggiunta da JS */
+     color: var(--status-success-color, #28a745);
+}
+
+/* Fix per Autofill di Chrome/WebKit in Dark Mode */
+/* Questo blocco è importante copiarlo da centro-operativo.css se non linki quel file */
+@media (prefers-color-scheme: dark) {
+    #login-form input:-webkit-autofill,
+    #login-form input:-webkit-autofill:hover, 
+    #login-form input:-webkit-autofill:focus, 
+    #login-form input:-webkit-autofill:active {
+        /* Usa le variabili definite nella media query del file principale */
+        -webkit-box-shadow: 0 0 0 30px var(--form-input-bg) inset !important; 
+        -webkit-text-fill-color: var(--text-color) !important; 
+        caret-color: var(--text-color); /* Colore cursore (lametta) */
+    }
+}
+
+/* Proposta dell'app Android dopo l'accesso da telefono */
+.proposta-app {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay-bg, rgba(0, 0, 0, 0.5));
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 1000;
+}
+
+.proposta-app-scheda {
+    background: var(--modal-bg, #ffffff);
+    color: var(--text-color, #212529);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 14px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 420px;
+    text-align: left;
+}
+
+.proposta-app-scheda h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+}
+
+.proposta-app-scheda p {
+    margin: 0 0 0.75rem 0;
+    line-height: 1.45;
+}
+
+.proposta-app-versione {
+    color: var(--text-muted, #6c757d);
+    font-size: 0.9rem;
+}
+
+.proposta-app-certificato {
+    color: var(--text-muted, #6c757d);
+    font-size: 0.72rem;
+    font-family: ui-monospace, monospace;
+    word-break: break-all;
+}
+
+.proposta-app-scarica {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    padding: 0.9rem;
+    margin-top: 0.5rem;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.proposta-app-web {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.9rem;
+    background: transparent;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 8px;
+    color: var(--text-color, #212529);
+    font-size: 1rem;
+    cursor: pointer;
+}

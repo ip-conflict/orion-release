@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Magazzino</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/magazzino.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body>
+<div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+    <nav class="admin-sidebar">
+        <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+            <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+            <h2 style="margin: 0;">ORION</h2>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt"></i> Centro Operativo</a></li>
+            <li id="sidebar-settings" style="display: none;"><a href="/admin/dashboard-admin.html"><i class="fas fa-cogs"></i> Amministrazione</a></li>
+            <li id="sidebar-segreteria" style="display: none;"><a href="/admin-segreteria.html"><i class="fas fa-notes-medical"></i> Segreteria</a></li>
+            <li><a href="/magazzino.html" class="attivo"><i class="fas fa-boxes-stacked"></i> Magazzino</a></li>
+        </ul>
+    </nav>
+
+    <main class="admin-content">
+        <header class="content-header">
+            <h1>Magazzino</h1>
+            <p class="sottotitolo">DPI, attrezzature e veicoli: dov'è, chi ce l'ha, quando scade, quando torna.</p>
+        </header>
+
+        <!-- Le quattro cose che servono davvero, una accanto all'altra.
+             Il resto è amministrazione e sta in fondo. -->
+        <nav class="schede-magazzino" role="tablist">
+            <button class="scheda attiva" data-scheda="consegna" role="tab">
+                <span>Consegna</span>
+            </button>
+            <button class="scheda" data-scheda="rientro" role="tab">
+                <span>Rientro</span>
+            </button>
+            <button class="scheda" data-scheda="chi-ha-cosa" role="tab">
+                <span>Chi ha cosa</span>
+            </button>
+            <button class="scheda" data-scheda="scadenze" role="tab">
+                <span>Scade e manca</span>
+                <span class="pallino" id="pallino-scadenze" hidden></span>
+            </button>
+            <button class="scheda solo-magazziniere" data-scheda="inventario" role="tab" hidden>
+                <span>Inventario</span>
+            </button>
+            <button class="scheda solo-magazziniere" data-scheda="registro" role="tab" hidden>
+                <span>Verbali e registro</span>
+                <span class="pallino pallino-info" id="pallino-verbali" hidden></span>
+            </button>
+            <button class="scheda solo-magazziniere" data-scheda="impostazioni" role="tab" hidden>
+                <span>Impostazioni</span>
+            </button>
+        </nav>
+
+        <div id="avviso-magazzino" class="avviso" hidden></div>
+
+        <!-- Modulo spento: si dice perché e cosa fare, invece di lasciare la
+             pagina vuota o piena di errori. -->
+        <section id="modulo-spento" class="modulo-spento" hidden>
+            <i class="fas fa-power-off"></i>
+            <h2>Il modulo Magazzino è disattivato</h2>
+            <p>
+                Un amministratore può accenderlo da <strong>Amministrazione &rarr;
+                Impostazioni &rarr; Modulo Magazzino</strong>.
+            </p>
+            <p class="nota">Niente è andato perso: beni, giacenze e registro tornano appena viene riacceso.</p>
+        </section>
+
+        <!-- ============ 1. CONSEGNA ============ -->
+        <section class="pannello-scheda" id="pannello-consegna">
+            <div class="passo">
+                <h2><span class="numero-passo">1</span> A chi va</h2>
+                <select id="destinatario" class="campo-grande" aria-label="Persona a cui consegnare"></select>
+            </div>
+
+            <div class="passo">
+                <h2><span class="numero-passo">2</span> Cosa</h2>
+                <input type="search" id="cerca-consegna" class="campo-grande" placeholder="Cerca per nome, matricola o targa...">
+                <div id="elenco-consegnabili" class="elenco-beni"></div>
+            </div>
+
+            <div class="passo" id="passo-conferma-consegna">
+                <h2><span class="numero-passo">3</span> Fatto</h2>
+                <label class="riga-opzione" id="riga-verbale">
+                    <input type="checkbox" id="genera-verbale" checked>
+                    Preparare il verbale di consegna: da stampare e far firmare, oppure fotografare il foglio firmato
+                </label>
+                <p class="nota" id="nota-conferma-dpi" hidden>
+                    Riceverà la richiesta di conferma sul telefono o nel suo profilo: il verbale si prepara da sé.
+                </p>
+                <div id="riepilogo-consegna" class="riepilogo">Nessun oggetto scelto.</div>
+                <button id="btn-consegna" class="button-style primary bottone-grande" disabled>
+                    Registra la consegna
+                </button>
+            </div>
+        </section>
+
+        <!-- ============ 2. RIENTRO ============ -->
+        <section class="pannello-scheda" id="pannello-rientro" hidden>
+            <div class="passo">
+                <h2><span class="numero-passo">1</span> Chi restituisce</h2>
+                <select id="detentore-rientro" class="campo-grande"></select>
+            </div>
+            <div class="passo">
+                <h2><span class="numero-passo">2</span> Cosa torna</h2>
+                <p class="nota">
+                    Spunta quello che rientra. Se di un materiale a quantità ne torna meno di
+                    quanto è uscito, scegli cosa ne è del resto: resta in carico, è stato usato
+                    sul posto o è perso. Senza questa scelta il rientro non si registra.
+                </p>
+                <div id="elenco-rientro" class="elenco-beni"></div>
+                <label class="riga-opzione" id="riga-verbale-rientro" hidden>
+                    <input type="checkbox" id="genera-verbale-rientro">
+                    Preparare il verbale di rientro da far firmare a chi restituisce
+                </label>
+                <button id="btn-rientro" class="button-style primary bottone-grande" disabled>
+                    Registra il rientro
+                </button>
+            </div>
+        </section>
+
+        <!-- ============ 3. CHI HA COSA ============ -->
+        <section class="pannello-scheda" id="pannello-chi-ha-cosa" hidden>
+            <input type="search" id="cerca-detentori" class="campo-grande" placeholder="Cerca persona, squadra o oggetto...">
+            <div id="elenco-detentori" class="elenco-detentori"></div>
+        </section>
+
+        <!-- ============ 4. COSA SCADE E COSA MANCA ============ -->
+        <section class="pannello-scheda" id="pannello-scadenze" hidden>
+            <h2 class="titolo-blocco">Scadenze</h2>
+            <div id="elenco-scadenze" class="elenco-avvisi"></div>
+            <h2 class="titolo-blocco">Fuori da tempo</h2>
+            <p class="nota">Materiale uscito e non ancora rientrato, dal più vecchio.</p>
+            <div id="elenco-da-recuperare" class="elenco-avvisi"></div>
+        </section>
+
+        <!-- ============ 5. INVENTARIO (solo magazziniere) ============ -->
+        <section class="pannello-scheda" id="pannello-inventario" hidden>
+            <div class="barra-inventario">
+                <input type="search" id="cerca-inventario" class="campo-grande" placeholder="Cerca nell'inventario...">
+                <select id="filtro-tipo">
+                    <option value="">Tutti i tipi</option>
+                    <option value="dpi">DPI</option>
+                    <option value="attrezzatura">Attrezzature</option>
+                    <option value="veicolo">Veicoli</option>
+                </select>
+                <a id="btn-etichette" class="bottone-contorno" href="/magazzino-etichette.html">
+                    Etichette
+                </a>
+                <button id="btn-nuovo-bene" class="bottone-nuovo">
+                    <span>Nuovo bene</span>
+                </button>
+            </div>
+            <!-- I DPI a taglie: un riquadro per modello, con le quantità per
+                 taglia. Le sue taglie non si ripetono nell'elenco sotto. -->
+            <div class="testata-modelli">
+                <h2 class="titolo-blocco">DPI a taglie</h2>
+                <div class="gruppo-azioni">
+                    <label class="riga-opzione" style="margin: 0;"><input type="checkbox" id="mostra-modelli-nascosti"> Mostra anche i nascosti</label>
+                    <button id="btn-nuovo-modello" class="bottone-contorno" type="button">Nuovo DPI a taglie</button>
+                </div>
+            </div>
+            <p class="nota">Guanti, scarpe, divise: un DPI con le sue taglie. «Carica» registra una fornitura intera (per esempio 4 L e 5 XL); ogni taglia ha la sua etichetta e si consegna come sempre.</p>
+            <div id="elenco-modelli" class="elenco-modelli"></div>
+
+            <h2 class="titolo-blocco">Tutti gli altri beni</h2>
+            <div id="elenco-inventario" class="elenco-beni"></div>
+        </section>
+
+        <!-- ============ 6. VERBALI E REGISTRO (solo magazziniere) ============ -->
+        <section class="pannello-scheda" id="pannello-registro" hidden>
+            <h2 class="titolo-blocco">Verbali di consegna e rientro</h2>
+            <p class="nota">
+                Ogni consegna (o rientro) di una persona con il verbale spuntato ne produce uno. Si apre per
+                stamparlo e farlo firmare, e lì si allega la foto del foglio firmato, che diventa il verbale:
+                la si può scattare anche dall'app. Se la conferma dall'applicazione è accesa, il volontario
+                può confermare una consegna anche dal telefono o dal suo profilo.
+            </p>
+            <div class="barra-inventario">
+                <input type="search" id="cerca-verbali" class="campo-grande" placeholder="Cerca per nome o numero...">
+                <select id="filtro-verbali">
+                    <option value="">Tutti</option>
+                    <option value="da_confermare">Da confermare</option>
+                    <option value="da_firmare">Da firmare (rientri)</option>
+                    <option value="confermato">Confermati</option>
+                    <option value="firmato_cartaceo">Firmati su carta</option>
+                </select>
+            </div>
+            <div id="elenco-verbali" class="elenco-beni"></div>
+
+            <h2 class="titolo-blocco">Registro dei movimenti</h2>
+            <p class="nota">Gli ultimi 500 movimenti, dal più recente: chi ha fatto cosa, con quale oggetto, e quando.</p>
+            <div class="barra-inventario">
+                <input type="search" id="cerca-movimenti" class="campo-grande" placeholder="Cerca oggetto, persona o nota...">
+                <select id="filtro-movimenti">
+                    <option value="">Tutti i movimenti</option>
+                    <option value="carico">Carichi</option>
+                    <option value="consegna">Consegne</option>
+                    <option value="rientro">Rientri</option>
+                    <option value="consumo">Consumi</option>
+                    <option value="manutenzione">Manutenzioni</option>
+                    <option value="smarrimento">Smarrimenti</option>
+                    <option value="dismissione">Dismissioni</option>
+                    <option value="rettifica">Rettifiche</option>
+                </select>
+            </div>
+            <div id="elenco-movimenti" class="elenco-registro"></div>
+        </section>
+
+        <!-- ============ 7. IMPOSTAZIONI (solo magazziniere) ============ -->
+        <section class="pannello-scheda" id="pannello-impostazioni" hidden>
+            <h2 class="titolo-blocco">Impostazioni del magazzino</h2>
+            <div class="impostazioni">
+                <label>
+                    Mezzi con revisione o assicurazione scadute
+                    <select id="blocco-mezzi">
+                        <option value="blocco">Non possono uscire</option>
+                        <option value="segnalazione">Escono, ma con un avviso</option>
+                        <option value="disattivato">Nessun controllo</option>
+                    </select>
+                </label>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="conferma-dpi">
+                    Chiedere al volontario di confermare la consegna dei DPI (dall'app o dal suo profilo)
+                </label>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="verbale-consegna">
+                    Preparare il verbale di consegna quando il materiale va a una persona (con la conferma dei DPI accesa c'è sempre)
+                </label>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="verbale-rientro">
+                    Preparare il verbale di rientro quando una persona restituisce il materiale (da firmare, anche fotografato dall'app)
+                </label>
+                <label class="riga-numero">
+                    <span>Avvisare il magazziniere per il materiale fuori da più di</span>
+                    <input type="number" id="giorni-recupero" min="1" max="365">
+                    <span>giorni</span>
+                </label>
+                <div>
+                    <button id="btn-salva-config" class="button-style bottone-azione">Salva</button>
+                </div>
+            </div>
+
+            <h2 class="titolo-blocco">Categorie</h2>
+            <p class="nota">
+                Servono a raggruppare e cercare i beni. Una categoria si elimina solo quando
+                non contiene più niente; rinominarla non sposta nessun bene.
+            </p>
+            <form id="form-categoria" class="riga-aggiunta">
+                <select id="nuova-categoria-tipo" aria-label="Tipo di bene">
+                    <option value="dpi">DPI</option>
+                    <option value="attrezzatura">Attrezzature</option>
+                    <option value="veicolo">Veicoli</option>
+                </select>
+                <input type="text" id="nuova-categoria-nome" maxlength="100" placeholder="Nuova categoria, es. Calzature" required>
+                <button type="submit" class="button-style bottone-azione">Aggiungi</button>
+            </form>
+            <div id="elenco-categorie" class="elenco-cataloghi"></div>
+
+            <h2 class="titolo-blocco">Ubicazioni</h2>
+            <p class="nota">
+                Dove stanno le cose quando sono in magazzino: la sede, un container, un garage.
+                Un'ubicazione con dei beni dentro non si elimina, ma si può segnare come non più in uso.
+            </p>
+            <form id="form-ubicazione" class="riga-aggiunta">
+                <select id="nuova-ubicazione-tipo" aria-label="Tipo di ubicazione">
+                    <option value="sede">Sede</option>
+                    <option value="container">Container</option>
+                    <option value="garage">Garage</option>
+                    <option value="altro">Altro</option>
+                </select>
+                <input type="text" id="nuova-ubicazione-nome" maxlength="100" placeholder="Nuova ubicazione, es. Container 2" required>
+                <button type="submit" class="button-style bottone-azione">Aggiungi</button>
+            </form>
+            <div id="elenco-ubicazioni" class="elenco-cataloghi"></div>
+
+            <h2 class="titolo-blocco">I tuoi avvisi via email</h2>
+            <p class="nota">
+                Queste scelte valgono solo per te: un altro magazziniere può volerli
+                tutti i giorni o non volerli affatto. Finché non li accendi non parte
+                nessuna email.
+            </p>
+            <div class="impostazioni">
+                <label class="riga-opzione">
+                    <input type="checkbox" id="avvisi-attivo">
+                    Mandami un riepilogo delle scadenze del magazzino
+                </label>
+                <label>
+                    Ogni quanto
+                    <select id="avvisi-frequenza">
+                        <option value="giornaliera">Tutti i giorni</option>
+                        <option value="settimanale">Una volta a settimana (il lunedì)</option>
+                        <option value="mensile">Una volta al mese (il primo)</option>
+                    </select>
+                </label>
+                <label class="riga-numero">
+                    <span>Elenca quello che scade entro</span>
+                    <input type="number" id="avvisi-preavviso" min="1" max="365">
+                    <span>giorni (le cose già scadute ci sono sempre)</span>
+                </label>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="avvisi-recuperi">
+                    Aggiungi anche il materiale uscito e non ancora rientrato
+                </label>
+                <p class="nota" id="avvisi-ultimo-invio"></p>
+                <div class="gruppo-azioni">
+                    <button id="btn-salva-avvisi" class="button-style bottone-azione">Salva</button>
+                    <button id="btn-prova-avvisi" class="button-style button-secondary">Mandami una prova adesso</button>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- DPI a taglie: creazione, modifica e carico -->
+<div id="modale-modello" class="modale" hidden>
+    <div class="contenuto-modale">
+        <button class="chiudi-modale" id="chiudi-modale-modello" aria-label="Chiudi">&times;</button>
+        <h2 id="titolo-modale-modello">Nuovo DPI a taglie</h2>
+        <form id="form-modello">
+            <div id="campi-anagrafica-modello" class="griglia-campi">
+                <label class="campo-largo">Nome <span class="obbligatorio">*</span>
+                    <input type="text" id="modello-nome" maxlength="150" placeholder="es. Divisa estiva" required>
+                </label>
+                <label>Categoria
+                    <select id="modello-categoria"></select>
+                </label>
+                <label>Si conta a
+                    <select id="modello-unita">
+                        <option value="pezzi">pezzi</option>
+                        <option value="paia">paia</option>
+                        <option value="kit">kit</option>
+                    </select>
+                </label>
+                <label class="campo-largo">Taglie <span class="obbligatorio">*</span>
+                    <input type="text" id="modello-taglie" placeholder="S, M, L, XL, XXL">
+                    <span class="scorciatoie-taglie">
+                        <button type="button" data-taglie="S, M, L, XL, XXL, XXXL">S–XXXL</button>
+                        <button type="button" data-taglie="44, 46, 48, 50, 52, 54, 56, 58, 60">44–60</button>
+                        <button type="button" data-taglie="36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48">36–48</button>
+                        <button type="button" data-taglie="7, 8, 9, 10, 11">7–11</button>
+                        <button type="button" data-taglie="Unica">Unica</button>
+                    </span>
+                </label>
+            </div>
+            <div id="blocco-quantita-modello">
+                <h3 id="titolo-quantita-modello">Quanti ce ne sono in magazzino</h3>
+                <div id="quantita-modello" class="griglia-quantita"></div>
+                <label id="campo-nota-carico" class="campo-largo" hidden>Nota (facoltativa)
+                    <input type="text" id="modello-nota" maxlength="300" placeholder="es. fornitura ditta Rossi, fattura 123">
+                </label>
+            </div>
+            <div class="azioni-modale">
+                <button type="button" class="button-style btn-discreto" id="elimina-modello" hidden>Elimina</button>
+                <button type="button" class="button-style button-secondary" id="nascondi-modello" hidden>Nascondi</button>
+                <span style="flex: 1;"></span>
+                <button type="button" class="button-style button-secondary" id="annulla-modello">Annulla</button>
+                <button type="submit" class="button-style primary" id="salva-modello">Salva</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Scheda di un bene -->
+<div id="modale-bene" class="modale" hidden>
+    <div class="contenuto-modale">
+        <button class="chiudi-modale" id="chiudi-modale-bene" aria-label="Chiudi">&times;</button>
+        <h2 id="titolo-modale-bene">Nuovo bene</h2>
+        <form id="form-bene">
+            <input type="hidden" id="bene-id">
+            <div class="griglia-campi">
+                <label>Tipo <span class="obbligatorio">*</span>
+                    <select id="bene-tipo" required>
+                        <option value="dpi">DPI</option>
+                        <option value="attrezzatura">Attrezzatura</option>
+                        <option value="veicolo">Veicolo</option>
+                    </select>
+                </label>
+                <label>Come si gestisce
+                    <select id="bene-gestione">
+                        <option value="singolo">Pezzo unico (ha una sua storia)</option>
+                        <option value="quantita">Sfuso (si conta a quantità)</option>
+                    </select>
+                </label>
+                <label class="campo-largo">Denominazione <span class="obbligatorio">*</span>
+                    <input type="text" id="bene-denominazione" required maxlength="150">
+                </label>
+                <label>Categoria
+                    <select id="bene-categoria"></select>
+                </label>
+                <label>Ubicazione
+                    <select id="bene-ubicazione"></select>
+                </label>
+                <label id="campo-matricola">Matricola o targa
+                    <input type="text" id="bene-matricola" maxlength="80">
+                </label>
+                <label id="campo-taglia">Taglia
+                    <input type="text" id="bene-taglia" maxlength="20">
+                </label>
+                <label id="campo-quantita" hidden>Quantità in magazzino
+                    <input type="number" id="bene-quantita" min="0" step="1" value="0">
+                </label>
+                <label id="campo-unita" hidden>Unità di misura
+                    <input type="text" id="bene-unita" maxlength="20" value="pezzi">
+                </label>
+                <label id="campo-km" hidden>Chilometri
+                    <input type="number" id="bene-km" min="0">
+                </label>
+                <label id="campo-patente" hidden>Patente richiesta
+                    <input type="text" id="bene-patente" maxlength="20" placeholder="B, C, ...">
+                </label>
+                <label>Codice etichetta
+                    <input type="text" id="bene-etichetta" maxlength="50">
+                </label>
+                <label class="campo-largo">Note
+                    <textarea id="bene-note" rows="2"></textarea>
+                </label>
+            </div>
+
+            <h3>Scadenze</h3>
+            <div id="campi-scadenze" class="griglia-scadenze"></div>
+
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" id="annulla-bene">Annulla</button>
+                <button type="submit" class="button-style primary">Salva</button>
+            </div>
+        </form>
+
+        <!-- Tutto quello che si può fare a un bene esistente. Prima queste
+             operazioni avevano l'API ma nessun pulsante: il magazziniere non
+             aveva modo di buttare un DPI scaduto se non dal database. -->
+        <div id="azioni-bene" hidden>
+            <h3>Cosa vuoi farne</h3>
+            <div class="pulsanti-movimento">
+                <button type="button" class="azione-movimento" data-movimento="carico">
+                    Carica
+                </button>
+                <button type="button" class="azione-movimento" data-movimento="manutenzione">
+                    Manda in manutenzione
+                </button>
+                <button type="button" class="azione-movimento" data-movimento="smarrimento">
+                    Segnala smarrito
+                </button>
+                <button type="button" class="azione-movimento pericolo" data-movimento="dismissione">
+                    Dismetti
+                </button>
+                <button type="button" class="azione-movimento" data-movimento="rettifica">
+                    Correggi la giacenza
+                </button>
+                <!-- Un adesivo rovinato si ristampa da qui, senza cercarlo nel foglio di tutto il magazzino. -->
+                <a class="azione-etichetta" id="link-etichetta-bene" href="/magazzino-etichette.html" target="_blank" rel="noopener">
+                    Stampa l'etichetta
+                </a>
+            </div>
+
+            <form id="form-movimento" class="riquadro-movimento" hidden>
+                <p id="spiega-movimento" class="nota"></p>
+                <div class="campi-movimento">
+                    <label id="campo-quantita-movimento" hidden>
+                        <span id="etichetta-quantita-movimento">Quantità</span>
+                        <input type="number" id="movimento-quantita" step="1" value="1">
+                    </label>
+                    <label class="campo-largo">
+                        <span id="etichetta-nota-movimento">Nota</span>
+                        <input type="text" id="movimento-nota" maxlength="300">
+                    </label>
+                </div>
+                <div class="azioni-modale">
+                    <button type="button" class="button-style button-secondary" id="annulla-movimento">Annulla</button>
+                    <button type="submit" class="button-style">Conferma</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Manutenzioni: storico con i verbali, e la prossima scadenza che si
+             ricalcola da sola dalla periodicità. -->
+        <div id="manutenzioni-bene" hidden>
+            <h3>Manutenzioni</h3>
+            <button type="button" id="btn-nuovo-intervento" class="bottone-contorno">
+                Registra un intervento
+            </button>
+
+            <form id="form-intervento" class="riquadro-movimento" hidden enctype="multipart/form-data">
+                <div class="campi-movimento">
+                    <label>
+                        <span>Tipo</span>
+                        <select id="intervento-tipo"></select>
+                    </label>
+                    <label>
+                        <span>Eseguito il</span>
+                        <input type="date" id="intervento-data" required>
+                    </label>
+                    <label>
+                        <span>Si ripete ogni (mesi)</span>
+                        <input type="number" id="intervento-periodicita" min="1" max="120" placeholder="es. 12">
+                    </label>
+                    <label>
+                        <span>Costo</span>
+                        <input type="number" id="intervento-costo" min="0" step="0.01">
+                    </label>
+                    <label class="campo-largo">
+                        <span>Chi l'ha fatto</span>
+                        <input type="text" id="intervento-fornitore" maxlength="150" placeholder="officina, ditta, o noi stessi">
+                    </label>
+                    <label class="campo-largo">
+                        <span>Descrizione</span>
+                        <input type="text" id="intervento-descrizione" maxlength="300">
+                    </label>
+                    <label class="campo-largo">
+                        <span>Verbale o fattura <em>(facoltativo)</em></span>
+                        <input type="file" id="intervento-documento" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    </label>
+                </div>
+                <div class="azioni-modale">
+                    <button type="button" class="button-style button-secondary" id="annulla-intervento">Annulla</button>
+                    <button type="submit" class="button-style">Registra</button>
+                </div>
+            </form>
+
+            <div id="elenco-interventi" class="elenco-storia"></div>
+        </div>
+
+        <div id="storia-bene" hidden>
+            <h3>Storia</h3>
+            <div id="elenco-storia" class="elenco-storia"></div>
+        </div>
+    </div>
+</div>
+
+<script src="/vendor/js-cookie/js.cookie.min.js"></script>
+<script src="/js/apiHelper.js"></script>
+<script src="/js/menu-laterale.js"></script>
+<script src="/js/magazzino.js"></script>
+</body>
+</html>

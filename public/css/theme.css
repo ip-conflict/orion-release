@@ -1,0 +1,207 @@
+/* ==========================================================================
+   ORION - Tema condiviso (design tokens)
+   ==========================================================================
+   Fonte unica delle variabili colore/spaziatura usate da TUTTE le pagine.
+   Va caricato per primo, prima di qualsiasi altro foglio di stile della
+   pagina, così i CSS specifici (dashboard-admin.css, centro-operativo.css,
+   admin-styles.css, login.css, ecc.) ereditano sempre gli stessi valori
+   invece di ridefinirli ciascuno a modo suo.
+
+   Prima di questo file esistevano due insiemi di variabili paralleli
+   (dashboard-admin.css e centro-operativo.css) con nomi identici ma valori
+   diversi (es. --bg-color, --link-color): a seconda di quali due file una
+   pagina caricava - e in che ordine - il tema cambiava leggermente da una
+   pagina all'altra. Questo file unifica tutto in un solo set di token.
+   ========================================================================== */
+
+:root {
+    /* --- TEMA CHIARO (DEFAULT) --- */
+
+    /* I controlli del browser (menu a tendina, caselle, calendari, barre di
+       scorrimento) seguono il tema: senza questa riga restano chiari anche
+       nel tema scuro. */
+    color-scheme: light dark;
+
+    /* Testi di stato su fondo normale (pagina o pannello), con un fondo
+       tenue per i cartellini. Nel tema scuro diventano tinte chiare. */
+    --danger-text: #c62828;
+    --success-text: #1b5e20;
+    --warning-text: #9a5b00;
+    --info-text: #1d4ed8;
+    --danger-soft-bg: #fdecea;
+    --success-soft-bg: #e8f5e9;
+    --warning-soft-bg: #fff8e1;
+    --info-soft-bg: #e3f2fd;
+
+    /* Superfici e sfondo */
+    --bg-color: #f4f7f9;
+    --surface-color: #ffffff;
+    --secondary-bg-color: #f8f9fa;
+    --header-bg: #f8f9fa;
+    --modal-bg: #ffffff;
+    --modal-overlay-bg: rgba(0, 0, 0, 0.5);
+
+    /* Testo */
+    --text-color: #333333;
+    /* Un grigio che arriva al contrasto minimo (4,5) anche sul fondo pagina. */
+    --text-muted: #5f6b76;
+    --header-text-color: #2c3e50;
+
+    /* Bordi e separatori */
+    --border-color: #dee2e6;
+    --border-light-color: #eee;
+    --list-item-border: #eee;
+    --map-border-color: #ccc;
+
+    /* Colore primario (brand) - usato per link e azioni principali */
+    /* Un blu abbastanza scuro da reggere il testo bianco dei pulsanti e da
+       leggersi come link sul fondo chiaro (contrasto 4,5). */
+    --primary-color: #2477b3;
+    --link-color: #1f6fa8;
+    --button-bg: #2477b3;
+    --button-hover-bg: #1c6194;
+    --button-text: #ffffff;
+
+    /* Azioni secondarie */
+    --button-secondary-hover-bg: #f0f0f0;
+    --button-cancel-bg: #6c757d;
+    --button-cancel-hover-bg: #5a6268;
+    --button-disabled-bg: #cccccc;
+    --button-disabled-text: #666666;
+    --list-item-hover-bg: #e9ecef;
+
+    /* Campi form */
+    --form-input-bg: #ffffff;
+    --form-input-border: #ced4da;
+    --form-input-focus-border: #80bdff;
+    --form-input-focus-shadow: rgba(52, 152, 219, 0.25);
+
+    /* Stati e priorità (semantici: non seguono il colore brand) */
+    --success-color: #28a745;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --priority-high-border: #dc3545;
+    --priority-medium-border: #ffc107;
+    --priority-low-border: #28a745;
+    /* Tonalità separate per il TESTO delle etichette di priorità: i colori dei
+       bordi qui sopra funzionano come segnale grafico ma su fondo chiaro non
+       hanno contrasto sufficiente per essere letti (il giallo su bianco è
+       praticamente invisibile). */
+    --priority-high-text: #c62828;
+    --priority-medium-text: #9a5b00;
+    --priority-low-text: #1b5e20;
+    /* Cartellino "DA ASSEGNARE" quando l'attesa si è fatta lunga: è un
+       riempimento, non un testo colorato, quindi gli serve una coppia
+       fondo/testo propria (il rosso del bordo con testo bianco sopra non
+       arriverebbe al contrasto minimo). */
+    --overdue-bg: #c62828;
+    --overdue-text: #ffffff;
+    --status-error-color: #dc3545;
+    --status-active-color: #3498db;
+    --status-success-color: #28a745;
+    --status-muted-color: #6c757d;
+    --status-available-bg: #d4edda;
+    --status-available-border: #c3e6cb;
+    --status-available-text: #155724;
+    --status-assigned-bg: #f8d7da;
+    --status-assigned-border: #f5c6cb;
+    --status-assigned-text: #721c24;
+    --blink-red-light: rgba(255, 0, 0, 0.85);
+    --blink-red-dark: rgba(222, 0, 0, 0.85);
+
+    /* Ombre e transizioni */
+    --shadow-color-light: rgba(0, 0, 0, 0.05);
+    --shadow-color-medium: rgba(0, 0, 0, 0.1);
+    --transition-speed: 0.3s;
+}
+
+/* --- TEMA SCURO: attivo quando il sistema/browser è in dark mode --- */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #1a1a2e;
+        --surface-color: #242f4c;
+        --secondary-bg-color: #242f4c;
+        --header-bg: #242f4c;
+        --modal-bg: #242f4c;
+        --modal-overlay-bg: rgba(0, 0, 0, 0.7);
+
+        --text-color: #e0e0e0;
+        --text-muted: #9aa5b8;
+        --header-text-color: #ffffff;
+
+        --border-color: #3a476a;
+        --border-light-color: #303d5e;
+        --list-item-border: #303d5e;
+        --map-border-color: #555555;
+
+        --primary-color: #5fa8d3;
+        --link-color: #5fa8d3;
+        --button-bg: #5fa8d3;
+        --button-hover-bg: #7dbce8;
+        --button-text: #1a1a2e;
+
+        --button-secondary-hover-bg: #303d5e;
+        --button-cancel-bg: #555555;
+        --button-cancel-hover-bg: #777777;
+        --button-disabled-bg: #444444;
+        --button-disabled-text: #888888;
+        --list-item-hover-bg: #2d3a5c;
+
+        --form-input-bg: #2c375a;
+        --form-input-border: #3a476a;
+        --form-input-focus-border: #64b5f6;
+        --form-input-focus-shadow: rgba(100, 181, 246, 0.3);
+
+        --success-color: #a5d6a7;
+        --danger-color: #f48fb1;
+        --warning-color: #ffe082;
+        /* Priorità nel tema scuro: restano nella famiglia tenue del tema, ma
+           l'alta vira al rosso e la media all'arancio. Il rosa e il giallo
+           pallido di prima si somigliavano troppo per un segnale che deve dire
+           "questa prima delle altre" con un'occhiata sola. */
+        --priority-high-border: #ff8a80;
+        --priority-medium-border: #ffcc80;
+        --priority-low-border: #a5d6a7;
+        /* Su fondo scuro sono già i colori dei bordi ad avere il contrasto
+           migliore: testo ed elemento grafico possono coincidere. */
+        --priority-high-text: #ff8a80;
+        --priority-medium-text: #ffcc80;
+        --priority-low-text: #a5d6a7;
+        /* Nel tema scuro i cartellini pieni sono chiari con testo scuro (come
+           il giallo di "DA ASSEGNARE"): il rosso in ritardo segue la stessa
+           regola, altrimenti stona e si legge peggio. */
+        --overdue-bg: #ff8a80;
+        --overdue-text: #1f2937;
+        --status-error-color: #f48fb1;
+        --status-active-color: #90caf9;
+        --status-success-color: #a5d6a7;
+        --status-muted-color: #9e9e9e;
+        --status-available-bg: #2a4a34;
+        --status-available-border: #3c6a4a;
+        --status-available-text: #c3e6cb;
+        --status-assigned-bg: #5a2b31;
+        --status-assigned-border: #84353f;
+        --status-assigned-text: #f5c6cb;
+
+        --shadow-color-light: rgba(0, 0, 0, 0.2);
+        --shadow-color-medium: rgba(0, 0, 0, 0.4);
+
+        --danger-text: #ff8a80;
+        --success-text: #a5d6a7;
+        --warning-text: #ffcc80;
+        --info-text: #90caf9;
+        --danger-soft-bg: rgba(255, 138, 128, 0.14);
+        --success-soft-bg: rgba(165, 214, 167, 0.14);
+        --warning-soft-bg: rgba(255, 204, 128, 0.14);
+        --info-soft-bg: rgba(144, 202, 249, 0.14);
+    }
+}
+
+/* Consente di forzare esplicitamente un tema indipendentemente dal sistema,
+   se in futuro si aggiunge un selettore tema in UI (classe sul <html>). */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+}
+:root[data-theme="light"] {
+    color-scheme: light;
+}

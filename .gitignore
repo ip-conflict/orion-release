@@ -1,0 +1,44 @@
+# ==============================================================================
+# File .gitignore
+# ==============================================================================
+
+# 1. File di configurazione sensibili
+.env
+
+# 2. Dipendenze
+node_modules/
+
+# 3. File di Log
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pm2.log*
+
+# 4. File di sistema e dell'editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 5. File temporanei o di cache
+npm-cache/
+.npm/
+generate-password.js
+
+# 6 Librerie
+public/js/lib/
+# Librerie front-end copiate da node_modules dallo script postinstall (copy-libs.js)
+public/vendor/
+
+# 7. Contenuti caricati a runtime (foto, certificati, documenti) - non vanno
+# mai versionati: possono contenere dati personali/sanitari reali
+uploads/
+protected_uploads/
+public/uploads/
+
+# public/logo.png è tracciato di proposito (logo di default alla prima
+# installazione); public/logo2.png invece è sempre e solo caricato a runtime
+# (nessun default), quindi va ignorato
+public/logo2.png

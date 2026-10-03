@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Verifica Tesserino - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <style>
+        /* Le variabili colore (--primary-color, --bg-color, --text-color, ecc.)
+           arrivano da /css/theme.css, caricato sopra: questa pagina pubblica
+           condivide così la stessa palette (e lo stesso supporto dark mode)
+           del resto dell'app, invece di averne una tutta sua. */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        .badge-card {
+            background: var(--surface-color);
+            width: 100%; max-width: 400px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+        .badge-header {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            color: white; padding: 30px 20px; text-align: center;
+        }
+        .badge-header img.logo { display: block; margin: 0 auto 10px auto; }
+        
+        /* Modificata la classe della foto per stare dentro al corpo del badge */
+        .profile-photo {
+            width: 140px; height: 140px;
+            border-radius: 50%;
+            border: 4px solid var(--surface-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            object-fit: cover;
+            margin: 15px auto;
+            background: white;
+            display: block;
+        }
+        
+        .badge-body { padding: 30px 20px; text-align: center; }
+        .volunteer-name { font-size: 1.6rem; margin: 0 0 15px 0; font-weight: 800; color: var(--text-color); }
+        
+        .status-box {
+            margin-top: 25px; padding: 15px; border-radius: 12px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.1rem;
+        }
+        .status-ok { background: rgba(16, 185, 129, 0.1); color: var(--success-color); border: 2px solid var(--success-color); }
+        .status-ko { background: rgba(239, 68, 68, 0.1); color: var(--danger-color); border: 2px solid var(--danger-color); }
+        
+        .courses-section { margin-top: 30px; text-align: left; }
+        .courses-title { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+        .course-list { list-style: none; padding: 0; margin: 0; }
+        .course-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.95rem; }
+        .course-item i { color: var(--primary-color); }
+        
+        #loading, #error-msg { text-align: center; margin-top: 50px; }
+        #error-msg { color: var(--danger-color); font-weight: bold; display: none; }
+        
+        .watermark {
+            text-align: center; margin-top: 20px; font-size: 0.75rem; color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading"><i class="fas fa-spinner fa-spin fa-3x"></i><p>Verifica credenziali in corso...</p></div>
+    
+    <div id="error-msg">
+        <i class="fas fa-times-circle fa-4x"></i>
+        <h2>Tesserino Non Valido</h2>
+        <p>Il codice scansionato non esiste o l'utente è stato disattivato.</p>
+    </div>
+
+    <div id="unavailable-msg" style="text-align: center; margin-top: 50px; display: none;">
+        <i class="fas fa-clock fa-4x" style="color: var(--text-muted, #64748b);"></i>
+        <h2>Verifica Non Disponibile</h2>
+        <p>Il tesserino elettronico è consultabile da tutti solo durante un'emergenza attiva.</p>
+        <p>Chi fa parte dell'associazione lo vede sempre, dopo aver fatto l'<a href="/">accesso a ORION</a> da questo browser.</p>
+    </div>
+
+    <div class="badge-card" id="badge-content" style="display: none;">
+        <div class="badge-header">
+            <img id="b-app-logo" src="/logo.png" class="logo" alt="Logo Protezione Civile" style="width: auto; max-width: 80px; height: 60px; margin: 0 auto 10px auto; display: block; object-fit: contain;">            
+            <div id="b-app-name" style="font-size: 0.9rem; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">PROTEZIONE CIVILE</div>
+            <div style="font-size: 0.75rem; opacity: 0.8;">SISTEMA INFORMATIVO ORION</div>
+        </div>
+        
+        <div class="badge-body">
+            <h1 class="volunteer-name" id="b-name">Nome Cognome</h1>
+            
+            <img id="b-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cbd5e1'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>" class="profile-photo" alt="Foto Volontario">
+
+            <div id="b-status" class="status-box status-ko">
+                <i class="fas fa-times-circle"></i> NON OPERATIVO
+            </div>
+
+            <div class="courses-section">
+                <div class="courses-title">Specializzazioni Valide</div>
+                <ul class="course-list" id="b-courses">
+                    </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="watermark" id="watermark" style="display: none;">
+        Verificato il <span id="verify-time"></span><br>
+    </div>
+
+    <script src="/js/badge.js" defer></script>
+</body>
+</html>

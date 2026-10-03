@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Utenti - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li><a href="/centro-operativo.html"><i class="fas fa-tachometer-alt" style="width: 20px;"></i> Centro Operativo</a></li>
+                <li><a href="/admin/dashboard-admin.html"><i class="fas fa-cogs" style="width: 20px;"></i> Impostazioni</a></li>
+                <li><a href="/admin/admin.html" class="active"><i class="fas fa-users" style="width: 20px;"></i> Gestione Utenti</a></li>
+                <li><a href="/admin/squadre.html"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a></li>
+                <li><a href="/admin/archive.html"><i class="fas fa-archive" style="width: 20px;"></i> Archivio Emergenze</a></li>
+                <li><a href="/admin/sistema.html"><i class="fas fa-shield-halved" style="width: 20px;"></i> Sistema</a></li>
+            
+                <li id="sidebar-magazzino" style="display: none;"><a href="/magazzino.html"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a></li>
+            </ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <div>
+                    <h1 style="margin: 0; font-size: 2rem;">Gestione Utenti</h1>
+                    <p style="margin: 5px 0 0 0; color: var(--text-muted);">Aggiungi volontari, gestisci ruoli e credenziali</p>
+                </div>
+                <button id="add-user-btn" class="button-style">
+                    Nuovo utente
+                </button>
+            </header>
+
+            <section class="admin-panel" style="margin-bottom: 40px;">
+                <div class="table-container" style="background: var(--surface-color); border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid var(--border-color);">
+                    <table class="admin-table" id="user-table" style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: var(--bg-color);">
+                            <tr>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Nome</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Cognome</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Username</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Email</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Ruoli</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color); text-align: center;">Stato</th>
+                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color); text-align: right;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Caricamento utenti...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="import-users-section" style="background: var(--surface-color); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 800px;">
+                <h2 style="margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                    Importa Utenti da Excel
+                </h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">Carica un file <code>.xlsx</code> o <code>.csv</code> (anche quello dell'Excel italiano, con il punto e virgola) per inserire più volontari in una volta. Nella prima riga servono le colonne <strong>Nome</strong> e <strong>Cognome</strong>; se ci sono, si leggono anche <strong>Email</strong>, <strong>Telefono</strong> (o Cellulare) e <strong>Codice fiscale</strong>. Chi è già in ORION non viene creato di nuovo, quindi lo stesso foglio si può ricaricare.</p>
+                
+                <div class="import-container" style="display: flex; gap: 15px; align-items: center; background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px dashed var(--border-color);">
+                    <input type="file" id="import-file-input" accept=".xlsx, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv" style="flex-grow: 1;">
+                    <button id="import-users-btn" class="button-style button-secondary" style="white-space: nowrap">
+                        Importa da file
+                    </button>
+                </div>
+                <div id="import-feedback" class="esito-import"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="add-user-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px; border-top: 5px solid #3b82f6;">
+            <span id="close-add-modal-btn" class="close" title="Chiudi">&times;</span>
+            <h2 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">Nuovo utente</h2>
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 15px 0;">
+            
+            <form id="add-user-form">
+                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label for="add-nome" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Nome <span class="obbligatorio">*</span></label>
+                        <input type="text" id="add-nome" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="add-cognome" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Cognome <span class="obbligatorio">*</span></label>
+                        <input type="text" id="add-cognome" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; align-items: flex-start;">
+                    <div style="flex: 2;">
+                        <label for="add-email" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Email (Opzionale, consigliata per recupero password)</label>
+                        <input type="email" id="add-email" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 1;">
+                        <span style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Ruoli <span class="obbligatorio">*</span></span>
+                        <div id="add-ruoli" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; background: var(--bg-color);">
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="add-ruolo" value="volontario" style="margin-top: 3px;">
+                                <span><strong>Volontario</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Entra nel centro operativo, va in squadra.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="add-ruolo" value="segreteria" style="margin-top: 3px;">
+                                <span><strong>Segreteria</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Visite, corsi, scadenze.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="add-ruolo" value="magazziniere" style="margin-top: 3px;">
+                                <span><strong>Magazziniere</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">DPI, attrezzature, veicoli.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="add-ruolo" value="admin" style="margin-top: 3px;">
+                                <span><strong>Amministratore</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Può tutto, apre e chiude le emergenze.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="add-ruolo" value="esterno" style="margin-top: 3px;">
+                                <span><strong>Esterno</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Solo segnalazioni. Non si somma agli altri.</span></span>
+                            </label>
+                        </div>
+                        <p style="margin: 6px 0 0; font-size: 0.8rem; opacity: 0.75;">Si possono spuntare più ruoli: per esempio Segreteria e Magazziniere insieme.</p>
+                    </div>
+                 </div>
+                 
+                 <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 10px 15px; border-radius: 4px; margin-bottom: 20px;">
+                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-color);">Lo Username e la Password verranno generati automaticamente dal sistema.
+                    </p>
+                 </div>
+
+                <div style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                    <button type="button" id="cancel-add-modal-btn" class="button-style button-secondary">Annulla</button>
+                    <button class="button-style" type="submit" style="margin-left: 10px">
+                        Salva
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-user-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px; border-top: 5px solid #f59e0b;">
+            <span id="close-edit-modal-btn" class="close" title="Chiudi">&times;</span>
+            <h2 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">Modifica Utente</h2>
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 15px 0;">
+            
+            <form id="edit-user-form">
+                 <input type="hidden" id="edit-user-id">
+                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label for="edit-nome" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Nome <span class="obbligatorio">*</span></label>
+                        <input type="text" id="edit-nome" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="edit-cognome" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Cognome <span class="obbligatorio">*</span></label>
+                        <input type="text" id="edit-cognome" required style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                 </div>
+                 <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: flex-start;">
+                    <div style="flex: 2;">
+                        <label for="edit-email" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Email</label>
+                        <input type="email" id="edit-email" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 1;">
+                        <span style="font-weight: 600; font-size: 0.9rem; margin-bottom: 5px; display: block;">Ruoli <span class="obbligatorio">*</span></span>
+                        <div id="edit-ruoli" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; background: var(--bg-color);">
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="edit-ruolo" value="volontario" style="margin-top: 3px;">
+                                <span><strong>Volontario</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Entra nel centro operativo, va in squadra.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="edit-ruolo" value="segreteria" style="margin-top: 3px;">
+                                <span><strong>Segreteria</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Visite, corsi, scadenze.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="edit-ruolo" value="magazziniere" style="margin-top: 3px;">
+                                <span><strong>Magazziniere</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">DPI, attrezzature, veicoli.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="edit-ruolo" value="admin" style="margin-top: 3px;">
+                                <span><strong>Amministratore</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Può tutto, apre e chiude le emergenze.</span></span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer;">
+                                <input type="checkbox" class="edit-ruolo" value="esterno" style="margin-top: 3px;">
+                                <span><strong>Esterno</strong><br><span style="font-size: 0.8rem; opacity: 0.75;">Solo segnalazioni. Non si somma agli altri.</span></span>
+                            </label>
+                        </div>
+                        <p style="margin: 6px 0 0; font-size: 0.8rem; opacity: 0.75;">Si possono spuntare più ruoli: per esempio Segreteria e Magazziniere insieme.</p>
+                    </div>
+                 </div>
+                 
+                <div style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                    <button type="button" id="cancel-edit-modal-btn" class="button-style button-secondary">Annulla</button>
+                    <button class="button-style button-secondary" type="submit" style="margin-left: 10px">
+                        Aggiorna
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="credentials-modal" class="modal" style="display: none; z-index: 1100;">
+        <div class="modal-content" style="max-width: 500px; text-align: center; border-top: 5px solid #10b981;">
+            <span id="close-credentials-modal-btn" class="close" title="Chiudi">&times;</span>
+            <h2 id="credentials-modal-title" style="margin-top: 0; color: var(--success-text);">Azione Manuale Richiesta</h2>
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 15px 0;">
+            
+            <p style="color: var(--text-color); line-height: 1.5; font-size: 0.95rem;">Il sistema non ha potuto inviare l'email in automatico.<br><strong>Copia e invia privatamente questo link all'utente</strong> per permettergli di accedere.</p>
+            
+            <div style="background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin: 20px 0; text-align: left;">
+                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Username Volontario:</strong></p>
+                <p id="new-user-username" style="margin: 0 0 15px 0; font-weight: bold; font-size: 1.1rem; color: var(--text-color);"></p>
+                
+                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Link Attivazione:</strong></p>
+                <div style="background: var(--surface-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); word-break: break-all;">
+                    <code id="new-user-password" style="user-select: all; font-family: monospace; font-size: 0.9rem; color: var(--info-text);"></code>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: center; gap: 15px;">
+                <button class="button-style button-secondary" type="button" id="copy-credentials-btn">
+                    Copia
+                </button>
+                <button type="button" id="ok-credentials-btn" class="button-style button-secondary">
+                    Ho capito
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer></footer>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script> 
+    <script src="/js/admin-users.js" defer></script> 
+</body>
+</html>
