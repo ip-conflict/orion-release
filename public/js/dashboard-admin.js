@@ -307,18 +307,23 @@ document.addEventListener('DOMContentLoaded', () => {
         mapPickerModal.style.display = 'flex';
         initPickerMap();
 
-        const currentLat = parseFloat(mapCenterLatInput.value) || 46.1396;
-        const currentLon = parseFloat(mapCenterLonInput.value) || 12.2174;
-        const currentZoom = parseInt(mapZoomInput.value, 10) || 10;
+        // Senza un centro salvato si parte dall'Italia intera e senza puntatore:
+        // il punto lo mette chi configura, con un clic.
+        const lat = parseFloat(mapCenterLatInput.value);
+        const lon = parseFloat(mapCenterLonInput.value);
+        const salvato = Number.isFinite(lat) && Number.isFinite(lon);
+        const zoom = parseInt(mapZoomInput.value, 10) || 10;
 
         // Leaflet ha bisogno di un attimo prima di ridimensionarsi in un modale
         setTimeout(() => {
             pickerMap.invalidateSize();
-            pickerMap.setView([currentLat, currentLon], currentZoom);
-            
-            if (pickerMarker) pickerMarker.remove();
-            
-            pickerMarker = L.marker([currentLat, currentLon], { draggable: true }).addTo(pickerMap);
+            if (pickerMarker) { pickerMarker.remove(); pickerMarker = null; }
+            if (salvato) {
+                pickerMap.setView([lat, lon], zoom);
+                pickerMarker = L.marker([lat, lon], { draggable: true }).addTo(pickerMap);
+            } else {
+                pickerMap.setView([41.9, 12.5], 6);
+            }
         }, 150);
     }
     
@@ -447,6 +452,43 @@ document.addEventListener('DOMContentLoaded', () => {
     if (auditFiltroAzione) auditFiltroAzione.addEventListener('change', () => caricaRegistro(false));
     if (auditFiltroUtente) auditFiltroUtente.addEventListener('keyup', (e) => { if (e.key === 'Enter') caricaRegistro(false); });
     if (auditAltre) auditAltre.addEventListener('click', () => { auditPagina++; caricaRegistro(true); });
+
+    // L'email di prova: l'esito resta a schermo, chi configura deve poterlo leggere.
+    const emailProvaBtn = document.getElementById('email-prova-btn');
+    const emailProvaA = document.getElementById('email-prova-a');
+    const emailProvaEsito = document.getElementById('email-prova-esito');
+    async function mandaEmailProva() {
+        emailProvaBtn.disabled = true;
+        emailProvaEsito.style.color = 'var(--info-text)';
+        emailProvaEsito.textContent = 'Invio in corso...';
+        try {
+            const r = await fetchApi('/api/admin/email-prova', {
+                method: 'POST',
+                body: JSON.stringify({
+                    a: emailProvaA?.value?.trim() || '',
+                    smtp_host: smtpHostInput?.value?.trim() || '',
+                    smtp_port: smtpPortInput?.value?.trim() || '',
+                    smtp_secure: smtpSecureInput?.value || 'true',
+                    smtp_user: smtpUserInput?.value?.trim() || '',
+                    smtp_pass: smtpPassInput?.value?.trim() || ''
+                })
+            });
+            emailProvaEsito.style.color = 'var(--success-text)';
+            emailProvaEsito.textContent = r.message;
+        } catch (error) {
+            emailProvaEsito.style.color = 'var(--danger-text)';
+            emailProvaEsito.textContent = error.message;
+            if (error.body?.dettaglio) {
+                const d = document.createElement('div');
+                d.style.cssText = 'margin-top: 4px; font-size: 0.8rem; color: var(--text-muted); font-family: monospace; word-break: break-word;';
+                d.textContent = `Risposta del server: ${error.body.dettaglio}`;
+                emailProvaEsito.appendChild(d);
+            }
+        } finally {
+            emailProvaBtn.disabled = false;
+        }
+    }
+    emailProvaBtn?.addEventListener('click', mandaEmailProva);
 
     if (settingsForm) settingsForm.addEventListener('submit', handleSettingsSubmit);
     if (logoInput) logoInput.addEventListener('change', handleLogoUpload);

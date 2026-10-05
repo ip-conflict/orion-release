@@ -93,6 +93,10 @@ moduli Segreteria e Magazzino, il tesserino, la disponibilità dell'app
 Android, il controllo degli aggiornamenti. La posta è facoltativa: senza,
 ORION funziona lo stesso e mostra all'amministratore i link di attivazione
 invece di spedirli.
+Il manuale d'uso spiega come usare un account Gmail gratuito; dalle
+Impostazioni "Manda una prova" (`POST /api/admin/email-prova`) prova i dati
+scritti nel modulo, anche non ancora salvati, e restituisce il motivo
+dell'errore insieme alla risposta grezza del server di posta.
 
 
 ## 4. Dove stanno i dati

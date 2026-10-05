@@ -406,6 +406,22 @@ async function eseguiTest() {
     verifica('registro operazioni negato al volontario', [401, 403].includes(registroVolontario.stato), `HTTP ${registroVolontario.stato}`);
 
     // ------------------------------------------------------------------
+    // L'email di prova: solo all'amministratore, con l'errore detto in parole.
+    // Una porta chiusa sulla macchina stessa fallisce subito e sempre.
+    console.log('\n[5-bis-2] Email di prova');
+    const provaVolontario = await volontario.chiamata('/api/admin/email-prova', { method: 'POST', body: {} });
+    verifica('email di prova negata al volontario', [401, 403].includes(provaVolontario.stato), `HTTP ${provaVolontario.stato}`);
+    const provaIndirizzo = await admin.chiamata('/api/admin/email-prova', { method: 'POST', body: { a: 'non-una-email' } });
+    verifica('email di prova: indirizzo non valido rifiutato', provaIndirizzo.stato === 400, `HTTP ${provaIndirizzo.stato}`);
+    const provaChiusa = await admin.chiamata('/api/admin/email-prova', {
+        method: 'POST',
+        body: { a: 'prova@esempio.it', smtp_host: '127.0.0.1', smtp_port: '1', smtp_secure: 'false', smtp_user: 'prova@esempio.it', smtp_pass: 'x' }
+    });
+    verifica('email di prova: il server che non risponde è detto in parole',
+        provaChiusa.stato === 422 && /connettersi/.test(provaChiusa.corpo?.message || '') && /ECONNREFUSED/.test(provaChiusa.corpo?.dettaglio || ''),
+        `HTTP ${provaChiusa.stato} ${JSON.stringify(provaChiusa.corpo)}`);
+
+    // ------------------------------------------------------------------
     // Il magazzino tiene DPI, attrezzature e veicoli con un registro dei
     // movimenti: la giacenza e il detentore si CALCOLANO dal registro, non si
     // scrivono. Questi controlli servono a verificare che il calcolo torni e

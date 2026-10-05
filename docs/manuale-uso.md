@@ -115,6 +115,11 @@ quel materiale non rientra.
 Chiudendo l'emergenza finiscono anche gli accessi esterni temporanei, e dal
 telefono spariscono gli avvisi dell'emergenza.
 
+Il centro operativo si apre anche dal browser del telefono, in una forma
+ridotta: la mappa in alto e l'elenco delle segnalazioni sotto; toccando una
+segnalazione il dettaglio prende tutto lo schermo, e la X riporta alla
+mappa. Per lavorare in sala resta molto più comodo un computer.
+
 ### Il diario di sala
 
 Nel centro operativo, sopra l'elenco degli eventi, c'è un campo per scrivere
@@ -380,6 +385,42 @@ configura la posta, si carica il logo dell'associazione, si decide se l'app
 Android è a disposizione del personale, si impostano il tempo dopo cui una
 segnalazione senza squadra diventa rossa e le regole del tesserino.
 
+### La posta in uscita
+
+ORION manda poche email: il link di attivazione ai nuovi utenti, il recupero
+della password e gli avvisi delle scadenze della segreteria. Senza posta
+funziona lo stesso, ma i link vanno copiati e mandati a mano. Basta un
+account Gmail gratuito, meglio se creato apposta per l'associazione invece di
+usare quello di una persona.
+
+Google non accetta da ORION la password normale dell'account: vuole una
+password per le app, che si crea solo con la verifica in due passaggi
+attiva. Si entra nell'account Google, nella sezione Sicurezza si attiva la
+verifica in due passaggi, poi si apre la pagina
+myaccount.google.com/apppasswords, si dà un nome (per esempio ORION) e si
+preme Crea. Google mostra un codice di 16 lettere, che va copiato senza spazi
+nel campo Password delle impostazioni di ORION. Se in futuro si cambia la
+password dell'account, Google revoca le password per le app e il codice va
+creato di nuovo.
+
+Negli altri campi si scrive `smtp.gmail.com` come host, la porta 465 con
+sicurezza SSL/TLS su Sì, e l'indirizzo Gmail completo come email mittente.
+Va bene anche la porta 587 con SSL/TLS su No: la connessione passa comunque
+a TLS. Un account gratuito manda circa 500 email al giorno, molte più di
+quante ne servano. Con un altro fornitore (Aruba, Libero, la posta del
+Comune) i dati sono quelli che il fornitore indica per i programmi di posta.
+
+Sotto i campi c'è "Manda una prova", che usa quello che è scritto in quel
+momento, anche prima di salvare, e spedisce un'email all'indirizzo indicato
+o, se il campo è vuoto, a quello dell'amministratore. Se qualcosa non va
+ORION dice cosa: credenziali rifiutate (con Gmail quasi sempre la password
+normale al posto di quella per le app), porta e SSL scambiati, server che
+non risponde. Quando la prova arriva, si preme Salva. Se il server di ORION
+sta presso un hosting che blocca le porte della posta in uscita, la prova
+finisce con un errore di connessione e va chiesto al fornitore di aprirle.
+
+### Sistema, backup e aggiornamenti
+
 La pagina Sistema mostra i backup, permette di farne uno subito, scaricarlo,
 verificarlo e ripristinarlo. Per ripristinare servono la propria password e
 la parola RIPRISTINA scritta per intero; prima di ripristinare ORION fa un
@@ -412,5 +453,6 @@ Se una consegna fatta senza rete non compare sul web, è ancora nella coda del
 telefono: parte appena c'è campo, e l'app lo dice nella schermata della
 consegna.
 
-Se le email non partono, il registro del server lo dice: è la prima cosa che
-l'amministratore guarda.
+Se le email non partono, la prima cosa è "Manda una prova" nelle
+impostazioni della posta, che dice il motivo; il registro del server tiene
+anche gli errori degli invii automatici.

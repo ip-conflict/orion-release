@@ -1856,3 +1856,75 @@ body.eventi-aperti #contenitore-avvisi {
 }
 #form-diario-sala button { align-self: flex-end; padding: 4px 14px; }
 #lista-eventi li.evento-sala { border-left-color: var(--warning-color, #e0a800); }
+
+/* ==========================================================================
+   Telefono: la mappa in alto, le segnalazioni sotto. La colonna fissa di
+   360px del desktop spingeva la mappa fuori dallo schermo. Gli stili della
+   pagina sono in linea, da qui gli !important.
+   ========================================================================== */
+@media (max-width: 760px) {
+    body { height: 100dvh !important; }
+    header {
+        height: auto !important;
+        min-height: 52px;
+        padding: 6px 10px !important;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    header { flex-wrap: nowrap; }
+    header > div:first-child { gap: 6px !important; min-width: 0; flex: 1 1 auto; }
+    /* Del titolo resta il logo: la scritta ORION non ci sta. */
+    header h1 { font-size: 0 !important; gap: 0 !important; flex-shrink: 0; }
+    header h1 img { height: 26px !important; }
+    #emergency-status-display {
+        font-size: 0.75rem !important;
+        padding: 4px 8px !important;
+        min-width: 0;
+        flex: 0 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block !important;
+    }
+    #open-emergency-btn, #close-emergency-btn, #top-menu-btn {
+        padding: 6px 8px !important;
+        font-size: 0.8rem !important;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    header > div:last-child { gap: 0 !important; flex-shrink: 0; }
+    .leaflet-control-logo img { max-width: 44px !important; }
+
+    #area-lavoro { flex-direction: column; }
+    #map-container {
+        order: 1;
+        flex: 0 0 42dvh !important;
+        min-width: 0 !important;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+    }
+    #map-segnalazioni { border-radius: 0; }
+    #reports-inbox-sidebar {
+        order: 2;
+        width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+        min-height: 0;
+        border-right: none !important;
+        border-top: 1px solid var(--border-color);
+    }
+    #team-status-panel {
+        bottom: 8px !important;
+        width: calc(100% - 16px) !important;
+        border-radius: 12px !important;
+        padding: 2px 8px !important;
+        font-size: 0.85rem;
+    }
+    #team-status-header { margin-right: 8px !important; }
+
+    /* Il dettaglio di una segnalazione prende tutta l'area sotto l'intestazione. */
+    body.dettaglio-aperto #reports-inbox-sidebar { display: none !important; }
+    body.dettaglio-aperto #map-container { flex: 1 1 auto !important; }
+    #report-detail-side-panel { max-width: none !important; }
+}

@@ -290,7 +290,17 @@
                         <hr style="margin: 30px 0; border-color: var(--border-light-color);">
 
                         <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Configurazione Email (SMTP)</h3>
-                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">Necessario per inviare notifiche e link di attivazione automatica.</p>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Serve per le email di attivazione degli account, il recupero della password e gli avvisi delle scadenze.</p>
+
+                        <details id="guida-smtp" style="margin-bottom: 20px; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color);">
+                            <summary style="cursor: pointer; font-weight: 600; color: var(--text-color);">Come usare un account Gmail gratuito</summary>
+                            <div style="font-size: 0.88rem; color: var(--text-color); line-height: 1.55; margin-top: 10px;">
+                                <p style="margin: 0 0 8px 0;">Conviene creare un account Gmail dedicato all'associazione, per esempio protezionecivile.vostrocomune@gmail.com, invece di usare quello di una persona. Google non accetta la password normale dell'account dai programmi come ORION: vuole una <strong>password per le app</strong>, che si può creare solo con la verifica in due passaggi attiva.</p>
+                                <p style="margin: 0 0 8px 0;">Entrate nell'account Google, aprite la sezione Sicurezza e attivate la verifica in due passaggi. Poi andate su <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>, date un nome alla password (per esempio ORION) e premete Crea: Google mostra un codice di 16 lettere, che va copiato senza spazi nel campo Password qui sotto. Se cambiate la password dell'account, le password per le app vengono revocate e va creata di nuovo.</p>
+                                <p style="margin: 0 0 8px 0;">Come host scrivete <code>smtp.gmail.com</code>, porta <code>465</code> con sicurezza SSL/TLS su Sì, e come email mittente l'indirizzo Gmail completo. In alternativa vanno bene la porta <code>587</code> con SSL/TLS su No: la connessione passa comunque a TLS.</p>
+                                <p style="margin: 0;">Un account gratuito può mandare circa 500 email al giorno, più che sufficienti per un'associazione. Se il server di ORION sta presso un hosting che blocca le porte della posta in uscita, la prova qui sotto lo dirà con un errore di connessione: in quel caso va chiesto al fornitore di aprirle.</p>
+                            </div>
+                        </details>
 
                         <div class="form-group">
                             <label for="smtp-host">Host SMTP</label>
@@ -319,6 +329,16 @@
                         <div class="form-group">
                             <label for="smtp-pass">Password Email</label>
                             <input type="password" id="smtp-pass" name="smtp_pass" placeholder="Password o App Password" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                        </div>
+
+                        <div id="riga-email-prova" style="padding: 15px; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-color);">
+                            <label for="email-prova-a" style="color: var(--text-color); font-weight: 600;">Email di prova</label>
+                            <p style="margin: 4px 0 10px 0; font-size: 0.85rem; color: var(--text-muted);">Prova le impostazioni scritte qui sopra, anche prima di salvarle. Vuoto, la prova arriva al vostro indirizzo email.</p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <input type="email" id="email-prova-a" placeholder="Il vostro indirizzo" style="flex: 1; min-width: 200px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);">
+                                <button type="button" id="email-prova-btn" class="button-style button-secondary">Manda una prova</button>
+                            </div>
+                            <div id="email-prova-esito" role="status" aria-live="polite" style="margin-top: 10px; font-size: 0.9rem; line-height: 1.45;"></div>
                         </div>
 
                         <div class="form-actions" style="margin-top: 30px; text-align: right; border-top: 1px solid var(--border-light-color); padding-top: 20px;">

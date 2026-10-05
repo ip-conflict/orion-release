@@ -9,6 +9,7 @@ import { checkAdminRole } from './autenticazione.js';
 import { LOGO2_FILE_PATH, LOGO_FILE_PATH, cleanupRejectedFiles, uploadLogo2Multer, uploadLogoMulter, verifySingleUploadedImage } from './caricamenti.js';
 import { MINUTI_ATTESA_CRITICA_MAX } from './costanti.js';
 import { pool } from './db.js';
+import { inviaEmailProva } from './email.js';
 import { wss } from './tempoReale.js';
 
 export function registraRotteImpostazioni(app) {
@@ -151,6 +152,29 @@ export function registraRotteImpostazioni(app) {
             client.release();
         }
     });
+    // L'email di prova: con le impostazioni del modulo, anche non salvate,
+    // all'indirizzo indicato o a quello dell'amministratore.
+    app.post('/api/admin/email-prova', checkAdminRole, async (req, res) => {
+        const corpo = (req.body && typeof req.body === 'object') ? req.body : {};
+        let a = typeof corpo.a === 'string' ? corpo.a.trim() : '';
+        if (a && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)) {
+            return res.status(400).json({ message: "L'indirizzo a cui mandare la prova non è valido." });
+        }
+        try {
+            if (!a) {
+                const r = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
+                a = r.rows[0]?.email || '';
+            }
+            const esito = await inviaEmailProva(corpo, a);
+            logger.info(`Admin ${req.user.username}: email di prova a ${esito.a || '-'} ${esito.success ? 'partita' : 'fallita'}.`);
+            if (!esito.success) return res.status(422).json({ message: esito.error, dettaglio: esito.dettaglio });
+            res.json({ message: `Email di prova inviata a ${esito.a}. Controlla la casella, anche nello spam.` });
+        } catch (error) {
+            logger.error("Errore durante l'email di prova:", error);
+            res.status(500).json({ message: 'Errore interno del server.' });
+        }
+    });
+
     // Il registro delle operazioni, per l'amministratore.
 
     app.get('/api/admin/audit-log', checkAdminRole, async (req, res) => {

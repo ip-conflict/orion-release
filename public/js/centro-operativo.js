@@ -1053,6 +1053,8 @@ function closeBottomPanel() {
     }
     
     sidePanel.style.left = '-100%'; 
+    // Sul telefono il dettaglio prende tutta l'area: chiuso, tornano mappa ed elenco.
+    document.body.classList.remove('dettaglio-aperto');
     highlightTableRow(null);
     currentlyDisplayedReportId = null;
     
@@ -1092,6 +1094,7 @@ async function showReportDetails(reportId) {
     if (bottomPanelNewUpdateText) bottomPanelNewUpdateText.value = '';
     bottomPanel.style.display = 'flex';
     if (sidePanel) sidePanel.style.left = '0px'; 
+    document.body.classList.add('dettaglio-aperto');
 
     try {
         const data = await fetchApi(`/api/reports/${reportId}`);
