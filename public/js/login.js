@@ -234,7 +234,10 @@ async function proponiApp(token, continua) {
     titolo.textContent = "ORION per Android";
 
     const testo = document.createElement('p');
-    testo.textContent = "Sul telefono c'è l'app: notifiche, tesserino e intervento della squadra, anche quando manca il campo.";
+    testo.textContent = "Sul telefono c'è l'app: notifiche, tesserino e intervento della squadra, anche quando manca il campo. Si installa così:";
+    // I passi si vedono subito: chi non ha mai installato un'app fuori dal
+    // Play Store si ferma alla prima domanda di Android.
+    const passi = typeof passiInstallaApp === 'function' ? passiInstallaApp('accedi') : null;
 
     const versione = document.createElement('p');
     versione.className = 'proposta-app-versione';
@@ -262,13 +265,14 @@ async function proponiApp(token, continua) {
     });
 
     scarica.addEventListener('click', () => {
-        // Il download parte da se'; qui si spiega cosa fare dopo.
-        testo.textContent = "Download avviato. Apri il file scaricato per installarla: la prima volta Android chiede di consentire l'installazione da questa fonte. Poi accedi con le stesse credenziali.";
-        scarica.style.display = 'none';
-        web.textContent = 'Continua sul web';
+        // Il download parte da se': si evidenzia il passo successivo.
+        testo.textContent = 'Download avviato. Ora:';
+        passi?.querySelectorAll('li').forEach((li, i) => li.classList.toggle('ora', i === 1));
+        scarica.textContent = 'Scarica di nuovo';
+        scarica.classList.add('button-secondary');
     });
 
-    scheda.append(titolo, testo, versione, ...(offerta.certificato_sha256 ? [certificato] : []), scarica, web);
+    scheda.append(titolo, testo, ...(passi ? [passi] : []), versione, scarica, web, ...(offerta.certificato_sha256 ? [certificato] : []));
     velo.append(scheda);
     document.body.append(velo);
     scarica.focus();

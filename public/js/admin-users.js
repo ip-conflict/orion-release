@@ -143,98 +143,223 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    async function loadUsers() {
-        console.log("Caricamento lista utenti...");
-        userTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Caricamento...</td></tr>'; 
+    // Interni ed esterni in due schede; fra gli esterni, i temporanei (nati
+    // dal centro operativo con il QR) si distinguono dai permanenti.
+    const testaTabella = document.getElementById('user-table-head');
+    const schede = Array.from(document.querySelectorAll('.gu-scheda'));
+    const cercaInput = document.getElementById('cerca-utenti');
+    const filtroEsterni = document.getElementById('filtro-esterni');
+    const notaEsterni = document.getElementById('nota-esterni');
 
-        // Recuperiamo il nostro ID per bloccare i tasti sulla nostra riga
-        const currentAdminId = parseInt(localStorage.getItem('userId'), 10);
+    let tuttiUtenti = [];
+    let gruppo = 'interni';
+    try { if (localStorage.getItem('gestione-utenti-gruppo') === 'esterni') gruppo = 'esterni'; } catch (e) { /* senza memoria si parte dagli interni */ }
+    let ordine = { chiave: 'cognome', verso: 1 };
 
-        try {
-            const users = await fetchApi('/api/admin/users'); 
-            userTableBody.innerHTML = ''; 
+    const eEsterno = (u) => u.temporaneo === true || (u.ruoli && u.ruoli.length ? u.ruoli : [u.role]).includes('esterno');
+    const ruoliTesto = (u) => (u.ruoli && u.ruoli.length ? u.ruoli : [u.role]).map(r => ETICHETTE_RUOLI[r] || r).join(', ');
 
-            if (!users || users.length === 0) {
-                userTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Nessun utente trovato.</td></tr>';
-                return;
+    const COLONNE = {
+        interni: [
+            { titolo: 'Persona', chiave: 'cognome' }, { titolo: 'Email' }, { titolo: 'Ruoli' }, { titolo: 'Stato', centro: true },
+            { titolo: 'Creato il', chiave: 'creato_il' }, { titolo: 'Ultimo accesso', chiave: 'ultimo_accesso' },
+            { titolo: 'Azioni', destra: true }
+        ],
+        esterni: [
+            { titolo: 'Persona', chiave: 'cognome' },
+            { titolo: 'Ente', chiave: 'ente' }, { titolo: 'Tipo' }, { titolo: 'Stato', centro: true },
+            { titolo: 'Creato il', chiave: 'creato_il' }, { titolo: 'Ultimo accesso', chiave: 'ultimo_accesso' },
+            { titolo: 'Azioni', destra: true }
+        ]
+    };
+
+    function dataBreve(valore) {
+        if (!valore) return '—';
+        return new Date(valore).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function dataCompleta(valore) {
+        return valore ? new Date(valore).toLocaleString('it-IT', { dateStyle: 'full', timeStyle: 'short' }) : '';
+    }
+
+    // "Oggi, 14:32", "Ieri, 09:10", "3 giorni fa": in sala conta quanto è recente.
+    function accessoRelativo(valore) {
+        if (!valore) return 'Mai';
+        const quando = new Date(valore);
+        const minuti = Math.round((Date.now() - quando.getTime()) / 60000);
+        if (minuti < 2) return 'Adesso';
+        if (minuti < 60) return `${minuti} min fa`;
+        const ora = quando.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const inizioOggi = new Date(); inizioOggi.setHours(0, 0, 0, 0);
+        if (quando >= inizioOggi) return `Oggi, ${ora}`;
+        const giorni = Math.ceil((inizioOggi - quando) / 86400000);
+        if (giorni === 1) return `Ieri, ${ora}`;
+        if (giorni < 7) return `${giorni} giorni fa`;
+        return dataBreve(valore);
+    }
+
+    function disegnaTesta() {
+        testaTabella.innerHTML = '';
+        COLONNE[gruppo].forEach(c => {
+            const th = document.createElement('th');
+            th.textContent = c.titolo;
+            if (c.centro) th.style.textAlign = 'center';
+            if (c.destra) th.style.textAlign = 'right';
+            if (c.chiave) {
+                th.classList.add('gu-ordina');
+                if (ordine.chiave === c.chiave) th.classList.add(ordine.verso > 0 ? 'gu-su' : 'gu-giu');
+                th.title = 'Ordina';
+                th.tabIndex = 0;
+                const ordina = () => {
+                    // Le date si guardano di solito dalla più recente.
+                    const verso = ordine.chiave === c.chiave ? -ordine.verso : (c.chiave.endsWith('_il') || c.chiave === 'ultimo_accesso' ? -1 : 1);
+                    ordine = { chiave: c.chiave, verso };
+                    disegna();
+                };
+                th.addEventListener('click', ordina);
+                th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordina(); } });
             }
+            testaTabella.appendChild(th);
+        });
+    }
 
-            users.forEach(user => {
-                const isMe = user.id === currentAdminId;
-                const tr = document.createElement('tr');
-                tr.dataset.userId = user.id;
+    function confronta(a, b) {
+        const k = ordine.chiave;
+        let va = a[k], vb = b[k];
+        // I vuoti ("mai", "non si sa") in fondo, in entrambi i versi.
+        if (va == null || va === '') return (vb == null || vb === '') ? 0 : 1;
+        if (vb == null || vb === '') return -1;
+        if (k === 'creato_il' || k === 'ultimo_accesso') return (new Date(va) - new Date(vb)) * ordine.verso;
+        const r = String(va).localeCompare(String(vb), 'it', { sensitivity: 'base' });
+        return (r || String(a.nome || '').localeCompare(String(b.nome || ''), 'it', { sensitivity: 'base' })) * ordine.verso;
+    }
 
-                // Creazione Badge di Stato
-                const statusBadge = user.is_active 
-                    ? `<span class="status-badge active">Attivo</span>` 
-                    : `<span class="status-badge inactive">Sospeso</span>`;
+    function disegna() {
+        const interni = tuttiUtenti.filter(u => !eEsterno(u));
+        const esterni = tuttiUtenti.filter(eEsterno);
+        document.getElementById('conta-interni').textContent = `(${interni.length})`;
+        document.getElementById('conta-esterni').textContent = `(${esterni.length})`;
+        schede.forEach(b => {
+            const attiva = b.dataset.gruppo === gruppo;
+            b.classList.toggle('attiva', attiva);
+            b.setAttribute('aria-selected', String(attiva));
+        });
+        filtroEsterni.hidden = gruppo !== 'esterni';
+        notaEsterni.hidden = gruppo !== 'esterni';
+        disegnaTesta();
 
-                tr.innerHTML = `
-                    <td>${escapeHTML(user.nome)}</td>
-                    <td>${escapeHTML(user.cognome)}</td>
-                    <td>${escapeHTML(user.username)}</td>
-                    <td>${escapeHTML(user.email)}</td>
-                    <td>${escapeHTML((user.ruoli && user.ruoli.length ? user.ruoli : [user.role]).map(r => ETICHETTE_RUOLI[r] || r).join(', '))}</td>
-                    <td style="text-align: center;">${statusBadge}</td>
-                `;
+        let elenco = gruppo === 'esterni' ? esterni : interni;
+        if (gruppo === 'esterni' && filtroEsterni.value !== 'tutti') {
+            const voglioTemporanei = filtroEsterni.value === 'temporanei';
+            elenco = elenco.filter(u => (u.temporaneo === true) === voglioTemporanei);
+        }
+        const cerca = cercaInput.value.trim().toLowerCase();
+        if (cerca) {
+            elenco = elenco.filter(u => [u.nome, u.cognome, u.username, u.email, u.ente, u.emergenza]
+                .some(v => v && String(v).toLowerCase().includes(cerca)));
+        }
+        elenco = elenco.slice().sort(confronta);
 
-                // Cella Azioni
-                const actionTd = document.createElement('td');
-                actionTd.className = 'action-buttons';
+        const colonne = COLONNE[gruppo].length;
+        userTableBody.innerHTML = '';
+        if (elenco.length === 0) {
+            const vuoto = cerca ? 'Nessun utente corrisponde alla ricerca.'
+                : gruppo === 'esterni' ? 'Nessun esterno. I temporanei si creano dal centro operativo, in «Accesso esterno».' : 'Nessun utente trovato.';
+            userTableBody.innerHTML = `<tr><td colspan="${colonne}" style="text-align: center;">${escapeHTML(vuoto)}</td></tr>`;
+            return;
+        }
+        elenco.forEach(user => userTableBody.appendChild(rigaUtente(user)));
+    }
 
-                // Bottone Modifica (Sempre visibile)
-                const editBtn = document.createElement('button');
-                editBtn.className = 'button-style button-small edit-user-btn';
-                editBtn.title = `Modifica Utente ${user.username}`;
-                editBtn.innerHTML = '<i class="fas fa-edit"></i>';
-                editBtn.addEventListener('click', () => openEditUserModal(user));
-                actionTd.appendChild(editBtn);
+    function bottone(classe, icona, titolo, azione) {
+        const b = document.createElement('button');
+        b.className = `button-style button-small ${classe}`;
+        b.innerHTML = `<i class="fas ${icona}"></i>`;
+        b.title = titolo;
+        b.setAttribute('aria-label', titolo);
+        if (azione) b.addEventListener('click', azione); else b.disabled = true;
+        return b;
+    }
 
-                // Bottone Abilita/Disabilita
-                const toggleBtn = document.createElement('button');
-                toggleBtn.className = `button-style button-small ${user.is_active ? 'suspend-btn' : 'reactivate-btn'}`;
-                toggleBtn.innerHTML = user.is_active ? '<i class="fas fa-user-slash"></i>' : '<i class="fas fa-user-check"></i>';
-                
-                if (isMe) {
-                    toggleBtn.disabled = true;
-                    toggleBtn.title = "Non puoi sospendere il tuo stesso account";
-                } else {
-                    toggleBtn.title = user.is_active ? 'Sospendi Utente' : 'Riattiva Utente';
-                    toggleBtn.addEventListener('click', () => handleToggleStatus(user.id, user.username, user.is_active));
-                }
-                actionTd.appendChild(toggleBtn);
+    function rigaUtente(user) {
+        const currentAdminId = parseInt(localStorage.getItem('userId'), 10);
+        const isMe = user.id === currentAdminId;
+        const temporaneo = user.temporaneo === true;
+        const tr = document.createElement('tr');
+        tr.dataset.userId = user.id;
 
-                // Bottone Reset Password
-                const resetPwdBtn = document.createElement('button');
-                resetPwdBtn.className = 'button-style button-small reset-pwd-btn';
-                resetPwdBtn.innerHTML = '<i class="fas fa-key"></i>';
-                if (isMe) {
-                    resetPwdBtn.disabled = true;
-                    resetPwdBtn.title = "Usa il 'Mio Profilo' per cambiare la tua password";
-                } else {
-                    resetPwdBtn.title = `Resetta Password Utente ${user.username}`;
-                    resetPwdBtn.addEventListener('click', () => handleResetPassword(user.id, user.username));
-                }
-                actionTd.appendChild(resetPwdBtn);
+        // Un temporaneo non si sospende: il suo accesso finisce con l'emergenza.
+        let stato;
+        if (temporaneo) {
+            stato = user.is_active && user.emergenza_aperta
+                ? '<span class="status-badge active">Attivo</span>'
+                : '<span class="status-badge finito" title="Emergenza chiusa o accesso revocato">Finito</span>';
+        } else {
+            stato = user.is_active ? '<span class="status-badge active">Attivo</span>' : '<span class="status-badge inactive">Sospeso</span>';
+        }
+        const date = `
+            <td class="gu-data" title="${escapeHTML(dataCompleta(user.creato_il))}">${escapeHTML(dataBreve(user.creato_il))}</td>
+            <td class="gu-data" title="${escapeHTML(dataCompleta(user.ultimo_accesso))}">${escapeHTML(accessoRelativo(user.ultimo_accesso))}</td>`;
 
-                // Bottone Elimina
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'button-style button-small delete-user-btn';
-                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                if (isMe) {
-                    deleteBtn.disabled = true;
-                    deleteBtn.title = "Non puoi eliminare il tuo stesso account";
-                } else {
-                    deleteBtn.title = `Elimina Utente ${user.username}`;
-                    deleteBtn.addEventListener('click', () => handleDeleteUser(user.id, user.username));
-                }
-                actionTd.appendChild(deleteBtn);
+        // Cognome e nome insieme, il nome utente sotto: la tabella resta larga
+        // quanto lo schermo anche con le date.
+        // Il temporaneo il nome utente non lo usa mai (entra col QR), e dopo un
+        // "Cambia persona" sarebbe ancora quello di prima: non lo si mostra.
+        const persona = `<td><strong>${escapeHTML([user.cognome, user.nome].filter(Boolean).join(' '))}</strong>` +
+            (temporaneo ? '' : `<span class="gu-sotto">${escapeHTML(user.username)}</span>`) + '</td>';
+        if (gruppo === 'esterni') {
+            const tipo = temporaneo
+                ? `<span class="gu-tipo temporaneo">Temporaneo</span>${user.emergenza ? `<span class="gu-sotto">emergenza ${escapeHTML(user.emergenza)}</span>` : ''}`
+                : '<span class="gu-tipo">Permanente</span>';
+            tr.innerHTML = `
+                ${persona}
+                <td>${escapeHTML(user.ente || '—')}</td>
+                <td>${tipo}</td>
+                <td style="text-align: center;">${stato}</td>${date}`;
+        } else {
+            tr.innerHTML = `
+                ${persona}
+                <td>${escapeHTML(user.email || '—')}</td>
+                <td>${escapeHTML(ruoliTesto(user))}</td>
+                <td style="text-align: center;">${stato}</td>${date}`;
+        }
 
-                tr.appendChild(actionTd);
-                userTableBody.appendChild(tr);
-            });
+        const actionTd = document.createElement('td');
+        actionTd.className = 'action-buttons';
+        actionTd.style.textAlign = 'right';
+        if (!temporaneo) {
+            actionTd.appendChild(bottone('edit-user-btn', 'fa-edit', `Modifica ${user.username}`, () => openEditUserModal(user)));
+            actionTd.appendChild(isMe
+                ? bottone(user.is_active ? 'suspend-btn' : 'reactivate-btn', 'fa-user-slash', 'Non puoi sospendere il tuo stesso account')
+                : bottone(user.is_active ? 'suspend-btn' : 'reactivate-btn', user.is_active ? 'fa-user-slash' : 'fa-user-check',
+                    user.is_active ? `Sospendi ${user.username}` : `Riattiva ${user.username}`,
+                    () => handleToggleStatus(user.id, user.username, user.is_active)));
+            actionTd.appendChild(isMe
+                ? bottone('reset-pwd-btn', 'fa-key', "Usa il 'Mio Profilo' per cambiare la tua password")
+                : bottone('reset-pwd-btn', 'fa-key', `Azzera la password di ${user.username}`, () => handleResetPassword(user.id, user.username)));
+        }
+        actionTd.appendChild(isMe
+            ? bottone('delete-user-btn', 'fa-trash-alt', 'Non puoi eliminare il tuo stesso account')
+            : bottone('delete-user-btn', 'fa-trash-alt', `Elimina ${user.username}`, () => handleDeleteUser(user.id, user.username)));
+        tr.appendChild(actionTd);
+        return tr;
+    }
+
+    schede.forEach(b => b.addEventListener('click', () => {
+        gruppo = b.dataset.gruppo;
+        try { localStorage.setItem('gestione-utenti-gruppo', gruppo); } catch (e) { /* non indispensabile */ }
+        disegna();
+    }));
+    cercaInput.addEventListener('input', disegna);
+    filtroEsterni.addEventListener('change', disegna);
+
+    async function loadUsers() {
+        userTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center;">Caricamento...</td></tr>`;
+        try {
+            tuttiUtenti = (await fetchApi('/api/admin/users')) || [];
+            disegna();
         } catch (error) {
-            userTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: red;">Errore: ${escapeHTML(error.message)}</td></tr>`;
+            userTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: red;">Errore: ${escapeHTML(error.message)}</td></tr>`;
         }
     }
 

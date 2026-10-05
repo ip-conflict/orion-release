@@ -46,6 +46,12 @@ ente, squadra, email): vedi `src/esterniTemporanei.js`.
 - Alla chiusura dell'emergenza (o a una revoca) l'utente si disattiva, esce
   dalla squadra, codice e sessioni non valgono più; le richieste rispondono
   `403` con `sessione_terminata: true` e `motivo: "accesso_temporaneo_finito"`.
+- Dalla 1.0.3 del server: `GET /api/esterni-temporanei/:id/codice` rimostra
+  codice e link (`409` con `rigenera: true` se non si può), `POST .../:id/invia`
+  `{ email }` lo rimanda per email, `PUT .../:id/persona` `{ nome, ente, email }`
+  cambia la persona: il codice vecchio smette di valere e le sessioni di chi
+  c'era prima si chiudono (`401`). Solo operatori interni.
+- L'app non propone il collegamento col logo agli accessi temporanei.
 
 ## Libretto: i corsi
 

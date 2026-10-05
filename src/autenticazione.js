@@ -80,6 +80,7 @@ export async function authenticateToken(req, res, next) {
         // Senza righe in utenti_ruoli vale il ruolo scritto nel token.
         const ruoliEffettivi = (ruoli && ruoli.length > 0) ? ruoli : ruoliDi(user);
         req.user = { ...user, nome, cognome, ruoli: ruoliEffettivi, role: ruoloPrincipale(ruoliEffettivi), temporaneo: temporaneo === true };
+        segnaAccesso(user.id);
         logger.debug(`[Auth OK] Utente: ${user.username}, Ruoli: ${ruoliEffettivi.join(', ')}, Path: ${req.originalUrl}`);
         next();
     } catch (err) {
@@ -104,6 +105,20 @@ export async function authenticateToken(req, res, next) {
             return res.sendStatus(status);
         }
     }
+}
+
+// L'ultimo accesso in Gestione utenti: si scrive all'ingresso e, mentre la
+// persona usa ORION (il web resta aperto per ore, l'app rinnova da sé), al
+// massimo una volta ogni INTERVALLO_ACCESSO, senza far aspettare la richiesta.
+const INTERVALLO_ACCESSO = 5 * 60 * 1000;
+const ultimiAccessiScritti = new Map();
+
+export function segnaAccesso(userId, subito = false) {
+    const ora = Date.now();
+    if (!subito && ora - (ultimiAccessiScritti.get(userId) || 0) < INTERVALLO_ACCESSO) return;
+    ultimiAccessiScritti.set(userId, ora);
+    pool.query('UPDATE users SET ultimo_accesso = NOW() WHERE id = $1', [userId])
+        .catch(e => logger.warn(`[Auth] Ultimo accesso di ${userId} non registrato: ${e.message}`));
 }
 
 // I ruoli si sommano e stanno in utenti_ruoli. users.role è il più alto di
@@ -139,6 +154,7 @@ export function emettiSessione(res, utente, ruoli) {
         signed: true,
         path: '/'
     });
+    segnaAccesso(utente.id, true);
     res.cookie('username', utente.username, { httpOnly: false, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
     return { token, principale, ruoliUtente };
 }

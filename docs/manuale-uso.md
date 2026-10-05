@@ -120,7 +120,9 @@ interni ricevono sul telefono l'avviso che l'emergenza è aperta.
 
 Alla chiusura ORION fa da solo tre cose. Salva un backup del database, perché
 è il momento in cui il registro è completo. Scrive il resoconto
-dell'intervento, che si scarica dall'Archivio Emergenze. Chiude d'ufficio le
+dell'intervento, che dall'Archivio Emergenze si stampa (o si salva in PDF)
+con "Stampa resoconto", oppure si scarica come file di testo da allegare con
+"Scarica .txt". Chiude d'ufficio le
 squadre rimaste vuote, cioè senza più nessuno e senza materiale in carico:
 sono di solito quelle nate per l'emergenza e svuotate strada facendo. Una
 squadra vuota che ha ancora un mezzo o del materiale resta aperta, finché
@@ -143,6 +145,36 @@ richiesta arrivata dalla Prefettura. Si scrive e si preme Annota, oppure
 Ctrl+Invio. La nota compare subito a tutte le postazioni, con
 l'ora e il nome di chi l'ha scritta, e alla chiusura apre il resoconto. Chi
 non lo usa può ignorarlo del tutto.
+
+### Il punto di situazione
+
+Nell'intestazione del centro operativo, a emergenza aperta, il pulsante
+"Situazione" apre in una scheda nuova il foglio con la situazione di quel
+momento: quante segnalazioni sono aperte (e quante ad alta priorità o ancora
+senza squadra), le segnalazioni aperte una per una con priorità, stato,
+squadre e ultimo aggiornamento, le squadre con i loro componenti, dove sono
+impegnate e da quanto non si sa la loro posizione, le segnalazioni già chiuse
+con il loro esito e le ultime note del diario di sala. È fatto per il briefing
+al cambio turno e per chi coordina da fuori: "Stampa o salva in PDF" lo
+manda alla stampante, oppure lo salva come PDF da mandare per email, su un
+foglio A4 con i margini e il numero di pagina. "Aggiorna" lo rifà con i dati
+nuovi. Lo vedono gli operatori interni, non gli esterni. Per un'emergenza
+chiusa lo stesso foglio è il resoconto, e lo stampa l'amministratore
+dall'Archivio.
+
+### La rubrica
+
+Accanto a "Situazione" c'è "Rubrica": i numeri che in sala servono subito,
+divisi in gruppi (istituzioni ed enti, soccorso e forze dell'ordine,
+reperibili, ditte e servizi, associazione, altri). Si cerca scrivendo un pezzo
+di nome, di ente o di numero. Dal telefono o da un computer con un programma
+per le chiamate, il numero si tocca e parte la chiamata. "Nuovo contatto"
+aggiunge una voce, "Modifica" la corregge o la toglie; per ogni contatto
+servono il nome e almeno un telefono o un'email. La tengono aggiornata tutti
+gli operatori interni, come le squadre, e ogni modifica finisce nel registro
+con il nome di chi l'ha fatta. Gli esterni non la vedono. "Stampa" apre la
+rubrica su un foglio da stampare: conviene tenerne una copia in sala, perché
+se la rete cade i numeri restano sulla carta.
 
 ### Le segnalazioni
 
@@ -228,9 +260,26 @@ inquadrando lo stesso QR.
 L'esterno vede solo l'emergenza e gli interventi della sua squadra. Può
 scrivere note e, sugli interventi assegnati alla sua squadra, caricare foto.
 Il suo accesso finisce da solo alla chiusura dell'emergenza. Dalla stessa
-finestra "Accesso esterno" si vede chi è entrato, si rigenera il QR (il
-vecchio smette di valere) o si revoca l'accesso subito. La persona resta in
-anagrafica, disattivata, perché i registri la citano per nome.
+finestra "Accesso esterno" si vede chi è entrato e, sotto ogni nome, ci sono
+tre pulsanti. "QR e link" rimostra il QR e il link di quella persona, per
+farglielo inquadrare di nuovo o per rimandarglielo per email; da lì si può
+anche generare un codice nuovo, e il vecchio smette di valere. "Cambia
+persona" serve quando l'ambulanza cambia equipaggio: si scrive chi subentra,
+e chi c'era prima esce subito mentre il nuovo riceve un QR suo, nella stessa
+squadra. "Revoca" chiude l'accesso subito. Chi esce resta nei registri con il
+suo nome, perché le note e le foto lo citano. Gli accessi creati prima della
+versione 1.0.3 non si possono rivedere: il QR e link propone direttamente un
+codice nuovo.
+
+Sul telefono, la pagina che propone l'app spiega in cinque passi come si
+installa, perché non arriva dal Play Store e Android chiede due conferme in
+più: si scarica (e se Chrome avvisa si tocca «Scarica comunque»), si apre
+orion.apk dalla notifica del download, la prima volta si consente
+l'installazione da quella fonte nelle impostazioni, si tocca «Installa» (e
+«Installa comunque» se Play Protect non conosce l'app) e infine si torna
+alla pagina e si tocca «Apri nell'app». Lo stesso spiega la proposta che
+compare ai volontari dopo l'accesso dal telefono, con l'ultimo passo diverso:
+si apre Orion Mobile e si scrive l'indirizzo del server.
 
 
 ## 4. La segreteria
@@ -403,6 +452,20 @@ caselle (una persona può essere volontaria, segretaria e magazziniera
 insieme), sospende chi non deve più entrare. I cambi di ruolo valgono subito,
 anche per chi è collegato in quel momento. Un amministratore non può togliersi
 l'amministrazione da solo.
+
+In Gestione utenti la tabella ha due schede. Gli interni sono i volontari e
+chi ha un ruolo nell'associazione. Gli esterni sono le persone di altri enti:
+quelli permanenti hanno nome utente e password come tutti, quelli temporanei
+sono nati dal centro operativo con il QR e riportano l'emergenza a cui
+appartengono. I temporanei non si modificano, non si sospendono e non
+ricevono una password da qui: si gestiscono dalla finestra "Accesso esterno"
+e finiscono da soli con l'emergenza, mentre in Gestione utenti si possono solo
+eliminare. Per ognuno la tabella dice quando è stato creato e quando ha usato
+ORION l'ultima volta, sul web o con l'app ("Oggi, 14:32", "3 giorni fa",
+"Mai"). Le colonne con le frecce si ordinano con un clic: ordinando per ultimo
+accesso si trova subito chi non entra da mesi. La casella di ricerca filtra
+per nome, nome utente, email ed ente. Per gli utenti che c'erano prima della
+versione 1.0.3 la data di creazione è ricostruita dal registro e può mancare.
 
 Per inserire molti volontari in una volta c'è l'importazione da un foglio
 Excel (.xlsx) o CSV, anche quello salvato dall'Excel italiano con il punto e

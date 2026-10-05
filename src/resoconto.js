@@ -96,10 +96,12 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             WHERE r.emergency_id = $1
             ORDER BY ru.update_timestamp ASC, ru.id ASC`, [emergencyId]),
         pool.query(`
-            SELECT a.report_id, a.assigned_at, s.nome, s.nome_radio
+            SELECT a.report_id, a.assigned_at,
+                   COALESCE(s.nome, a.squadra_nome, a.nome_radio) AS nome, COALESCE(s.nome_radio, a.nome_radio) AS nome_radio
             FROM report_team_assignments a
             JOIN reports r ON a.report_id = r.id
-            JOIN squadre s ON a.squadra_id = s.id
+            -- La squadra può essere stata sciolta: restano i nomi di allora.
+            LEFT JOIN squadre s ON a.squadra_id = s.id
             WHERE r.emergency_id = $1
             ORDER BY a.assigned_at ASC`, [emergencyId]),
         pool.query(`

@@ -38,7 +38,10 @@
             </button>
         </div>
 
-        <div style="position: relative; display: flex; align-items: center; gap: 15px;">
+        <div style="position: relative; display: flex; align-items: center; gap: 10px;">
+            <!-- Il punto di situazione da stampare e la rubrica: a portata di mano, non nel menu. -->
+            <button type="button" id="situazione-btn" class="button-style button-secondary" style="display: none" title="Il punto di situazione da stampare o salvare in PDF"><i class="fas fa-clipboard-list"></i> Situazione</button>
+            <button type="button" id="rubrica-btn" class="button-style button-secondary" style="display: none" title="I numeri utili in sala"><i class="fas fa-address-book"></i> Rubrica</button>
             <div class="top-menu-dropdown">
                 <button id="top-menu-btn" class="button-style button-secondary">
                     Menu </button>
@@ -433,6 +436,7 @@
     <script src="/js/apiHelper.js"></script>
     <script src="/vendor/qrcode/qrcode.min.js"></script>
     <script src="/js/esterni-temporanei.js"></script>
+    <script src="/js/rubrica.js"></script>
     <script src="/websocket.js"></script>
     <script type="module" src="/js/centro-operativo.js"></script>
 </body>

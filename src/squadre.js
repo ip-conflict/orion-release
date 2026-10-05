@@ -484,10 +484,6 @@ export function registraRotteSquadre(app) {
                 throw erroreRichiesta(`La squadra ${nomeRadio} è impegnata sulla segnalazione ${elenco}. Liberala dall'intervento prima di eliminarla.`);
             }
 
-            // Le assegnazioni a interventi chiusi se ne vanno con lei: si contano e si dice.
-            const storico = await client.query('SELECT COUNT(*)::int AS quante FROM report_team_assignments WHERE squadra_id = $1', [squadraId]);
-            const interventiStorici = storico.rows[0].quante;
-
             // Il registro annota l'uscita dei membri e blocca il nome radio; il
             // materiale in carico si decide riga per riga (beniInUscita.js).
             const beniSistemati = await sistemaBeniInCarico(client, req, 'squadra', squadraId, req.body?.beni);
@@ -502,22 +498,20 @@ export function registraRotteSquadre(app) {
                 { ...riferimentoSquadra, azione: 'squadra_eliminata', motivo: 'squadra_eliminata' }
             ], req);
 
-            await client.query('DELETE FROM report_team_assignments WHERE squadra_id = $1', [squadraId]);
+            // Le assegnazioni a interventi chiusi restano, con il nome radio di
+            // allora: il database mette squadra_id a NULL.
             await client.query('DELETE FROM squadra_membri WHERE squadra_id = $1', [squadraId]);
             const deleteResult = await client.query('DELETE FROM squadre WHERE id = $1', [squadraId]);
             if (deleteResult.rowCount === 0) throw new Error('Squadra non trovata');
             await client.query('COMMIT');
-            const avvisoStorico = interventiStorici > 0
-                ? ` Con lei sono stati rimossi i collegamenti a ${interventiStorici} intervento/i già chiuso/i: restano nel diario delle segnalazioni e nei resoconti già prodotti.`
-                : '';
             const avvisoNomeRadio = emergenzaInCorso
                 ? ` Il nome radio ${nomeRadio} resta bloccato fino alla chiusura dell'emergenza.`
                 : '';
             const avvisoBeni = beniSistemati.sistemati.length
                 ? ` Materiale sistemato: ${beniSistemati.sistemati.map(b => `${b.denominazione} (${b.decisione.replace('_', ' ')})`).join(', ')}.`
                 : '';
-            res.status(200).json({ message: `Squadra ${nomeRadio} rimossa.${avvisoStorico}${avvisoNomeRadio}${avvisoBeni}`, beni: beniSistemati.sistemati });
-            registraAudit(req, 'squadra.eliminata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio: nomeRadio, nome: nomeSquadra, interventi_storici_rimossi: interventiStorici, beni: beniSistemati.sistemati } });
+            res.status(200).json({ message: `Squadra ${nomeRadio} rimossa.${avvisoNomeRadio}${avvisoBeni}`, beni: beniSistemati.sistemati });
+            registraAudit(req, 'squadra.eliminata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio: nomeRadio, nome: nomeSquadra, beni: beniSistemati.sistemati } });
             wss.clients.forEach(client => client.send(JSON.stringify({ action: 'reload_squadre', deletedTeamId: squadraId })));
         } catch (error) {
             await client.query('ROLLBACK');

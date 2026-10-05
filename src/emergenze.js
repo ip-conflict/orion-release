@@ -116,15 +116,11 @@ export function registraRotteEmergenze(app) {
             await client.query('BEGIN');
 
             let squadreSciolte = 0;
-            let collegamentiStoriciPersi = 0;
             if (azzera_squadre === true) {
                 const daSciogliere = await client.query('SELECT id FROM squadre');
                 squadreSciolte = daSciogliere.rowCount;
-                // I collegamenti a segnalazioni di emergenze chiuse se ne vanno
-                // con le squadre: si contano, per dirlo.
-                const storici = await client.query('SELECT COUNT(*)::int AS quanti FROM report_team_assignments');
-                collegamentiStoriciPersi = storici.rows[0].quanti;
-                await client.query('DELETE FROM report_team_assignments WHERE squadra_id IN (SELECT id FROM squadre)');
+                // Le assegnazioni delle emergenze passate restano, con il nome
+                // radio di allora: il database mette squadra_id a NULL.
                 await client.query('DELETE FROM squadra_membri');
                 await client.query('DELETE FROM squadre');
             }
@@ -158,7 +154,6 @@ export function registraRotteEmergenze(app) {
                 message: 'Emergenza aperta con successo.',
                 emergency: activeEmergency,
                 squadre_sciolte: squadreSciolte,
-                collegamenti_storici_persi: collegamentiStoriciPersi,
                 squadre_ereditate: new Set(membriEreditati.map(m => m.squadra_id)).size,
                 volontari_ereditati: membriEreditati.length
             });
@@ -174,7 +169,7 @@ export function registraRotteEmergenze(app) {
                     oreValidita: 72
                 }))
                 .catch(e => logger.error("[Notifiche] Avviso di apertura dell'emergenza non riuscito:", e));
-            registraAudit(req, 'emergenza.aperta', { tipo: 'emergenza', id: newEmergency.id, dettagli: { codice: newEmergency.code, nome: newEmergency.name, squadre_sciolte: squadreSciolte, collegamenti_storici_persi: collegamentiStoriciPersi, volontari_ereditati: membriEreditati.length } });
+            registraAudit(req, 'emergenza.aperta', { tipo: 'emergenza', id: newEmergency.id, dettagli: { codice: newEmergency.code, nome: newEmergency.name, squadre_sciolte: squadreSciolte, volontari_ereditati: membriEreditati.length } });
 
 
             wss.clients.forEach(wsClient => {

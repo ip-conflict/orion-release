@@ -171,8 +171,11 @@ body {
 }
 
 /* Ottimizzazioni specifiche per il motore di stampa */
+/* A4 e margini espliciti: senza "size" Chrome usa il formato della
+   stampante o della lingua (Letter in inglese) e i margini cambiano. */
 @page {
-    margin: 1.5cm;
+    size: A4;
+    margin: 15mm 14mm;
 }
 @media print {
     body { background: white; }

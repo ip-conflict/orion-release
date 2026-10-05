@@ -176,17 +176,36 @@ export function registraRotteUtenti(app) {
         try {
             const result = await pool.query(`
             SELECT u.id, u.username, u.nome, u.cognome, u.email, u.role, u.is_active, u.codice_fiscale, u.telefono,
+                   u.temporaneo, u.ente, e.code AS emergenza, e.status = 'ACTIVE' AS emergenza_aperta,
+                   u.creato_il, u.ultimo_accesso,
                    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
-            FROM users u ORDER BY u.cognome, u.nome`);
+            FROM users u LEFT JOIN emergencies e ON e.id = u.temporaneo_emergenza_id
+            ORDER BY u.cognome, u.nome`);
             res.json(result.rows);
         } catch (error) { logger.error('Errore GET /api/admin/users:', error); res.status(500).json({ message: 'Errore recupero utenti admin' }); }
     });
+
+    // Gli accessi esterni temporanei nascono e finiscono con l'emergenza:
+    // password, sospensione e dati si gestiscono dal centro operativo
+    // ("Accesso esterno"), non da qui. Si possono solo eliminare.
+    async function rifiutaSeTemporaneo(userId, res) {
+        const r = await pool.query('SELECT temporaneo FROM users WHERE id = $1', [userId]);
+        if (r.rows[0]?.temporaneo !== true) return false;
+        res.status(409).json({ message: "È un accesso esterno temporaneo: si gestisce dal centro operativo, in «Accesso esterno», e finisce da solo con l'emergenza." });
+        return true;
+    }
 
     app.patch('/api/admin/users/:id/toggle-status', checkAdminRole, async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         
         if (isNaN(userId)) {
             return res.status(400).json({ message: 'ID non valido.' });
+        }
+        try {
+            if (await rifiutaSeTemporaneo(userId, res)) return;
+        } catch (error) {
+            logger.error(`Errore lettura utente ${userId}:`, error);
+            return res.status(500).json({ message: 'Errore interno del server.' });
         }
 
         try {
@@ -312,6 +331,12 @@ export function registraRotteUtenti(app) {
         const controlloCampi = leggiCampiAnagrafici({ nome, cognome, email }, ['nome', 'cognome', 'email']);
         if (controlloCampi.errore) return res.status(400).json({ message: controlloCampi.errore });
         const sanitizedEmail = email ? String(email).trim().toLowerCase() : null;
+        try {
+            if (await rifiutaSeTemporaneo(userId, res)) return;
+        } catch (error) {
+            logger.error(`Errore lettura utente ${userId}:`, error);
+            return res.status(500).json({ message: 'Errore interno del server.' });
+        }
 
         const client = await pool.connect();
         try {
@@ -440,6 +465,7 @@ export function registraRotteUtenti(app) {
         logger.info(`Admin ${req.user.username} (ID: ${req.user.id}) richiede reset password per utente ID: ${userIdToReset}`);
 
         try {
+            if (await rifiutaSeTemporaneo(userIdToReset, res)) return;
             const resetToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = await bcrypt.hash(resetToken, 10);
             const expireDate = new Date(Date.now() + 24 * 3600000);

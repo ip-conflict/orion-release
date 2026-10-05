@@ -148,6 +148,15 @@ numero del punto, il telefono e l'ora.
 50. Rigenerare il QR: il vecchio non vale più, il nuovo sì.
 51. Revocare l'accesso: l'app dell'esterno dice che l'accesso è finito, non
     "sessione scaduta".
+51-bis. "QR e link" sotto un accesso: mostra lo stesso QR di prima, si
+    rimanda per email. "Cambia persona": chi c'era esce, il suo QR non vale
+    più, chi subentra entra con il QR nuovo e compare nella squadra. L'app
+    di un accesso temporaneo non propone il collegamento col logo.
+51-ter. Gestione utenti: le schede Interni ed Esterni, il filtro dei
+    temporanei, l'emergenza sotto ogni temporaneo, le colonne Creato il e
+    Ultimo accesso (che per chi è appena entrato dice "Adesso"); su un
+    temporaneo ci sono solo il cestino e nessun pulsante di password o
+    sospensione.
 52. Chiudere l'emergenza con un esterno ancora dentro: viene disattivato,
     esce dalla squadra, l'app lo dice. La squadra rimasta vuota viene chiusa
     d'ufficio; una squadra vuota con un mezzo in carico resta.
@@ -243,6 +252,16 @@ numero del punto, il telefono e l'ora.
     di sala è la prima sezione.
 80. Aprire il web da un telefono piccolo: menu, centro operativo e magazzino
     si usano con il dito.
+81. A emergenza aperta, "Situazione" nell'intestazione: il foglio riporta le
+    segnalazioni aperte con stato e squadre, le squadre con i componenti, le
+    chiuse e le ultime note di sala. Stampato o salvato in PDF ha i margini e
+    il numero di pagina. Un esterno non vede il pulsante.
+82. "Rubrica": aggiungere un contatto, cercarlo, correggerlo, toglierlo. Da
+    un'altra postazione la rubrica aperta si aggiorna da sola. "Stampa" dà il
+    foglio con i gruppi.
+83. Chiudere un'emergenza in cui una squadra nata per l'occasione ha fatto un
+    intervento: la squadra si chiude d'ufficio, ma nell'Archivio, in "Stampa
+    resoconto" e nel dettaglio della segnalazione la squadra intervenuta c'è.
 
 
 ## L. Senza rete e con rete scarsa

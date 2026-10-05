@@ -1084,115 +1084,13 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
 }
 
 /* ==========================================================================
-   10. Stili Specifici per la Stampa
+   10. Stampa
+   La stampa della sala è il punto di situazione (situazione.html), con i
+   suoi margini; qui la pagina si stampa com'è, senza menu né finestre.
    ========================================================================== */
 @media print {
-
-    /* Nascondi tutto tranne il contenuto del pannello dettagli */
-    body > *:not(#report-detail-bottom-panel) {
-        display: none !important;
-    }
-    /* Assicurati che anche eventuali elementi fissi residui siano nascosti */
-    header, #map-container, #reports-management, #team-status-panel, .modal {
-        display: none !important;
-    }
-
-    /* Forza il pannello dettagli ad essere visibile e statico */
-    body {
-        padding-bottom: 0 !important; /* Rimuovi padding per barra stato squadre */
-        background-color: #fff !important; /* Sfondo bianco per stampa */
-        color: #000 !important; /* Testo nero */
-    }
-    #report-detail-bottom-panel {
-        display: block !important; /* Forza visualizzazione */
-        position: static !important; /* Rimuovi posizionamento fisso */
-        width: 100% !important;
-        height: auto !important;
-        max-height: none !important;
-        border: none !important; /* Rimuovi bordi/ombre del pannello */
-        box-shadow: none !important;
-        overflow: visible !important; /* Non far scrollare il pannello */
-        margin-top: 0 !important;
-    }
-
-    /* Nascondi header e pulsante chiusura del pannello */
-    #report-detail-bottom-panel .panel-header {
-        display: none !important;
-    }
-
-    /* Layout contenuto pannello per stampa (es. tutto in colonna) */
-    #report-detail-bottom-panel .panel-content {
-        display: block !important; /* Non usare flex qui */
-        padding: 0 !important; /* Rimuovi padding extra */
-    }
-
-    #bottom-detail-main,
-    #bottom-detail-updates {
-        width: 100% !important; /* Occupa tutta larghezza pagina */
-        flex-basis: auto !important; /* Rimuovi basi flex */
-        margin-top: 0 !important;
-        order: 0 !important; /* Resetta ordine */
-        page-break-before: auto; /* Controllo interruzione pagina */
-    }
-    #bottom-detail-updates {
-        margin-top: 20px; /* Spazio prima degli aggiornamenti */
-        border-top: 1px solid #ccc; /* Separatore leggero */
-        padding-top: 15px;
-    }
-
-    /* Nascondi elementi non necessari ALL'INTERNO del pannello */
-    #detail-status-select,
-    #detail-save-status-btn,
-    #status-save-feedback,
-    #bottom-add-update-form,
-    .action-buttons { /* Nasconde TUTTI i bottoni azione (Edit, Assign, AddImg, Print) */
-        display: none !important;
-    }
-    /* Nascondi anteprime immagini (occupano spazio, link non funzionano su carta) */
-    /* Se vuoi stamparle, rimuovi questa regola e stile .report-image-thumbnail */
-    #detail-image-previews {
-         display: none !important;
-    }
-    /* Stile per elementi da stampare */
-    #bottom-detail-main h4,
-    #bottom-detail-updates h4 {
-        font-size: 1.3em;
-        margin-bottom: 10px;
-        border-bottom: 1px solid #999;
-        padding-bottom: 5px;
-    }
-    #bottom-detail-main p {
-        margin-bottom: 6px;
-        line-height: 1.4;
-    }
-    #bottom-detail-main strong { min-width: unset; } /* Evita allineamenti strani */
-
-    #bottom-updates-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        border: none;
-        background: none;
-        max-height: none; /* Permetti alla lista di espandersi */
-        overflow: visible; /* Non scrollare */
-    }
-    #bottom-updates-list li {
-        font-size: 9pt; /* Dimensione font per stampa */
-        padding: 4px 0;
-        border-bottom: 1px dotted #ccc;
-        page-break-inside: avoid; /* Evita di spezzare un singolo log tra due pagine */
-    }
-    #bottom-updates-list li p { margin: 0 0 2px 0; }
-    #bottom-updates-list li small { color: #555; font-size: 8pt; }
-
-    /* Evita margini pagina eccessivi (default browser) */
-    @page {
-        margin: 1.5cm;
-    }
-    body {
-        margin: 0; /* Rimuovi margini body per controllo @page */
-    }
-
+    @page { size: A4 landscape; margin: 10mm; }
+    header, .modal, #top-menu-content { display: none !important; }
 }
 
 .actions-panel a.button-secondary {

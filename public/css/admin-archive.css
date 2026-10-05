@@ -61,3 +61,16 @@
     font-size: 0.8rem;
     font-weight: 600;
 }
+
+/* La scelta dell'emergenza e le sue azioni su una riga, che va a capo
+   sugli schermi stretti. */
+.ar-scelta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ar-scelta select { flex: 1 1 320px; max-width: 560px; margin: 0; padding: 10px 12px; border-radius: 8px; }
+.ar-azioni { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ar-azioni[hidden] { display: none; }
+.ar-azioni .btn-pericolo { margin-left: 8px; }
+.ar-dettagli { margin: 10px 0 0; color: var(--text-muted); font-size: 0.9rem; }
+.ar-dettagli:empty { display: none; }
+
+/* La stampa di una riga della tabella: un pulsante piccolo come gli altri. */
+#archived-report-table td.action-buttons .button-style { min-height: 30px; padding: 4px 10px; }

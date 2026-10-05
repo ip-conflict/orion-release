@@ -36,6 +36,8 @@ import { cleanupRevokedTokens, runDailyExpiryCheck } from './scadenze.js';
 import { registraRotteSegnalazioni } from './segnalazioni.js';
 import { registraRotteSegreteria } from './segreteria.js';
 import { registraRotteSessioni } from './sessioni.js';
+import { registraRotteRubrica } from './rubrica.js';
+import { registraRotteSituazione } from './situazione.js';
 import { annotaRegistroSquadre, nomiRadioBloccati, registraRotteSquadre } from './squadre.js';
 import { activeEmergency, loadActiveEmergency } from './statoEmergenza.js';
 import { avviaTempoReale, avvisaClienti, notifiche } from './tempoReale.js';
@@ -103,7 +105,7 @@ app.use(express.urlencoded({ extended: true }));
 const PAGINE_RISERVATE = new Set([
     '/centro-operativo.html', '/profile.html', '/admin-segreteria.html',
     '/magazzino.html', '/magazzino-etichette.html', '/magazzino-verbale.html',
-    '/print-report.html'
+    '/print-report.html', '/situazione.html', '/rubrica.html'
 ]);
 app.use(async (req, res, next) => {
     if (!PAGINE_RISERVATE.has(req.path)) return next();
@@ -174,6 +176,12 @@ registraRotteEsterniTemporanei(app, {
 registraRotteDiarioSala(app, {
     pool, logger, nonEsterni, nomeUtente, avvisaClienti, emergenzaAttiva: () => activeEmergency
 });
+
+registraRotteSituazione(app, {
+    pool, logger, nonEsterni, haRuolo, registraAudit, emergenzaAttiva: () => activeEmergency
+});
+
+registraRotteRubrica(app, { pool, logger, nonEsterni, registraAudit, nomeUtente, avvisaClienti });
 
 const magazzino = registraRotteMagazzino(app, {
     pool, logger, haRuolo, ruoliDi, registraAudit,

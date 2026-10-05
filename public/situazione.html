@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto di situazione - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/stampa.css">
+</head>
+<body>
+    <div class="st-comandi">
+        <button type="button" class="st-primario" id="st-stampa">Stampa o salva in PDF</button>
+        <button type="button" id="st-aggiorna">Aggiorna</button>
+        <span class="st-nota" id="st-nota"></span>
+    </div>
+
+    <main class="st-foglio" id="st-foglio" aria-busy="true">
+        <p class="st-vuoto">Preparo il punto di situazione…</p>
+    </main>
+
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/situazione.js" defer></script>
+</body>
+</html>

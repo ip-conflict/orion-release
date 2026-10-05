@@ -79,6 +79,8 @@ document.getElementById('esterni-temporanei-btn')?.addEventListener('click', (e)
     if (menu) menu.style.display = 'none';
     window.EsterniTemporanei?.apri();
 });
+document.getElementById('rubrica-btn')?.addEventListener('click', () => window.Rubrica?.apri());
+document.getElementById('situazione-btn')?.addEventListener('click', () => window.open('/situazione.html', '_blank', 'noopener'));
 const profileBtn = document.getElementById('profile-btn');
 
 const teamStatusContentDiv = document.getElementById('team-status-content');
@@ -490,6 +492,8 @@ function updateUserInterfaceForRole(role) {
     }
     if (profileBtn) profileBtn.style.display = 'block';
     if (manageTeamsBtn) manageTeamsBtn.style.display = isEsterno ? 'none' : 'block';
+    const rubricaBtn = document.getElementById('rubrica-btn');
+    if (rubricaBtn) rubricaBtn.style.display = isEsterno ? 'none' : '';
     // Le scorciatoie della barra squadre, quando si sa chi è collegato.
     if (!isEsterno) preparaScorciatoieSquadre();
     if (adminDashboardBtn) adminDashboardBtn.style.display = (isEsterno || !isAdmin) ? 'none' : 'block';
@@ -872,6 +876,8 @@ function updateEmergencyStatusUI(emergencyData) {
     // L'accesso esterno temporaneo nasce e finisce con l'emergenza.
     const esterniBtn = document.getElementById('esterni-temporanei-btn');
     if (esterniBtn) esterniBtn.style.display = activeEmergency && !ruoliUtente().includes('esterno') ? 'block' : 'none';
+    const situazioneBtn = document.getElementById('situazione-btn');
+    if (situazioneBtn) situazioneBtn.style.display = activeEmergency && !ruoliUtente().includes('esterno') ? '' : 'none';
 
     const isAdmin = haRuolo('admin');
     const canUpload = !ruoliUtente().includes('esterno');
@@ -2695,10 +2701,7 @@ async function handleOpenEmergencySubmit(event) {
         });
         closeEmergencyModal();
         if (result?.squadre_sciolte > 0) {
-            const storici = result.collegamenti_storici_persi > 0
-                ? ` Rimossi anche ${result.collegamenti_storici_persi} collegamenti a interventi passati.`
-                : '';
-            showTemporaryFeedback(`Emergenza aperta. Sciolte ${result.squadre_sciolte} squadre preesistenti.${storici}`);
+            showTemporaryFeedback(`Emergenza aperta. Sciolte ${result.squadre_sciolte} squadre preesistenti.`);
         } else if (result?.volontari_ereditati > 0) {
             const q = result.squadre_ereditate;
             const v = result.volontari_ereditati;

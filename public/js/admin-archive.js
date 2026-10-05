@@ -84,6 +84,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const deleteSelectedEmergencyBtn = document.getElementById('delete-selected-emergency-btn');
     const downloadResocontoLink = document.getElementById('download-resoconto-link');
+    const printResocontoLink = document.getElementById('print-resoconto-link');
+    const azioniEmergenza = document.getElementById('ar-azioni');
 
     let selectedArchivedEmergency = null;
 
@@ -96,12 +98,21 @@ let brandingSettings = {
         return;
     }
 
+    // "Dal 3 ott 2026, 08:10 al 4 ott 2026, 19:40 · 35 ore"
+    function descriviPeriodo(inizio, fine) {
+        if (!inizio) return '';
+        const f = (d) => new Date(d).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        if (!fine) return `Aperta il ${f(inizio)}`;
+        const ore = Math.max(0, Math.round((new Date(fine) - new Date(inizio)) / 3600000));
+        const durata = ore < 1 ? "meno di un'ora" : ore < 48 ? `${ore} ${ore === 1 ? 'ora' : 'ore'}` : `${Math.round(ore / 24)} giorni`;
+        return `Dal ${f(inizio)} al ${f(fine)} · ${durata}`;
+    }
+
     const formatDate = (dtString) => dtString ? new Date(dtString).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
 
     async function loadClosedEmergencies() {
         selectedArchivedEmergency = null;
-        if(deleteSelectedEmergencyBtn) deleteSelectedEmergencyBtn.style.display = 'none';
-        if(downloadResocontoLink) downloadResocontoLink.style.display = 'none';
+        if (azioniEmergenza) azioniEmergenza.hidden = true;
         emergencyDetailsDisplay.textContent = '';
         reportsSection.style.display = 'none';
         reportsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Seleziona un\'emergenza.</td></tr>';
@@ -118,6 +129,8 @@ let brandingSettings = {
                     option.textContent = `${em.code} ${em.name ? '- ' + em.name : ''} (${endDate})`;
                     option.dataset.code = em.code;
                     option.dataset.name = em.name || '';
+                    option.dataset.inizio = em.start_time || '';
+                    option.dataset.fine = em.end_time || '';
                     emergencySelect.appendChild(option);
                 });
             } else {
@@ -221,7 +234,6 @@ let brandingSettings = {
 
         reportsSection.style.display = 'block';
         reportsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Caricamento segnalazioni...</td></tr>';
-        emergencyDetailsDisplay.textContent = '(ID Emergenza Selezionata: ' + emergencyId + ')';
 
         try {
             const apiUrl = '/api/reports?emergency_id=' + emergencyId + '&page=1&limit=1000&status_type=closed';
@@ -251,8 +263,8 @@ let brandingSettings = {
                         <td><small>${escapeHTML(teamNames)}</small></td>
                         <td><small>${escapeHTML(formatDate(report.updated_at))}</small></td>
                         <td class="action-buttons" style="text-align: right;">
-                            <a href="/print-report.html?id=${report.id}" target="_blank" class="button-style button-small" style="background: #64748b; color: white; border-radius: 50px; padding: 6px 12px; border: none; text-decoration: none;" title="Stampa Report #${escapeHTML(displayValue)}">
-                                Stampa
+                            <a href="/print-report.html?id=${report.id}" target="_blank" rel="noopener" class="button-style button-small button-secondary" title="Stampa la segnalazione #${escapeHTML(displayValue)}">
+                                <i class="fas fa-print"></i> Stampa
                             </a>
                         </td>
                      `;
@@ -277,7 +289,7 @@ let brandingSettings = {
                 code: selectedOption.dataset.code,
                 name: selectedOption.dataset.name
             };
-            emergencyDetailsDisplay.textContent = `(ID: ${selectedArchivedEmergency.id}, Codice: ${selectedArchivedEmergency.code})`;
+            emergencyDetailsDisplay.textContent = descriviPeriodo(selectedOption.dataset.inizio, selectedOption.dataset.fine);
             console.log("[Select Change] Emergenza selezionata:", selectedArchivedEmergency);
             loadArchivedReports(selectedArchivedEmergency.id);
             loadArchivedDocuments(selectedArchivedEmergency.id);
@@ -285,17 +297,17 @@ let brandingSettings = {
             // basta un link, il cookie di sessione viaggia da solo.
             if (downloadResocontoLink) {
                 downloadResocontoLink.href = `/api/admin/emergencies/${selectedArchivedEmergency.id}/resoconto`;
-                downloadResocontoLink.title = `Scarica il resoconto testuale di ${selectedArchivedEmergency.code}`;
-                downloadResocontoLink.style.display = 'inline-block';
+                downloadResocontoLink.title = `Il resoconto di ${selectedArchivedEmergency.code} come file di testo, da allegare`;
             }
-            if(deleteSelectedEmergencyBtn) deleteSelectedEmergencyBtn.style.display = 'inline-block';
+            if (printResocontoLink) printResocontoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}`;
+            if (azioniEmergenza) azioniEmergenza.hidden = false;
         } else {
             // Se l'utente ha selezionato "-- Seleziona --"
             selectedArchivedEmergency = null;
             loadArchivedReports(null);
             loadArchivedDocuments(null);
-            if(downloadResocontoLink) downloadResocontoLink.style.display = 'none';
-            if(deleteSelectedEmergencyBtn) deleteSelectedEmergencyBtn.style.display = 'none';
+            if (azioniEmergenza) azioniEmergenza.hidden = true;
+            emergencyDetailsDisplay.textContent = '';
         }
     });
 
@@ -352,7 +364,7 @@ let brandingSettings = {
               if (selectedArchivedEmergency && selectedArchivedEmergency.id == deletedId) {
                    loadArchivedReports(null);
                    emergencyDetailsDisplay.textContent = '';
-                   if(deleteSelectedEmergencyBtn) deleteSelectedEmergencyBtn.style.display = 'none';
+                   if (azioniEmergenza) azioniEmergenza.hidden = true;
               }
               loadClosedEmergencies();
          }
@@ -396,7 +408,10 @@ let brandingSettings = {
             populateArchivedElement('archived-detail-location', report.location_address);
             populateArchivedElement('archived-detail-coords', `Lat: ${formatArchivedCoord(report.latitude)} / Lon: ${formatArchivedCoord(report.longitude)}`);
             populateArchivedElement('archived-detail-description', report.description, 'Nessuna');
-            populateArchivedElement('archived-detail-env-hazard', report.environmental_hazard, 'Nessuno specificato');
+            // Il riquadro rosso solo se un pericolo c'è davvero.
+            populateArchivedElement('archived-detail-env-hazard', report.environmental_hazard, '');
+            const riquadroPericolo = document.getElementById('archived-detail-env-hazard-box');
+            if (riquadroPericolo) riquadroPericolo.hidden = !String(report.environmental_hazard || '').trim();
             populateArchivedElement('archived-detail-creator', `${report.creator_fullname || 'Sconosciuto'} il ${formatArchivedDate(report.created_at)}`);
             populateArchivedElement('archived-detail-updated-at', formatArchivedDate(report.updated_at));
             const teamNames = Array.isArray(report.assigned_teams) && report.assigned_teams.length > 0 ? report.assigned_teams.map(t => t.nome).join(', ') : 'Nessuna';

@@ -30,13 +30,19 @@ stanno ciascuna nel suo modulo: `pubbliche.js` (accesso, branding, tesserino),
 `segnalazioni.js`, `segreteria.js`, `diarioSala.js`, `magazzino.js` per beni,
 movimenti e verbali, `appMobile.js` per quello che esiste solo per l'app
 (contesto, coda delle notifiche, token di rinnovo), `esterniTemporanei.js`
-per gli accessi esterni durante un'emergenza e `manutenzione.js`. I servizi
+per gli accessi esterni durante un'emergenza, `situazione.js` per il punto
+di situazione (`GET /api/situazione`, anche per un'emergenza chiusa con
+`?emergenza=ID`, solo per l'amministratore), `rubrica.js` per la rubrica
+d'emergenza e `manutenzione.js`. I servizi
 condivisi hanno i loro moduli: `config.js` e `db.js` per configurazione e
 database, `autenticazione.js`, `tempoReale.js` per il WebSocket e le
 notifiche, `statoEmergenza.js` per l'emergenza attiva, `scadenze.js` per i
 controlli giornalieri, e poi `email.js`, `audit.js`, `backup.js`,
 `resoconto.js`, `caricamenti.js`, `anagrafica.js`. Le pagine web stanno in
 `public/`, con i loro script in `public/js/`. Non c'è un passaggio di compilazione del frontend.
+I fogli da stampare (`situazione.html`, `rubrica.html`) condividono
+`public/css/stampa.css`: A4, margini fissati con `@page`, testo scuro anche
+col tema scuro, numero di pagina in fondo.
 
 L'app Android sta in un repository a parte (orion-app). È scritta in Kotlin
 con Jetpack Compose, parla con il server attraverso le stesse rotte del web e
@@ -151,6 +157,14 @@ applicazione `src/allineaMigrazioni.js` le riconosce e, se c'è l'ultima
 Un database fermo a una versione più vecchia della 3.36 non si allinea da
 solo, e il messaggio dice di reinstallarlo.
 
+Le assegnazioni delle squadre (`report_team_assignments`) tengono anche il
+nome radio e il nome della squadra di allora, scritti da un trigger
+all'inserimento. Eliminata una squadra (anche d'ufficio, alla chiusura
+dell'emergenza), `squadra_id` diventa NULL e l'assegnazione resta: resoconti,
+archivio e punto di situazione dicono ancora chi è intervenuto. La migrazione
+della 1.0.3 ha ricostruito dalle note di sistema delle segnalazioni ("Squadra
+'Alfa' assegnata.") le assegnazioni già perse.
+
 Una regola da non dimenticare: `users.role` non si scrive mai a mano. È un
 ruolo principale ricavato dal codice; i permessi veri stanno nella tabella
 `utenti_ruoli`, e si rileggono dal database a ogni richiesta.
@@ -236,7 +250,20 @@ L'esterno non si somma a nessun altro ruolo: è una limitazione.
 
 Gli esterni temporanei sono utenti con il ruolo esterno e un segno in più:
 sono legati all'emergenza in cui sono nati. Entrano con un codice (il QR), non con
-una password, e rigenerare il codice invalida quello vecchio. Alla chiusura dell'emergenza o a
+una password, e rigenerare il codice invalida quello vecchio. Le rotte di
+Gestione utenti (modifica, sospensione, azzeramento della password)
+rispondono 409 su un temporaneo: si gestisce solo dal centro operativo.
+
+`users.creato_il` la scrive il database; `users.ultimo_accesso` la scrive
+`segnaAccesso()` in `autenticazione.js`, subito a ogni accesso (password,
+codice, token di rinnovo dell'app) e, mentre la persona lavora, al massimo
+una volta ogni cinque minuti, senza far aspettare la richiesta. Del codice il
+server tiene l'impronta SHA-256, che basta per l'accesso, e una copia cifrata
+(AES-256-GCM, chiave derivata da `JWT_SECRET`) per poterlo rimostrare dalla
+finestra "Accesso esterno"; cambiare `JWT_SECRET` rende illeggibili le copie e
+la finestra propone un codice nuovo. Cambiare la persona di un accesso
+aggiorna nome ed ente, scrive l'uscita e l'entrata nel registro della
+squadra, genera un codice nuovo e chiude le sessioni di chi c'era prima. Alla chiusura dell'emergenza o a
 una revoca vengono disattivati e le loro richieste ricevono una risposta 403
 che dice il motivo (`accesso_temporaneo_finito`), così l'app lo spiega invece
 di dire "sessione scaduta".

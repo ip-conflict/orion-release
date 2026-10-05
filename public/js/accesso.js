@@ -79,14 +79,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     perche.className = 'piccolo';
     perche.textContent = 'Se sei in una squadra, il centro operativo ti vede sulla mappa anche con il telefono in tasca, e ricevi gli interventi.';
     app.appendChild(perche);
-    const passi = document.createElement('ol');
-    ['Scarica e installa l\'app (Android chiede di consentire l\'installazione dal browser).',
-     'Torna qui e tocca «Apri nell\'app»: entri senza password.'].forEach(t => {
-        const li = document.createElement('li');
-        li.textContent = t;
-        passi.appendChild(li);
-    });
-    app.appendChild(passi);
+    // I passi precisi: l'app non viene dal Play Store e Android lo fa notare.
+    if (typeof passiInstallaApp === 'function') app.appendChild(passiInstallaApp('codice'));
     const scarica = document.createElement('a');
     scarica.className = 'pulsante secondario';
     scarica.href = offerta.scarica;

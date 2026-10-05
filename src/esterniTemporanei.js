@@ -23,16 +23,44 @@ function usernameDa(nome) {
     return `est.${base}.${crypto.randomBytes(2).toString('hex')}`;
 }
 
+// Il codice si tiene anche cifrato, per farlo rivedere dal centro operativo
+// a chi non l'ha ancora usato. La chiave viene da JWT_SECRET: chi la conosce
+// puo' gia' firmare qualunque sessione, quindi non si aggiunge rischio. Si
+// entra comunque solo con l'impronta.
+function chiaveCodici() {
+    return crypto.createHash('sha256').update(`orion-accessi-temporanei:${process.env.JWT_SECRET || ''}`).digest();
+}
+
+function cifra(codice) {
+    const iv = crypto.randomBytes(12);
+    const c = crypto.createCipheriv('aes-256-gcm', chiaveCodici(), iv);
+    const dati = Buffer.concat([c.update(codice, 'utf8'), c.final()]);
+    return [iv, c.getAuthTag(), dati].map(b => b.toString('base64url')).join('.');
+}
+
+// Null se non si legge (segreto cambiato, accesso nato prima della 1.0.3).
+function decifra(testoCifrato) {
+    try {
+        const [iv, tag, dati] = String(testoCifrato || '').split('.').map(p => Buffer.from(p, 'base64url'));
+        const d = crypto.createDecipheriv('aes-256-gcm', chiaveCodici(), iv);
+        d.setAuthTag(tag);
+        return Buffer.concat([d.update(dati), d.final()]).toString('utf8');
+    } catch {
+        return null;
+    }
+}
+
 async function nuovoCodice(client, userId, creatoDa) {
     const codice = crypto.randomBytes(18).toString('base64url');
     const r = await client.query(
-        `INSERT INTO accessi_temporanei (user_id, impronta, creato_da, scade_il)
-         VALUES ($1, $2, $3, NOW() + ($4::int * INTERVAL '1 day'))
+        `INSERT INTO accessi_temporanei (user_id, impronta, codice_cifrato, creato_da, scade_il)
+         VALUES ($1, $2, $3, $4, NOW() + ($5::int * INTERVAL '1 day'))
          ON CONFLICT (user_id) DO UPDATE
-            SET impronta = EXCLUDED.impronta, creato_il = NOW(), creato_da = EXCLUDED.creato_da,
+            SET impronta = EXCLUDED.impronta, codice_cifrato = EXCLUDED.codice_cifrato,
+                creato_il = NOW(), creato_da = EXCLUDED.creato_da,
                 scade_il = EXCLUDED.scade_il, usato_il = NULL
          RETURNING scade_il`,
-        [userId, impronta(codice), creatoDa, GIORNI_CODICE]);
+        [userId, impronta(codice), cifra(codice), creatoDa, GIORNI_CODICE]);
     return { codice, scade_il: r.rows[0].scade_il };
 }
 
@@ -248,6 +276,100 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         } catch (e) {
             logger.error('Errore nuovo codice temporaneo:', e);
             res.status(500).json({ message: 'Errore nel generare il codice.' });
+        }
+    });
+
+    // Il codice di adesso, per mostrarlo di nuovo: il QR sul posto o il link
+    // da rimandare. Se non si legge (accesso nato prima della 1.0.3, segreto
+    // cambiato) lo dice, e se ne genera uno nuovo.
+    app.get('/api/esterni-temporanei/:id/codice', nonEsterni, async (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
+        try {
+            const u = await temporaneoAttivo(id);
+            if (!u) return res.status(404).json({ message: "Accesso temporaneo non trovato, revocato o di un'altra emergenza." });
+            const r = await pool.query('SELECT codice_cifrato, scade_il, usato_il FROM accessi_temporanei WHERE user_id = $1', [id]);
+            const codice = r.rowCount ? decifra(r.rows[0].codice_cifrato) : null;
+            if (!codice) return res.status(409).json({ message: 'Questo codice non si può rivedere: generane uno nuovo.', rigenera: true });
+            if (new Date(r.rows[0].scade_il) <= new Date()) return res.status(409).json({ message: 'Il codice è scaduto: generane uno nuovo.', rigenera: true });
+            res.json({ codice, link: indirizzo(codice), scade_il: r.rows[0].scade_il, usato_il: r.rows[0].usato_il });
+        } catch (e) {
+            logger.error('Errore lettura codice temporaneo:', e);
+            res.status(500).json({ message: 'Errore nel leggere il codice.' });
+        }
+    });
+
+    // Il link di adesso, di nuovo per email.
+    app.post('/api/esterni-temporanei/:id/invia', nonEsterni, async (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        const email = testo(req.body?.email, 100);
+        if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
+        if (!EMAIL.test(email)) return res.status(400).json({ message: "L'indirizzo email non sembra valido." });
+        try {
+            const u = await temporaneoAttivo(id);
+            if (!u) return res.status(404).json({ message: "Accesso temporaneo non trovato, revocato o di un'altra emergenza." });
+            const r = await pool.query('SELECT codice_cifrato FROM accessi_temporanei WHERE user_id = $1 AND scade_il > NOW()', [id]);
+            const codice = r.rowCount ? decifra(r.rows[0].codice_cifrato) : null;
+            if (!codice) return res.status(409).json({ message: 'Questo codice non si può rimandare: generane uno nuovo.', rigenera: true });
+            const inviata = await inviaInvito(email, u.nome, indirizzo(codice), emergenzaAttiva());
+            if (!inviata) return res.status(502).json({ message: "L'email non è partita: controlla la posta nelle Impostazioni, o usa il QR o il link." });
+            registraAudit(req, 'esterno_temporaneo.invito_rimandato', { tipo: 'utente', id, dettagli: { username: u.username, email } });
+            res.json({ message: `Link mandato a ${email}.` });
+        } catch (e) {
+            logger.error('Errore invio codice temporaneo:', e);
+            res.status(500).json({ message: "Errore nel mandare l'email." });
+        }
+    });
+
+    // Un'altra persona al posto di questa (cambio turno sull'ambulanza): nome
+    // ed ente nuovi, codice nuovo, e chi c'era prima esce dall'app. Squadra e
+    // registri restano quelli di questo accesso.
+    app.put('/api/esterni-temporanei/:id/persona', nonEsterni, async (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
+        const nome = testo(req.body?.nome, 100);
+        const ente = testo(req.body?.ente, 100) || null;
+        const email = testo(req.body?.email, 100);
+        if (!nome) return res.status(400).json({ message: 'Serve il nome di chi subentra.' });
+        if (email && !EMAIL.test(email)) return res.status(400).json({ message: "L'indirizzo email non sembra valido." });
+        const [primo, ...resto] = nome.split(' ');
+        const nomeU = primo.slice(0, 50);
+        const cognomeU = (resto.join(' ') || ente || '').slice(0, 50);
+        const client = await pool.connect();
+        try {
+            const u = await temporaneoAttivo(id);
+            if (!u) return res.status(404).json({ message: "Accesso temporaneo non trovato, revocato o di un'altra emergenza." });
+            await client.query('BEGIN');
+            await client.query('UPDATE users SET nome = $1, cognome = $2, ente = $3 WHERE id = $4', [nomeU, cognomeU, ente, id]);
+            const membro = await client.query(
+                `UPDATE squadra_membri sm SET nome = $1, cognome = $2 FROM squadre s
+                 WHERE sm.username = $3 AND s.id = sm.squadra_id RETURNING s.id, s.nome_radio, s.nome`,
+                [nomeU, cognomeU, u.username]);
+            if (membro.rowCount) {
+                // Nel registro della squadra: esce chi c'era, entra chi subentra.
+                const sq = membro.rows[0];
+                const voce = { squadra_id: sq.id, nome_radio: sq.nome_radio, squadra_nome: sq.nome, username: u.username, motivo: 'operazione' };
+                await annotaRegistroSquadre(client, [
+                    { ...voce, nome: u.nome, cognome: u.cognome, azione: 'membro_rimosso' },
+                    { ...voce, nome: nomeU, cognome: cognomeU, azione: 'membro_aggiunto' }
+                ], req);
+            }
+            const { codice, scade_il } = await nuovoCodice(client, id, nomeUtente(req.user) || req.user.username);
+            await chiudiSessioni(id, client);
+            await client.query('COMMIT');
+            const link = indirizzo(codice);
+            registraAudit(req, 'esterno_temporaneo.persona_cambiata', {
+                tipo: 'utente', id, dettagli: { username: u.username, prima: `${u.nome || ''} ${u.cognome || ''}`.trim(), dopo: nome, ente }
+            });
+            if (membro.rowCount && typeof avvisaClienti === 'function') avvisaClienti('reload_squadre');
+            const emailInviata = email ? await inviaInvito(email, nomeU, link, emergenzaAttiva()) : false;
+            res.json({ id, nome: nomeU, cognome: cognomeU, ente, codice, link, scade_il, email_inviata: emailInviata });
+        } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            logger.error('Errore cambio persona accesso temporaneo:', e);
+            res.status(500).json({ message: 'Errore nel cambiare la persona.' });
+        } finally {
+            client.release();
         }
     });
 

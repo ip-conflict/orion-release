@@ -53,6 +53,9 @@ button.btn {
     justify-content: center;
     gap: 8px;
 
+    /* border-box anche sui link: altezza e padding si contano come sui
+       <button>, e un link-pulsante non viene più alto di un pulsante vero. */
+    box-sizing: border-box;
     padding: 9px 16px;
     min-height: 38px;
 

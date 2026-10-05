@@ -1,0 +1,132 @@
+/* public/css/stampa.css
+ *
+ * I fogli da stampare (punto di situazione, rubrica): A4 con margini veri,
+ * testo scuro su bianco anche col tema scuro, tabelle che non si spezzano a
+ * metà riga. A video il foglio sta al centro, con la barra dei comandi sopra.
+ */
+
+@page {
+    size: A4;
+    margin: 14mm 13mm 16mm;
+    /* Il numero di pagina in fondo (Chrome e Edge dalla 131, Firefox dalla 134). */
+    @bottom-right {
+        content: "Pagina " counter(page) " di " counter(pages);
+        font: 8pt system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        color: #64748b;
+    }
+}
+
+:root {
+    --st-testo: #1e293b;
+    --st-tenue: #64748b;
+    --st-linea: #cbd5e1;
+    --st-fondo-testa: #f1f5f9;
+    --st-rosso: #b91c1c;
+    --st-ambra: #b45309;
+    --st-verde: #15803d;
+    --st-blu: #1d4ed8;
+}
+
+* { box-sizing: border-box; }
+
+html { background: #e2e8f0; }
+body {
+    margin: 0;
+    font: 10.5pt/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--st-testo);
+    background: #e2e8f0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* La barra dei comandi, solo a video. */
+.st-comandi {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
+    padding: 10px 16px; background: #0f172a; color: #fff;
+}
+.st-comandi button, .st-comandi a {
+    font: 600 0.92rem system-ui, sans-serif; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #475569; background: #1e293b; color: #fff; text-decoration: none;
+}
+.st-comandi .st-primario { background: #2563eb; border-color: #2563eb; }
+.st-comandi .st-nota { font-size: 0.85rem; color: #cbd5e1; }
+
+.st-foglio {
+    max-width: 210mm; margin: 16px auto; padding: 14mm 13mm;
+    background: #fff; box-shadow: 0 2px 12px rgba(15, 23, 42, 0.15);
+}
+
+@media (max-width: 700px) {
+    .st-foglio { margin: 0; padding: 16px; box-shadow: none; }
+    .st-tabella { font-size: 9pt; }
+}
+
+@media print {
+    html, body { background: #fff; }
+    .st-comandi { display: none !important; }
+    .st-foglio { max-width: none; margin: 0; padding: 0; box-shadow: none; }
+}
+
+/* Intestazione */
+.st-testa { display: flex; align-items: center; gap: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--st-testo); }
+.st-testa img { height: 46px; width: auto; max-width: 70px; object-fit: contain; }
+.st-testa .st-ente { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--st-tenue); margin: 0; }
+.st-testa h1 { font-size: 17pt; margin: 2px 0 0; line-height: 1.15; }
+.st-testa .st-emergenza { margin: 2px 0 0; font-size: 11pt; font-weight: 600; }
+.st-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; font-size: 9pt; color: var(--st-tenue); }
+.st-meta strong { color: var(--st-testo); }
+
+/* Riquadri dei numeri */
+.st-sintesi { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0 4px; }
+.st-numero { border: 1px solid var(--st-linea); border-radius: 6px; padding: 7px 10px; break-inside: avoid; }
+.st-numero .st-valore { font-size: 18pt; font-weight: 700; line-height: 1.1; }
+.st-numero .st-etichetta { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.03em; color: var(--st-tenue); }
+.st-numero .st-sotto { font-size: 8.5pt; color: var(--st-tenue); }
+.st-numero.st-allarme .st-valore { color: var(--st-rosso); }
+
+/* Sezioni e tabelle */
+.st-sezione { margin-top: 16px; }
+.st-sezione h2 {
+    font-size: 11.5pt; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--st-linea);
+    break-after: avoid;
+}
+.st-sezione h2 .st-conta { font-weight: 400; color: var(--st-tenue); }
+.st-vuoto { color: var(--st-tenue); font-style: italic; margin: 4px 0; }
+
+.st-tabella { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.st-tabella thead { display: table-header-group; } /* l'intestazione si ripete su ogni pagina */
+.st-tabella th {
+    text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--st-tenue); background: var(--st-fondo-testa); padding: 4px 6px; border-bottom: 1px solid var(--st-linea);
+}
+.st-tabella td { padding: 5px 6px; border-bottom: 1px solid var(--st-linea); vertical-align: top; }
+.st-tabella tr { break-inside: avoid; }
+.st-tabella .st-n { width: 1%; white-space: nowrap; font-weight: 700; }
+.st-tabella .st-stretta { width: 1%; white-space: nowrap; }
+.st-piccolo { display: block; font-size: 8.5pt; color: var(--st-tenue); }
+.st-pericolo { display: block; font-size: 8.5pt; color: var(--st-rosso); font-weight: 600; }
+
+/* Priorità e stato: colore e parola, perché in bianco e nero resti la parola. */
+.st-bollino { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 8pt; font-weight: 700; border: 1px solid currentColor; white-space: nowrap; }
+.st-alta { color: var(--st-rosso); }
+.st-media { color: var(--st-ambra); }
+.st-bassa { color: var(--st-verde); }
+.st-stato { color: var(--st-blu); }
+.st-senza { color: var(--st-rosso); font-weight: 600; }
+
+.st-diario { list-style: none; margin: 0; padding: 0; font-size: 9.5pt; }
+.st-diario li { padding: 3px 0; border-bottom: 1px dotted var(--st-linea); break-inside: avoid; }
+.st-diario time { font-weight: 700; margin-right: 6px; }
+
+.st-piede { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--st-linea); font-size: 8.5pt; color: var(--st-tenue); }
+
+.st-errore { max-width: 600px; margin: 40px auto; padding: 20px; background: #fff; border-radius: 8px; text-align: center; }
+.st-autore { font-size: 8.5pt; color: var(--st-tenue); }
+
+/* La rubrica: le stesse colonne in ogni gruppo. */
+.st-rubrica { table-layout: fixed; }
+.st-rubrica th:nth-child(1) { width: 36%; }
+.st-rubrica th:nth-child(2) { width: 18%; }
+.st-rubrica th:nth-child(3) { width: 24%; }
+.st-rubrica td { overflow-wrap: anywhere; }

@@ -1663,6 +1663,32 @@ async function eseguiTest() {
             verifica('un esterno non crea squadre -> 403', squadraEsterno.stato === 403, `HTTP ${squadraEsterno.stato}`);
             const eliminaEsterno = await clientEsterno.chiamata('/api/squadre/999999', { method: 'DELETE' });
             verifica('un esterno non elimina squadre -> 403', eliminaEsterno.stato === 403, `HTTP ${eliminaEsterno.stato}`);
+
+            // La rubrica d'emergenza: la tiene la sala, non chi viene da fuori.
+            const vuotoRubrica = await volontario.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Senza numeri' } });
+            const numeroStorto = await volontario.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Numero storto', telefono: 'chiamami' } });
+            verifica('rubrica: senza telefono né email, o con un numero storto -> 400',
+                vuotoRubrica.stato === 400 && numeroStorto.stato === 400, `${vuotoRubrica.stato}/${numeroStorto.stato}`);
+            const contatto = await volontario.chiamata('/api/rubrica', {
+                method: 'POST', body: { nome: 'Sala operativa Prefettura (collaudo)', ente: 'Prefettura', categoria: 'istituzioni', telefono: '+39 0437 000000' }
+            });
+            const corretto = await volontario.chiamata(`/api/rubrica/${contatto.corpo?.id}`, {
+                method: 'PUT', body: { nome: 'Sala operativa Prefettura (collaudo)', ente: 'Prefettura', categoria: 'categoria-inventata', telefono: '0437 111111', telefono_alt: '333 2222222' }
+            });
+            const elencoRubrica = await volontario.chiamata('/api/rubrica');
+            const inRubrica = (elencoRubrica.corpo || []).find(c => c.id === contatto.corpo?.id);
+            verifica('rubrica: un volontario aggiunge e corregge un contatto, chi lo ha toccato resta scritto',
+                contatto.stato === 201 && corretto.stato === 200 && inRubrica?.telefono === '0437 111111'
+                    && inRubrica?.categoria === 'altro' && !!inRubrica?.aggiornato_da,
+                `${contatto.stato}/${corretto.stato} ${JSON.stringify(inRubrica)}`);
+            const rubricaEsterno = await clientEsterno.chiamata('/api/rubrica');
+            const scriveEsterno = await clientEsterno.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Esterno', telefono: '123' } });
+            verifica('rubrica: un esterno non la legge e non la scrive -> 403',
+                rubricaEsterno.stato === 403 && scriveEsterno.stato === 403, `${rubricaEsterno.stato}/${scriveEsterno.stato}`);
+            const tolto = await volontario.chiamata(`/api/rubrica/${contatto.corpo?.id}`, { method: 'DELETE' });
+            const toltoDiNuovo = await volontario.chiamata(`/api/rubrica/${contatto.corpo?.id}`, { method: 'DELETE' });
+            verifica('rubrica: il contatto si toglie (e una seconda volta -> 404)',
+                tolto.stato === 200 && toltoDiNuovo.stato === 404, `${tolto.stato}/${toltoDiNuovo.stato}`);
             const disponibiliEsterno = await clientEsterno.chiamata('/api/users/unassigned');
             verifica("un esterno non vede l'idoneita' dei volontari -> 403", disponibiliEsterno.stato === 403, `HTTP ${disponibiliEsterno.stato}`);
 
@@ -2137,8 +2163,74 @@ async function eseguiTest() {
         verifica('un QR nuovo annulla il vecchio', nuovo.stato === 200 && vecchio.stato === 401 && conNuovo.stato === 200,
             `${nuovo.stato}/${vecchio.stato}/${conNuovo.stato}`);
 
+        // Il codice si rivede (per mostrare di nuovo il QR o rimandare il link),
+        // e per un cambio turno l'accesso passa a un'altra persona: chi c'era
+        // esce, il suo codice non vale più, chi subentra entra col nuovo.
+        const rivisto = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/codice`);
+        verifica('il codice di un accesso si rivede uguale', rivisto.stato === 200 && rivisto.corpo?.codice === nuovo.corpo?.codice && !!rivisto.corpo?.link,
+            `HTTP ${rivisto.stato}`);
+        const rivistoDaEsterno = await cri.chiamata(`/api/esterni-temporanei/${idTemp}/codice`);
+        verifica('un esterno non rivede i codici -> 403', rivistoDaEsterno.stato === 403, `HTTP ${rivistoDaEsterno.stato}`);
+        const emailStorta = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/invia`, { method: 'POST', body: { email: 'non-una-email' } });
+        verifica('il link si rimanda solo a un indirizzo valido -> 400', emailStorta.stato === 400, `HTTP ${emailStorta.stato}`);
+        const cambio = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/persona`, {
+            method: 'PUT', body: { nome: 'Paolo Subentro', ente: 'Croce Rossa' }
+        });
+        const criDopoCambio = await cri.chiamata('/api/app/contesto');
+        const codiceDiPrima = await creaClient().chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: nuovo.corpo?.codice } });
+        const subentro = creaClient();
+        const entraSubentro = await subentro.chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: cambio.corpo?.codice } });
+        verifica('cambio persona: chi c\'era esce, il codice vecchio non vale, chi subentra entra',
+            cambio.stato === 200 && cambio.corpo?.nome === 'Paolo' && [401, 403].includes(criDopoCambio.stato) && codiceDiPrima.stato === 401 && entraSubentro.stato === 200,
+            `${cambio.stato}/${criDopoCambio.stato}/${codiceDiPrima.stato}/${entraSubentro.stato}`);
+        const squadraDopoCambio = (await volontario.chiamata('/api/squadre')).corpo?.find(sq => sq.nome_radio === libero);
+        verifica('in squadra compare chi è subentrato', (squadraDopoCambio?.membri || []).some(m => m.nome === 'Paolo'),
+            JSON.stringify(squadraDopoCambio?.membri));
+
+        // In Gestione utenti l'accesso temporaneo sta fra gli esterni, con
+        // emergenza, data di creazione e ultimo accesso; password, sospensione
+        // e modifica si fanno dal centro operativo, non da lì.
+        const elencoUtenti = await admin.chiamata('/api/admin/users');
+        const rigaTemp = (elencoUtenti.corpo || []).find(u => u.id === idTemp);
+        verifica('Gestione utenti: il temporaneo ha emergenza, creazione e ultimo accesso',
+            elencoUtenti.stato === 200 && rigaTemp?.temporaneo === true && rigaTemp?.emergenza_aperta === true && !!rigaTemp?.emergenza
+                && !!rigaTemp?.creato_il && !!rigaTemp?.ultimo_accesso,
+            JSON.stringify(rigaTemp));
+        const rigaAdmin = (elencoUtenti.corpo || []).find(u => u.username === ADMIN_USER);
+        verifica("Gestione utenti: l'ultimo accesso dell'amministratore è di adesso",
+            !!rigaAdmin?.ultimo_accesso && Date.now() - new Date(rigaAdmin.ultimo_accesso).getTime() < 3600000,
+            JSON.stringify(rigaAdmin?.ultimo_accesso));
+        const sospendiTemp = await admin.chiamata(`/api/admin/users/${idTemp}/toggle-status`, { method: 'PATCH' });
+        const azzeraTemp = await admin.chiamata(`/api/admin/users/${idTemp}/reset-password`, { method: 'POST' });
+        const modificaTemp = await admin.chiamata(`/api/users/${idTemp}`, { method: 'PUT', body: { nome: 'Paolo', cognome: 'Subentro', ruoli: ['volontario'] } });
+        verifica('un temporaneo non si sospende, non riceve una password e non si modifica da Gestione utenti -> 409',
+            sospendiTemp.stato === 409 && azzeraTemp.stato === 409 && modificaTemp.stato === 409,
+            `${sospendiTemp.stato}/${azzeraTemp.stato}/${modificaTemp.stato}`);
+
+        // Il punto di situazione: lo legge chi lavora in sala, non l'esterno.
+        const situazione = await volontario.chiamata('/api/situazione');
+        const squadraInSituazione = (situazione.corpo?.squadre || []).find(sq => sq.nome_radio === libero);
+        verifica('punto di situazione: emergenza, segnalazioni aperte e chiuse, squadre con i componenti',
+            situazione.stato === 200 && situazione.corpo?.chiusa === false && Array.isArray(situazione.corpo?.aperte)
+                && Array.isArray(situazione.corpo?.chiuse) && (squadraInSituazione?.membri || []).some(m => m.nome === 'Paolo')
+                && (giaAperta || (situazione.corpo?.diario || []).some(v => /Prefettura/.test(v.testo))),
+            `HTTP ${situazione.stato} ${JSON.stringify(squadraInSituazione)}`);
+        const situazioneEsterno = await subentro.chiamata('/api/situazione');
+        const situazioneStorta = await volontario.chiamata('/api/situazione?emergenza=abc');
+        verifica('punto di situazione: un esterno no (403), un id storto 400',
+            situazioneEsterno.stato === 403 && situazioneStorta.stato === 400, `${situazioneEsterno.stato}/${situazioneStorta.stato}`);
+        const chiuseInArchivio = await admin.chiamata('/api/admin/emergencies/closed');
+        const unaChiusa = (chiuseInArchivio.corpo || [])[0];
+        if (unaChiusa) {
+            const resocontoVolontario = await volontario.chiamata(`/api/situazione?emergenza=${unaChiusa.id}`);
+            const resocontoAdmin = await admin.chiamata(`/api/situazione?emergenza=${unaChiusa.id}`);
+            verifica("il resoconto di un'emergenza chiusa lo vede l'amministratore, non il volontario",
+                resocontoVolontario.stato === 403 && resocontoAdmin.stato === 200 && resocontoAdmin.corpo?.chiusa === true,
+                `${resocontoVolontario.stato}/${resocontoAdmin.stato}`);
+        }
+
         const revoca = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}`, { method: 'DELETE' });
-        const dopoRevoca = await cri.chiamata('/api/app/contesto');
+        const dopoRevoca = await subentro.chiamata('/api/app/contesto');
         verifica("revocato, l'esterno è fuori subito, e l'app sa perché",
             revoca.stato === 200 && dopoRevoca.stato === 403 && dopoRevoca.corpo?.motivo === 'accesso_temporaneo_finito',
             `${revoca.stato}/${dopoRevoca.stato} ${JSON.stringify(dopoRevoca.corpo)}`);
@@ -2152,6 +2244,13 @@ async function eseguiTest() {
             await tecnico.chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: secondo.corpo?.codice } });
             const notaEsterno = await tecnico.chiamata('/api/emergencies/diario-sala', { method: 'POST', body: { testo: 'Sono un esterno' } });
             verifica('un esterno non scrive nel diario di sala -> 403', notaEsterno.stato === 403, `HTTP ${notaEsterno.stato}`);
+            // Un intervento della squadra dell'ambulanza, chiuso: la squadra si
+            // scioglierà con l'emergenza, ma chi è intervenuto deve restare scritto.
+            const intervento = await admin.chiamata('/api/reports', {
+                method: 'POST', body: { title: 'Trasporto in ospedale', reporter_name: 'Collaudo', reporter_contact: '000', priority: 'Medium' }
+            });
+            const assegnato = await admin.chiamata(`/api/reports/${intervento.corpo?.id}/teams`, { method: 'POST', body: { teamId: idSquadra } });
+            await admin.chiamata(`/api/reports/${intervento.corpo?.id}`, { method: 'PUT', body: { status: 'Closed' } });
             const chiusa = await admin.chiamata('/api/emergencies/close', { method: 'POST' });
             const dopoChiusura = await tecnico.chiamata('/api/app/contesto');
             const codiceDopo = await creaClient().chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: secondo.corpo?.codice } });
@@ -2173,6 +2272,10 @@ async function eseguiTest() {
                 ancoraLi = ((await admin.chiamata('/api/squadre')).corpo || []).some(s => s.id === idSquadra);
             }
             verifica("la squadra rimasta vuota si chiude d'ufficio alla chiusura", !ancoraLi);
+            const resocontoStampato = await admin.chiamata(`/api/situazione?emergenza=${aperta.corpo?.emergency?.id}`);
+            const trasporto = (resocontoStampato.corpo?.chiuse || []).find(r => r.id === intervento.corpo?.id);
+            verifica("sciolta la squadra, l'intervento ricorda ancora chi l'ha fatto",
+                assegnato.stato < 300 && trasporto?.squadre === libero, `${assegnato.stato} ${JSON.stringify(trasporto)}`);
             const resocontoProva = await admin.chiamata(`/api/admin/emergencies/${aperta.corpo?.emergency?.id}/resoconto`);
             verifica('il resoconto riporta il diario di sala',
                 typeof resocontoProva.corpo === 'string' && resocontoProva.corpo.includes('1. DIARIO DI SALA')

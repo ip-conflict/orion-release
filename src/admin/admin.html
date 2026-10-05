@@ -10,6 +10,30 @@
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/admin-styles.css">
     <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <style>
+        .gu-barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .gu-schede { display: inline-flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--surface-color); }
+        .gu-scheda { border: 0; background: transparent; color: var(--text-color); padding: 8px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+        .gu-scheda + .gu-scheda { border-left: 1px solid var(--border-color); }
+        .gu-scheda.attiva { background: var(--button-bg); color: var(--button-text); }
+        .gu-conta { font-weight: 400; opacity: 0.8; }
+        .gu-filtri { display: flex; gap: 8px; flex-wrap: wrap; }
+        .gu-filtro { padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--surface-color); color: var(--text-color); font: inherit; min-width: 0; }
+        input.gu-filtro { width: 260px; max-width: 100%; }
+        .gu-nota { margin: 0 0 12px; font-size: 0.88rem; color: var(--text-muted); max-width: 900px; }
+        .gu-tabella { background: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; }
+        .gu-tabella th { padding: 12px 15px; white-space: nowrap; }
+        .gu-tabella th.gu-ordina { cursor: pointer; user-select: none; }
+        .gu-tabella th.gu-ordina::after { content: ' \2195'; opacity: 0.35; }
+        .gu-tabella th.gu-su::after { content: ' \2191'; opacity: 1; }
+        .gu-tabella th.gu-giu::after { content: ' \2193'; opacity: 1; }
+        .gu-tabella td.gu-data { white-space: nowrap; font-size: 0.9rem; }
+        .gu-tipo { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; border: 1px solid var(--border-color); color: var(--text-muted); }
+        .gu-tipo.temporaneo { color: var(--warning-text, #9a6700); border-color: currentColor; background: var(--warning-soft-bg, transparent); }
+        .gu-sotto { display: block; font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; white-space: nowrap; }
+        .gu-tabella td.action-buttons { white-space: nowrap; }
+        .status-badge.finito { background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); }
+    </style>
 </head>
 <body style="margin: 0; background: var(--bg-color);">
 
@@ -44,22 +68,29 @@
             </header>
 
             <section class="admin-panel" style="margin-bottom: 40px;">
-                <div class="table-container" style="background: var(--surface-color); border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid var(--border-color);">
-                    <table class="admin-table" id="user-table" style="width: 100%; border-collapse: collapse;">
-                        <thead style="background: var(--bg-color);">
-                            <tr>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Nome</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Cognome</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Username</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Email</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color);">Ruoli</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color); text-align: center;">Stato</th>
-                                <th style="padding: 15px; border-bottom: 2px solid var(--border-color); text-align: right;">Azioni</th>
-                            </tr>
+                <div class="gu-barra">
+                    <div class="gu-schede" role="tablist" aria-label="Tipo di utenti">
+                        <button type="button" class="gu-scheda attiva" role="tab" aria-selected="true" data-gruppo="interni">Interni <span class="gu-conta" id="conta-interni"></span></button>
+                        <button type="button" class="gu-scheda" role="tab" aria-selected="false" data-gruppo="esterni">Esterni <span class="gu-conta" id="conta-esterni"></span></button>
+                    </div>
+                    <div class="gu-filtri">
+                        <select id="filtro-esterni" class="gu-filtro" hidden aria-label="Quali esterni">
+                            <option value="tutti">Tutti gli esterni</option>
+                            <option value="temporanei">Solo temporanei</option>
+                            <option value="permanenti">Solo permanenti</option>
+                        </select>
+                        <input type="search" id="cerca-utenti" class="gu-filtro" placeholder="Cerca nome, username, email, ente" aria-label="Cerca utenti">
+                    </div>
+                </div>
+                <p class="gu-nota" id="nota-esterni" hidden>Gli esterni <strong>temporanei</strong> entrano con il QR creato dal centro operativo durante un'emergenza e si gestiscono da lì, in «Accesso esterno»: il loro accesso finisce da solo alla chiusura dell'emergenza. Qui si possono solo eliminare. Gli esterni <strong>permanenti</strong> hanno nome utente e password, come gli interni.</p>
+                <div class="table-container gu-tabella">
+                    <table class="admin-table" id="user-table">
+                        <thead>
+                            <tr id="user-table-head"></tr>
                         </thead>
                         <tbody id="user-table-body">
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Caricamento utenti...</td>
+                                <td colspan="9" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Caricamento utenti...</td>
                             </tr>
                         </tbody>
                     </table>

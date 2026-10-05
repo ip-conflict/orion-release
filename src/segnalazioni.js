@@ -201,8 +201,13 @@ export function registraRotteSegnalazioni(app) {
                 LEFT JOIN emergencies e ON r.emergency_id = e.id
                 LEFT JOIN users u ON r.creator_user_id = u.id
                 LEFT JOIN (
-                     SELECT rta.report_id, json_agg(json_build_object('id', s.id,'nome_radio', s.nome_radio, 'nome', s.nome) ORDER BY s.nome) AS assigned_teams
-                     FROM report_team_assignments rta JOIN squadre s ON rta.squadra_id = s.id
+                     SELECT rta.report_id,
+                            json_agg(json_build_object('id', rta.squadra_id,
+                                                       'nome_radio', COALESCE(s.nome_radio, rta.nome_radio),
+                                                       'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio))
+                                     ORDER BY COALESCE(s.nome, rta.squadra_nome, rta.nome_radio)) AS assigned_teams
+                     -- Anche le squadre sciolte dopo l'intervento, con il nome di allora.
+                     FROM report_team_assignments rta LEFT JOIN squadre s ON rta.squadra_id = s.id
                      GROUP BY rta.report_id
                 ) rt ON r.id = rt.report_id
                 LEFT JOIN (
@@ -241,7 +246,10 @@ export function registraRotteSegnalazioni(app) {
                 e.code as emergency_code,
                 e.name as emergency_name,
                 CONCAT(u.nome, ' ', u.cognome) AS creator_fullname,
-                COALESCE(json_agg(DISTINCT jsonb_build_object('id', s.id, 'nome', s.nome, 'nome_radio', s.nome_radio)) FILTER (WHERE s.id IS NOT NULL), '[]'::json) AS assigned_teams,
+                COALESCE(json_agg(DISTINCT jsonb_build_object('id', rta.squadra_id,
+                                                              'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio),
+                                                              'nome_radio', COALESCE(s.nome_radio, rta.nome_radio)))
+                         FILTER (WHERE rta.assignment_id IS NOT NULL), '[]'::json) AS assigned_teams,
                 COALESCE(json_agg(DISTINCT ri.image_url) FILTER (WHERE ri.image_id IS NOT NULL), '[]'::json) AS image_urls
             FROM
                 reports r
