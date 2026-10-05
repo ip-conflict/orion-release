@@ -1,6 +1,7 @@
 // js/centro-operativo.js
 
 import DOMPurify from '/js/lib/purify.es.js';
+import { creaRicerca, calcolaPercorso, distanzaMetri, distanzaLeggibile, durataLeggibile } from '/js/mappa-strumenti.js';
 
 const reportListBody = document.getElementById('report-list-body');
 const createNewReportBtn = document.getElementById('createNewReportBtn');
@@ -548,30 +549,321 @@ function initMap() {
         "Posizione Squadre": teamMarkersLayer
     };
 
-    L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(map);
-    L.control.logo({ position: 'topleft' }).addTo(map); 
+    // Livelli e ricerca in basso a sinistra: in alto a destra stanno gli
+    // eventi e gli avvisi a comparsa, e i comandi finivano coperti.
+    L.control.logo({ position: 'topleft' }).addTo(map);
+    creaRicerca(map, { cercaLocale: cercaSullaMappa, suScelta: usaRisultatoRicerca });
+    L.control.layers(baseMaps, overlayMaps, { position: 'bottomleft' }).addTo(map);
+    livelloPercorso = L.layerGroup().addTo(map);
 
-    const geocoder = L.Control.geocoder({
-        position: 'topright',
-        defaultMarkGeocode: false
-    }).on('markgeocode', function(e) {
-        console.log('Geocode Result:', e);
-        if (createReportModal?.style.display !== 'none' && e.geocode?.center) {
-            if (createLatitudeInput) createLatitudeInput.value = e.geocode.center.lat.toFixed(6);
-            if (createLongitudeInput) createLongitudeInput.value = e.geocode.center.lng.toFixed(6);
-            if (mapSelectionFeedback) mapSelectionFeedback.textContent = `Indirizzo: ${e.geocode.name}`;
-            if (isSelectingOnMap) deactivateMapSelectionMode();
-        } else if (editReportModal?.style.display !== 'none' && e.geocode?.center) {
-             if (editLatitudeInput) editLatitudeInput.value = e.geocode.center.lat.toFixed(6);
-             if (editLongitudeInput) editLongitudeInput.value = e.geocode.center.lng.toFixed(6);
-             if (editMapSelectionFeedback) editMapSelectionFeedback.textContent = `Indirizzo: ${e.geocode.name}`;
-             if (isSelectingOnMap) deactivateMapSelectionModeEdit();
-        } else if (e.geocode?.center) {
-            map.setView(e.geocode.center, 16);
+    console.log("Mappa Segnalazioni inizializzata.");
+}
+
+// --------------------------------------------------------------------------
+// Ricerca sulla mappa: segnalazioni e squadre di questa emergenza, poi gli
+// indirizzi (in mappa-strumenti.js).
+// --------------------------------------------------------------------------
+
+const senzaAccenti = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+function cercaSullaMappa(testo) {
+    const cercato = senzaAccenti(testo).replace(/^#/, '').trim();
+    if (!cercato) return [];
+    const parole = cercato.split(/\s+/);
+    const numero = /^\d+$/.test(cercato) ? cercato : null;
+    const voci = [];
+    Object.values(reportMarkerReferences).forEach(marker => {
+        const d = marker.dati;
+        if (!d) return;
+        const testoReport = senzaAccenti(`${d.titolo} ${d.indirizzo || ''}`);
+        const corrisponde = numero ? String(d.numero) === numero : parole.every(p => testoReport.includes(p));
+        if (!corrisponde) return;
+        const { lat, lng } = marker.getLatLng();
+        voci.push({ nome: `#${d.numero} ${d.titolo}`, dettaglio: d.indirizzo || null, lat, lng, fonte: 'segnalazione', reportId: marker.reportId });
+    });
+    if (!numero) {
+        allTeamsList.forEach(squadra => {
+            const testoSquadra = senzaAccenti(`${squadra.nome_radio || ''} ${squadra.nome || ''}`);
+            if (!parole.every(p => testoSquadra.includes(p))) return;
+            const marker = teamMarkerReferences[squadra.id];
+            const posizione = marker?.getLatLng();
+            voci.push({
+                nome: squadra.nome_radio || 'Squadra',
+                dettaglio: [squadra.nome, posizione ? null : 'nessuna posizione ricevuta'].filter(Boolean).join(' · ') || null,
+                lat: posizione?.lat, lng: posizione?.lng, fonte: 'squadra', teamId: squadra.id
+            });
+        });
+    }
+    return voci.slice(0, 6);
+}
+
+// Il punto trovato: dentro un modulo aperto diventa la sua posizione,
+// altrimenti la mappa ci va e lo segna per qualche secondo.
+let segnoRicerca = null;
+function usaRisultatoRicerca(r) {
+    if (r.fonte === 'squadra') return trovaSquadra(r.teamId);
+    if (r.fonte === 'segnalazione') {
+        const marker = reportMarkerReferences[r.reportId];
+        if (marker) reportMarkersLayer.zoomToShowLayer(marker, () => marker.openPopup());
+        return;
+    }
+    const centro = L.latLng(r.lat, r.lng);
+    if (createReportModal && createReportModal.style.display !== 'none') {
+        if (createLatitudeInput) createLatitudeInput.value = centro.lat.toFixed(6);
+        if (createLongitudeInput) createLongitudeInput.value = centro.lng.toFixed(6);
+        if (mapSelectionFeedback) mapSelectionFeedback.textContent = `Indirizzo: ${r.nome}`;
+        if (isSelectingOnMap) deactivateMapSelectionMode();
+        return;
+    }
+    if (editReportModal && editReportModal.style.display !== 'none') {
+        if (editLatitudeInput) editLatitudeInput.value = centro.lat.toFixed(6);
+        if (editLongitudeInput) editLongitudeInput.value = centro.lng.toFixed(6);
+        if (editMapSelectionFeedback) editMapSelectionFeedback.textContent = `Indirizzo: ${r.nome}`;
+        if (isSelectingOnMap) deactivateMapSelectionModeEdit();
+        return;
+    }
+    map.setView(centro, Math.max(map.getZoom(), 16));
+    if (segnoRicerca) segnoRicerca.remove();
+    segnoRicerca = L.circleMarker(centro, { radius: 14, color: '#2477b3', weight: 3, fillColor: '#2477b3', fillOpacity: 0.15, className: 'segno-ricerca' })
+        .bindTooltip(r.nome, { direction: 'top', offset: [0, -12] })
+        .addTo(map);
+    segnoRicerca.openTooltip();
+    const questo = segnoRicerca;
+    setTimeout(() => { if (segnoRicerca === questo) { questo.remove(); segnoRicerca = null; } }, 12000);
+}
+
+// --------------------------------------------------------------------------
+// Le squadre sulla mappa: il riquadro, "trova", il percorso.
+// --------------------------------------------------------------------------
+
+// Sotto questa distanza la squadra e' sul posto: niente percorso.
+const DISTANZA_SUL_POSTO = 150;
+let livelloPercorso = null;
+let percorsoAttivo = null; // { teamId, reportId, calcolatoIl }
+
+function destinazioneSquadra(squadra) {
+    const meta = squadra?.active_target_info;
+    if (!meta) return null;
+    const marker = reportMarkerReferences[meta.report_id];
+    return {
+        reportId: meta.report_id,
+        numero: meta.target_report_progressive_number ?? meta.report_id,
+        titolo: meta.target_report_title || '',
+        posizione: marker ? marker.getLatLng() : null
+    };
+}
+
+function quandoRelativo(iso) {
+    if (!iso) return null;
+    const minuti = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (!Number.isFinite(minuti)) return null;
+    if (minuti < 1) return 'adesso';
+    if (minuti < 60) return `${minuti} min fa`;
+    const ore = Math.floor(minuti / 60);
+    return ore < 24 ? `${ore} h fa` : new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Il riquadro di una squadra sulla mappa: chi e', dove deve andare, quanto
+// e' fresca la posizione, chi c'e' dentro. Si costruisce all'apertura, cosi'
+// e' sempre aggiornato.
+function riquadroSquadra(teamId) {
+    const squadra = allTeamsList.find(t => t.id === teamId) || {};
+    const marker = teamMarkerReferences[teamId];
+    const posizione = marker?.getLatLng();
+    const meta = destinazioneSquadra(squadra);
+    const ultimo = teamLastUpdateTimestamps.get(teamId) || squadra.last_update;
+    const ferma = !ultimo || (Date.now() - new Date(ultimo).getTime() > STALE_TIMESTAMP_THRESHOLD);
+
+    const box = document.createElement('div');
+    box.className = 'riquadro-squadra';
+    const testa = document.createElement('div');
+    testa.className = 'rs-testa';
+    const lettera = document.createElement('span');
+    lettera.className = 'rs-lettera';
+    lettera.textContent = (squadra.nome_radio || '?').charAt(0).toUpperCase();
+    const nomi = document.createElement('div');
+    const nome = document.createElement('strong');
+    nome.textContent = squadra.nome_radio || `Squadra ${teamId}`;
+    nomi.appendChild(nome);
+    if (squadra.nome) {
+        const desc = document.createElement('span');
+        desc.textContent = squadra.nome;
+        nomi.appendChild(desc);
+    }
+    testa.append(lettera, nomi);
+    box.appendChild(testa);
+
+    const stato = document.createElement('div');
+    if (!meta) {
+        stato.className = 'rs-stato libera';
+        stato.textContent = 'Libera';
+    } else {
+        const distanza = posizione && meta.posizione ? distanzaMetri(posizione, meta.posizione) : null;
+        const sulPosto = distanza != null && distanza <= DISTANZA_SUL_POSTO;
+        stato.className = 'rs-stato ' + (sulPosto ? 'sul-posto' : 'in-viaggio');
+        stato.textContent = `${sulPosto ? 'Sul posto' : 'Verso'} #${meta.numero}${meta.titolo ? ' · ' + meta.titolo : ''}`;
+        if (distanza != null && !sulPosto) {
+            const d = document.createElement('span');
+            d.className = 'rs-distanza';
+            d.textContent = `${distanzaLeggibile(distanza)} in linea d'aria`;
+            stato.appendChild(d);
         }
-    }).addTo(map);
+    }
+    box.appendChild(stato);
 
-    console.log("Mappa Segnalazioni inizializzata con Geocoder (senza marker di default).");
+    const righe = document.createElement('dl');
+    righe.className = 'rs-righe';
+    const riga = (etichetta, valore, classe) => {
+        const dt = document.createElement('dt');
+        dt.textContent = etichetta;
+        const dd = document.createElement('dd');
+        dd.textContent = valore;
+        if (classe) dd.className = classe;
+        righe.append(dt, dd);
+    };
+    riga('Posizione', posizione ? (quandoRelativo(ultimo) || '—') + (ferma ? ' · non si aggiorna' : '') : 'mai ricevuta', ferma ? 'attenzione' : null);
+    const membri = (squadra.membri || []).map(m => [m.cognome, m.nome].filter(Boolean).join(' ') || m.username);
+    riga('Membri', membri.length ? (membri.slice(0, 3).join(', ') + (membri.length > 3 ? ` e altri ${membri.length - 3}` : '')) : 'nessuno');
+    box.appendChild(righe);
+
+    const azioni = document.createElement('div');
+    azioni.className = 'rs-azioni';
+    if (meta) {
+        const apri = document.createElement('button');
+        apri.type = 'button';
+        apri.className = 'button-style button-secondary button-small';
+        apri.textContent = `Apri #${meta.numero}`;
+        apri.addEventListener('click', () => { map.closePopup(); showReportDetails(meta.reportId); });
+        azioni.appendChild(apri);
+        if (posizione && meta.posizione && percorsoAttivo?.teamId !== teamId && distanzaMetri(posizione, meta.posizione) > DISTANZA_SUL_POSTO) {
+            const strada = document.createElement('button');
+            strada.type = 'button';
+            strada.className = 'button-style button-small';
+            strada.textContent = 'Percorso';
+            strada.addEventListener('click', () => trovaSquadra(teamId));
+            azioni.appendChild(strada);
+        }
+    }
+    if (azioni.children.length) box.appendChild(azioni);
+    return box;
+}
+
+/**
+ * Porta la squadra in vista. Se e' assegnata a una segnalazione e non e'
+ * ancora li', disegna la strada che deve fare e inquadra entrambe.
+ */
+async function trovaSquadra(teamId) {
+    const squadra = allTeamsList.find(t => t.id === teamId);
+    const nome = squadra?.nome_radio || 'La squadra';
+    const marker = teamMarkerReferences[teamId];
+    if (!marker) {
+        notifica(`${nome} non ha ancora mandato la sua posizione: serve l'app aperta da almeno un membro.`, 'attenzione');
+        return;
+    }
+    if (!map.hasLayer(teamMarkersLayer)) teamMarkersLayer.addTo(map);
+    // Il dettaglio di una segnalazione copre la mappa sul telefono.
+    if (document.body.classList.contains('dettaglio-aperto')) closeBottomPanel?.();
+    const posizione = marker.getLatLng();
+    const meta = destinazioneSquadra(squadra);
+    evidenziaSquadra(marker);
+    if (meta?.posizione && distanzaMetri(posizione, meta.posizione) > DISTANZA_SUL_POSTO) {
+        await mostraPercorso(squadra, meta, { inquadra: true });
+        // Sulla mappa bassa del telefono il riquadro coprirebbe il percorso:
+        // basta la barra con distanza e tempo.
+        if (map.getSize().y < 500) return;
+    } else {
+        togliPercorso();
+        map.flyTo(posizione, Math.max(map.getZoom(), 16), { duration: 0.6 });
+        if (meta && !meta.posizione) notifica(`La segnalazione #${meta.numero} non ha una posizione sulla mappa: il percorso non si può disegnare.`, 'info');
+    }
+    marker.openPopup();
+}
+
+function evidenziaSquadra(marker) {
+    const el = marker.getElement();
+    if (!el) return;
+    el.classList.remove('team-marker-cercato');
+    void el.offsetWidth; // riparte l'animazione
+    el.classList.add('team-marker-cercato');
+    setTimeout(() => el.classList.remove('team-marker-cercato'), 3200);
+}
+
+async function mostraPercorso(squadra, meta, { inquadra }) {
+    const marker = teamMarkerReferences[squadra.id];
+    if (!marker || !meta?.posizione) return;
+    const da = marker.getLatLng();
+    percorsoAttivo = { teamId: squadra.id, reportId: meta.reportId, calcolatoIl: Date.now() };
+    const questo = percorsoAttivo;
+    mostraInfoPercorso(squadra, meta, null);
+    const percorso = await calcolaPercorso(da, meta.posizione);
+    if (percorsoAttivo !== questo) return; // nel frattempo se ne e' chiesto un altro
+    livelloPercorso.clearLayers();
+    const opzioni = percorso.stradale ? {} : { dashArray: '8 10' };
+    L.polyline(percorso.punti, { color: '#ffffff', weight: 9, opacity: 0.9, interactive: false }).addTo(livelloPercorso);
+    const linea = L.polyline(percorso.punti, { color: '#2477b3', weight: 5, opacity: 0.95, interactive: false, ...opzioni }).addTo(livelloPercorso);
+    L.circleMarker(meta.posizione, { radius: 18, color: '#d4453c', weight: 3, fill: false, interactive: false, className: 'meta-percorso' }).addTo(livelloPercorso);
+    mostraInfoPercorso(squadra, meta, percorso);
+    if (inquadra) {
+        const aperti = document.body.classList.contains('eventi-aperti') ? 330 : 40;
+        // In alto resta spazio per il riquadro della squadra, che si apre sopra
+        // al suo segno; sulla mappa bassa del telefono quanto basta.
+        const alta = map.getSize().y >= 500;
+        map.fitBounds(linea.getBounds().extend(da), {
+            paddingTopLeft: alta ? [60, 250] : [70, 70],
+            paddingBottomRight: alta ? [aperti + 60, 110] : [30, 70],
+            maxZoom: 17
+        });
+    }
+}
+
+function togliPercorso() {
+    percorsoAttivo = null;
+    livelloPercorso?.clearLayers();
+    document.getElementById('info-percorso')?.remove();
+}
+
+function mostraInfoPercorso(squadra, meta, percorso) {
+    let info = document.getElementById('info-percorso');
+    if (!info) {
+        info = document.createElement('div');
+        info.id = 'info-percorso';
+        info.setAttribute('role', 'status');
+        document.getElementById('map-container')?.appendChild(info);
+    }
+    info.innerHTML = '';
+    const testo = document.createElement('span');
+    const titolo = document.createElement('strong');
+    titolo.textContent = `${squadra.nome_radio} → #${meta.numero}`;
+    const dettaglio = document.createElement('span');
+    dettaglio.className = 'dettaglio-percorso';
+    if (!percorso) dettaglio.textContent = 'calcolo del percorso…';
+    else if (percorso.stradale) dettaglio.textContent = `${distanzaLeggibile(percorso.metri)} su strada · circa ${durataLeggibile(percorso.secondi)}`;
+    else dettaglio.textContent = `${distanzaLeggibile(percorso.metri)} in linea d'aria · percorso stradale non disponibile`;
+    testo.append(titolo, dettaglio);
+    const chiudi = document.createElement('button');
+    chiudi.type = 'button';
+    chiudi.setAttribute('aria-label', 'Nascondi il percorso');
+    chiudi.title = 'Nascondi il percorso';
+    chiudi.innerHTML = '&times;';
+    chiudi.addEventListener('click', togliPercorso);
+    info.append(testo, chiudi);
+}
+
+// La squadra si e' mossa mentre se ne guarda il percorso: si ricalcola, al
+// massimo ogni 30 secondi, senza spostare la mappa.
+function aggiornaPercorsoSeServe(teamId) {
+    if (!percorsoAttivo || percorsoAttivo.teamId !== teamId) return;
+    if (Date.now() - percorsoAttivo.calcolatoIl < 30000) return;
+    const squadra = allTeamsList.find(t => t.id === teamId);
+    const meta = destinazioneSquadra(squadra);
+    const marker = teamMarkerReferences[teamId];
+    if (!meta?.posizione || meta.reportId !== percorsoAttivo.reportId || !marker) return togliPercorso();
+    if (distanzaMetri(marker.getLatLng(), meta.posizione) <= DISTANZA_SUL_POSTO) {
+        togliPercorso();
+        notifica(`${squadra.nome_radio} e' arrivata alla segnalazione #${meta.numero}.`, 'successo');
+        return;
+    }
+    mostraPercorso(squadra, meta, { inquadra: false });
 }
 
 function updateEmergencyStatusUI(emergencyData) {
@@ -791,28 +1083,35 @@ function updateSingleTeamMarker(teamData) {
     }
 
     const position = [parsedLat, parsedLon];
-    const optionalName = teamData.squadra_nome_descrittivo ? ` (${escapeHTML(teamData.squadra_nome_descrittivo)})` : '';
-    const lastUpdateString = lastUpdate ? new Date(lastUpdate).toLocaleString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
     
     const now = Date.now();
     const isStale = lastUpdate && (now - new Date(lastUpdate).getTime() > STALE_TIMESTAMP_THRESHOLD);
-    const popupContent = `<b>Squadra ${escapeHTML(prefix || 'ID ' + teamId)}</b>${optionalName}<br>ID: ${escapeHTML(teamId)}<br>Ultimo Agg.: ${lastUpdateString}${isStale ? ' (> 5 min)' : ''}`;
     
     const existingMarker = teamMarkerReferences[teamId];
 
     if (existingMarker) {
         existingMarker.setLatLng(position);
-        existingMarker.setPopupContent(popupContent);
+        if (existingMarker.isPopupOpen()) existingMarker.setPopupContent(riquadroSquadra(teamId));
         
         const iconElement = existingMarker.getElement();
         if (iconElement && !isStale) iconElement.classList.remove('team-marker-stale');
         
     } else {
         const icon = createTeamDivIcon(teamData, isStale); 
-        const newMarker = L.marker(position, { icon: icon }).bindPopup(popupContent);
-        teamMarkersLayer.addLayer(newMarker);
-        teamMarkerReferences[teamId] = newMarker;
+        teamMarkersLayer.addLayer(nuovoMarkerSquadra(teamId, position, icon));
     }
+    aggiornaPercorsoSeServe(teamId);
+}
+
+// Il riquadro si costruisce all'apertura; il clic porta in vista la squadra
+// e, se sta andando a una segnalazione, ne disegna la strada.
+function nuovoMarkerSquadra(teamId, position, icon) {
+    const marker = L.marker(position, { icon })
+        .bindPopup(() => riquadroSquadra(teamId), { className: 'popup-orion', minWidth: 240, maxWidth: 300, autoPan: false });
+    marker.off('click', marker._openPopup);
+    marker.on('click', () => trovaSquadra(teamId));
+    teamMarkerReferences[teamId] = marker;
+    return marker;
 }
 
 function updateTeamMarkers(teamLocations) {
@@ -846,9 +1145,6 @@ function updateTeamMarkers(teamLocations) {
 
             const icon = createTeamDivIcon(loc, isStale);
             const position = [parsedLat, parsedLon];
-            const optionalName = loc.squadra_nome_descrittivo ? ` (${escapeHTML(loc.squadra_nome_descrittivo)})` : '';
-            const lastUpdateString = lastUpdate ? new Date(lastUpdate).toLocaleString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
-            const popupContent = `<b>Squadra ${escapeHTML(prefix)}</b>${optionalName}<br>ID: ${escapeHTML(teamId)}<br>Ultimo Agg.: ${lastUpdateString}${isStale ? ' (> 5 min)' : ''}`;
             const existingMarker = teamMarkerReferences[teamId];
 
             if (lastUpdate) {
@@ -861,15 +1157,15 @@ function updateTeamMarkers(teamLocations) {
             console.log(`[updateTeamMarkers] Stato attuale teamLastUpdateTimestamps:`, new Map(teamLastUpdateTimestamps));
 
             if (existingMarker) {
-                existingMarker.setLatLng(position).setIcon(icon).setPopupContent(popupContent);
+                existingMarker.setLatLng(position).setIcon(icon);
+                if (existingMarker.isPopupOpen()) existingMarker.setPopupContent(riquadroSquadra(teamId));
             } else {
-                const newMarker = L.marker(position, { icon: icon }).bindPopup(popupContent);
-                teamMarkersLayer.addLayer(newMarker);
-                teamMarkerReferences[teamId] = newMarker;
-                console.log(`+++ Aggiunto NUOVO marker squadra ${teamId} (${prefix}) e salvato riferimento.`);
+                teamMarkersLayer.addLayer(nuovoMarkerSquadra(teamId, position, icon));
             }
+            aggiornaPercorsoSeServe(teamId);
         });
     }
+    if (percorsoAttivo && !receivedTeamIds.has(percorsoAttivo.teamId)) togliPercorso();
 
     Object.keys(teamMarkerReferences).forEach(teamIdStr => {
         const teamId = parseInt(teamIdStr, 10);
@@ -2270,6 +2566,7 @@ function addReportMarkers(reports) {
             if (!existingMarker) {
                 const marker = L.marker([latNum, lonNum], markerOptions);
                 marker.reportId = reportId;
+                marker.dati = { numero: displayValue, titolo: report.title || '', indirizzo: report.location_address || '' };
                 marker.bindPopup(`<b>#${escapeHTML(displayValue)}: ${escapeHTML(report.title)}</b><br>Stato: ${escapeHTML(report.status)}`);
                 marker.on('click', (e) => {
                     if (isUpdatingCoordsFromPanel) {
@@ -2296,6 +2593,7 @@ function addReportMarkers(reports) {
                 console.log(`[${new Date().toISOString()}] ~~~ Updated Existing Marker for report ${reportId}`);
                 existingMarker.setLatLng([latNum, lonNum]);
                 existingMarker.setIcon(selectedIcon);
+                existingMarker.dati = { numero: displayValue, titolo: report.title || '', indirizzo: report.location_address || '' };
                 existingMarker.setPopupContent(`<b>#${escapeHTML(displayValue)}: ${escapeHTML(report.title)}</b><br>Stato: ${escapeHTML(report.status)}`);
             }
 
@@ -3125,6 +3423,11 @@ async function apriMenuSquadra(squadra, ancora) {
     titolo.append(nome, stato);
     menu.appendChild(titolo);
 
+    menu.appendChild(voceMenuSquadra(destinazione ? 'Trova sulla mappa e mostra il percorso' : 'Trova sulla mappa', () => {
+        chiudiMenuSquadra();
+        trovaSquadra(squadra.id);
+    }));
+
     if (destinazione) {
         menu.appendChild(voceMenuSquadra(`Apri la segnalazione #${destinazione.target_report_progressive_number ?? destinazione.report_id}`, () => {
             chiudiMenuSquadra();
@@ -3378,9 +3681,9 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
     const displayValue = (emergencyReportNumber !== null && emergencyReportNumber !== undefined) ? emergencyReportNumber : report.id;
 
     // Status Badge (Mini)
-    let statusColor = '#64748b'; let bgColor = '#f1f5f9';
-    if (['New', 'Open'].includes(report.status)) { statusColor = '#ef4444'; bgColor = '#fee2e2'; }
-    else if (['InProgress'].includes(report.status)) { statusColor = '#10b981'; bgColor = '#d1fae5'; }
+    let tonoStato = 'spento';
+    if (['New', 'Open'].includes(report.status)) tonoStato = 'grave';
+    else if (['InProgress'].includes(report.status)) tonoStato = 'ok';
 
     const squadreAssegnate = Array.isArray(report.assigned_teams) && report.assigned_teams.length > 0
                   ? report.assigned_teams.map(t => t.nome_radio || '?').join(', ')
@@ -3425,7 +3728,7 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
                 : (motivoSenzaSquadra
                     ? `<span class="squadra-tag squadra-non-richiesta" title="${escapeHTML(motivoSenzaSquadra.descrizione)}"><i class="fas fa-hand-paper" style="font-size:0.6rem;"></i> ${motivoSenzaSquadra.etichetta}</span>`
                     : (terminale ? '' : `<span class="squadra-tag squadra-mancante${attesaCritica ? ' attesa-critica' : ''}">DA ASSEGNARE</span>`))}
-            <span style="background: ${bgColor}; color: ${statusColor}; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase;">
+            <span class="bollino piccolo ${tonoStato}">
                 ${escapeHTML(ETICHETTA_STATO[report.status] || report.status || 'N/D')}
             </span>
             ${report.latitude === null ? '<i class="fas fa-exclamation-circle" style="color: var(--danger-text); font-size: 0.8rem;" title="Coordinate Mancanti"></i>' : ''}

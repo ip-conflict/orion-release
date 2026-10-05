@@ -66,6 +66,20 @@ PIN del telefono, perché sono dati sanitari. Toccando un corso si vedono il
 codice, la validità, le volte in cui è stato fatto e l'attestato, che si apre
 o si salva nella cartella Download.
 
+Da Io si apre anche Il mio profilo, con tutto quello che sul web si fa dalla
+pagina Profilo. Si cambia la foto del tesserino, scattandola o scegliendola
+dalla galleria; si correggono codice fiscale, telefono, indirizzo, città e
+CAP; si cambia la password. Dopo il cambio della password il telefono resta
+collegato, mentre gli altri dispositivi devono rientrare con quella nuova, e
+l'accesso con l'impronta si riattiva la volta successiva che si entra con la
+password. Il pulsante del fascicolo prepara lo stesso PDF che il web stampa,
+con dati, visite e corsi, e lo apre con il lettore del telefono; siccome
+dentro ci sono le visite mediche, prima chiede l'impronta o il PIN.
+
+Quando l'associazione mette sul server una versione nuova dell'app, la
+schermata principale la propone con il pulsante Scarica, e anche ad app
+chiusa arriva una notifica, una sola per ogni versione.
+
 ### Le notifiche
 
 Le email restano quelle di sempre: gli avvisi delle proprie scadenze e,
@@ -160,6 +174,27 @@ chiusura, per non mandare due squadre diverse con lo stesso nome.
 Mandando una squadra su un intervento, i suoi membri ricevono la notifica sul
 telefono. Quando la squadra viene tolta o l'intervento chiuso, la notifica
 sparisce.
+
+Sulla mappa ogni squadra con il telefono acceso compare con la sua lettera.
+Toccandola, o scegliendo "Trova sulla mappa" dal menu che si apre cliccando
+la squadra nella barra in basso, la mappa la porta in vista e apre un
+riquadro con l'essenziale: dove sta andando, quanto è recente la posizione
+(se il telefono non trasmette da più di cinque minuti lo dice) e chi c'è
+dentro. Se la squadra è assegnata a una segnalazione e non è ancora sul
+posto, ORION disegna la strada che deve fare e ne indica lunghezza e tempo
+in auto; la strada si ricalcola da sola mentre la squadra si muove, e quando
+arriva lo dice. Se il servizio dei percorsi non risponde, al posto della
+strada compare la linea d'aria, tratteggiata.
+
+### La mappa
+
+In basso a sinistra stanno la scelta fra mappa stradale e satellite e la
+ricerca. La ricerca trova, mentre si scrive, le segnalazioni (per numero,
+"#12", per titolo o indirizzo) e le squadre; con Invio cerca gli indirizzi,
+dando la precedenza a quelli vicini alla zona inquadrata. Accetta anche le
+coordinate come le detta chi chiama, per esempio "46.1405, 12.2168" o
+"46,1405 12,2168". Con un modulo di segnalazione aperto, l'indirizzo scelto
+ne diventa la posizione.
 
 ### In squadra con il telefono
 
@@ -427,9 +462,12 @@ la parola RIPRISTINA scritta per intero; prima di ripristinare ORION fa un
 backup di sicurezza dei dati attuali. I backup restano sulla stessa macchina
 del server, quindi ogni tanto va scaricata una copia e tenuta altrove.
 
-Sempre da Sistema si vede se esiste una versione più recente, se il
-controllo è acceso, e si aggiorna. ORION non si aggiorna mai da solo: decide
-l'amministratore, che sa se c'è un'emergenza in corso.
+Sempre da Sistema, con "Controlla adesso", si vede se esiste una versione più
+recente, e si aggiorna. Spuntando "Cerca aggiornamenti ogni giorno" il
+controllo lo fa ORION una volta al giorno e, quando trova una versione nuova,
+lo dice agli amministratori con una notifica sull'app e un'email. ORION non si
+aggiorna mai da solo, e con un'emergenza aperta non si può aggiornare: si
+aspetta di averla chiusa.
 
 
 ## 7. Quando qualcosa non va

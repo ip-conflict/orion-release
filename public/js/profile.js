@@ -169,11 +169,11 @@ async function loadMioLibretto(userId) {
                 const vDate = new Date(m.last_visit_date).toLocaleDateString('it-IT');
                 const eDate = new Date(m.expiry_date).toLocaleDateString('it-IT');
                 
-                let badgeColor = m.status === 'Idoneo' ? '#10b981' : '#ef4444';
-                if (new Date(m.expiry_date) < new Date()) badgeColor = '#f59e0b';
+                const scaduta = new Date(m.expiry_date) < new Date();
+                const tono = scaduta ? 'attenzione' : (m.status === 'Idoneo' ? 'ok' : 'grave');
                 
-                const badgeHTML = m.isLatest ? `<span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: bold;">${escapeHTML((m.status || '').toUpperCase())}</span>` 
-                                             : `<span style="background: #f1f5f9; color: #64748b; padding: 4px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: bold;"><i class="fas fa-archive"></i> STORICO</span>`;
+                const badgeHTML = m.isLatest ? `<span class="bollino ${tono}">${escapeHTML((m.status || '').toUpperCase())}${scaduta ? ' · SCADUTA' : ''}</span>` 
+                                             : `<span class="bollino spento"><i class="fas fa-archive"></i> STORICO</span>`;
 
                 let actionsHTML = '';
                 if (m.document_url) {
@@ -210,11 +210,12 @@ async function loadMioLibretto(userId) {
                 const aDate = new Date(c.acquisition_date).toLocaleDateString('it-IT');
                 const eDate = c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Nessuna Scadenza';
                 
-                let badgeColor = '#3b82f6';
-                if (c.expiry_date && new Date(c.expiry_date) < new Date()) badgeColor = '#f59e0b'; 
+                const scaduto = !!c.expiry_date && new Date(c.expiry_date) < new Date();
 
-                const badgeHTML = c.isLatest ? `<span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: bold;"><i class="fas fa-certificate"></i> VALIDO</span>` 
-                                             : `<span style="background: #f1f5f9; color: #64748b; padding: 4px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: bold;"><i class="fas fa-archive"></i> STORICO</span>`;
+                const badgeHTML = c.isLatest ? (scaduto
+                                                 ? `<span class="bollino attenzione"><i class="fas fa-certificate"></i> SCADUTO</span>`
+                                                 : `<span class="bollino info"><i class="fas fa-certificate"></i> VALIDO</span>`)
+                                             : `<span class="bollino spento"><i class="fas fa-archive"></i> STORICO</span>`;
 
                 let actionsHTML = '';
                 if (c.document_url) {

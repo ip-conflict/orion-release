@@ -86,7 +86,9 @@ app.use(helmet({
             // Le mattonelle della mappa sono l'unica cosa remota: senza rete la
             // mappa resta vuota, il resto funziona.
             "img-src": ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "*.tile.osm.org", "server.arcgisonline.com"],
-            "connect-src": ["'self'", "nominatim.openstreetmap.org", `wss://${domainName}`]
+            // Indirizzi (Nominatim, Photon) e percorsi (OSRM): tutti di
+            // OpenStreetMap, chiesti dal browser della sala.
+            "connect-src": ["'self'", "nominatim.openstreetmap.org", "photon.komoot.io", "router.project-osrm.org", `wss://${domainName}`]
         }
     },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
@@ -198,8 +200,11 @@ registraRotteApp(app, {
     leggiConfigMagazzino: magazzino.leggiConfig
 });
 
-registraRotteManutenzione(app, {
+const manutenzione = registraRotteManutenzione(app, {
     pool, logger, registraAudit, avvisaClienti,
+    emergenzaAttiva: () => activeEmergency,
+    notificaA: notifiche.notificaA,
+    inviaEmail: sendEmailUtility,
     soloAdmin: checkAdminRole,
     eseguiBackup: eseguiBackupDatabase,
     cartellaApp: CARTELLA_BACKUP_APP,
@@ -266,6 +271,10 @@ app.use((err, req, res, next) => {
         // Il backup notturno saltato perché il server era spento.
         backupDiRecupero();
         setInterval(backupDiRecupero, 6 * 3600000);
+        // Il controllo giornaliero delle versioni, se acceso: guarda ogni ora
+        // se è passato un giorno dall'ultimo.
+        manutenzione.controlloAutomatico();
+        setInterval(manutenzione.controlloAutomatico, 3600000);
         server.listen(port, () => {
             logger.info(`Server in esecuzione su porta ${port}`);
             logger.info(`Accesso web app: http://localhost:${port} o https://${domainName}`);

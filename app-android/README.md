@@ -29,6 +29,10 @@ firmato con la stessa chiave.
 Se la cartella è vuota il contesto riporta `app: null` e tutto il resto
 funziona lo stesso.
 
+Con l'aggiornamento dalla pagina Sistema l'APK della release nuova prende il
+posto di quello installato solo se è più recente e firmato con la stessa
+chiave; un APK diverso messo qui a mano resta com'è.
+
 L'amministratore può togliere l'app al personale dalle impostazioni
 (App Android → Disponibile al personale): l'APK smette di scaricarsi e
 nessuno se la vede più proporre, anche se i file sono qui.

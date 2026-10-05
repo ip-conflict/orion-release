@@ -201,6 +201,23 @@ dire sì). Spenta, l'APK risponde 404, il contesto riporta `app: null` (l'app
 non propone aggiornamenti) e il web non la propone; chi l'ha già installata
 continua a usarla.
 
+Ad app aperta la home propone la versione nuova (`app.ultima` maggiore della
+versione installata) e blocca l'app sotto `app.minima`. Ad app chiusa il
+controllo in background chiede il contesto al massimo ogni 20 ore e, se c'è
+una versione nuova, mostra una notifica locale, una sola per versione.
+
+## Il mio profilo
+
+L'app usa le stesse rotte della pagina Profilo del web: `GET /api/users/me`
+(con i dati anagrafici), `PUT /api/users/me/anagrafica`, `POST
+/api/users/me/photo` (campo `photo`) e `POST /api/users/change-password`. Il
+cambio password risponde 401 anche alla password attuale sbagliata: l'app lì
+chiude la sessione solo se la risposta porta `sessione_terminata`. Andato a
+buon fine, l'app tiene il token nuovo della risposta e dimentica il token di
+rinnovo dell'impronta, che il server ha cancellato con `chiudiSessioni`. Il
+fascicolo in PDF si scrive sul telefono con il libretto (`GET
+/api/users/:id/libretto`); il server non ha rotte apposta.
+
 ## Proposta dopo l'accesso dal telefono
 
 Chi accede al web da un telefono Android, dopo il login, si vede proporre

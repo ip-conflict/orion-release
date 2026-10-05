@@ -87,6 +87,14 @@ quanti giorni tenerli (predefinito 30).
 I due segreti non vanno mai cambiati a server acceso senza sapere cosa si fa:
 cambiare `JWT_SECRET` fa uscire tutti.
 
+La mappa del centro operativo usa servizi di OpenStreetMap chiesti dal
+browser della sala, non dal server: le tessere della mappa
+(tile.openstreetmap.org, il satellite da server.arcgisonline.com), gli
+indirizzi (photon.komoot.io e nominatim.openstreetmap.org) e i percorsi
+delle squadre (router.project-osrm.org). Sono gli unici indirizzi esterni
+ammessi dalla Content-Security-Policy in `src/server.js`. Senza rete la mappa
+resta vuota e il percorso diventa linea d'aria; tutto il resto funziona.
+
 Tutto il resto si configura dall'applicazione, nelle Impostazioni, e sta nel
 database: la posta in uscita (SMTP), il logo e il nome dell'associazione, i
 moduli Segreteria e Magazzino, il tesserino, la disponibilità dell'app
@@ -201,9 +209,11 @@ comprese), riavvio. Se dipendenze o migrazioni falliscono, nessun file è
 ancora stato toccato. La sostituzione usa rsync con `--delete-after` ma non
 tocca i file nascosti della cartella, che è anche la home dell'utente di
 sistema (`.pm2`, `.npm`, `.npmrc`, `.env`), i dati caricati, i loghi, i
-registri e `app-android`. Il controllo delle nuove versioni è spento finché
-l'amministratore non lo accende, e ORION non si aggiorna mai da solo. Il
-dettaglio è in `manutenzione-backup-e-aggiornamenti.md`.
+registri e `app-android`. Il controllo delle nuove versioni si fa a mano con
+"Controlla adesso"; acceso, quello giornaliero avvisa gli amministratori con
+una notifica e un'email. ORION non si aggiorna mai da solo, e con
+un'emergenza aperta non si aggiorna proprio. Il dettaglio è in
+`manutenzione-backup-e-aggiornamenti.md`.
 
 Fino alla 3.36 l'aggiornamento dalla pagina Sistema cancellava `.pm2`: PM2
 restava acceso ma senza più rispondere, e il primo `update.sh` successivo si

@@ -68,8 +68,8 @@
                 <label class="riga-opzione" style="margin-top: 18px;">
                     <input type="checkbox" id="aggiornamenti-attivo">
                     <span>
-                        Controlla se esistono versioni più recenti
-                        <small>Da spento l'applicazione non contatta nessun servizio esterno. Da acceso, quando premi "Controlla adesso", chiede al servizio indicato qui sotto qual è l'ultima versione pubblicata.</small>
+                        Cerca aggiornamenti ogni giorno
+                        <small>Se trova una versione nuova avvisa gli amministratori con una notifica sull'app e un'email. Spento, ORION chiede solo quando premi "Controlla adesso".</small>
                     </span>
                 </label>
 
@@ -90,10 +90,12 @@
                         Indirizzo del manifesto
                         <input type="text" id="aggiornamenti-manifesto" placeholder="https://..." spellcheck="false">
                     </label>
+                    <div class="gruppo-azioni">
+                        <button type="button" id="btn-salva-aggiornamenti" class="button-style button-secondary">Salva</button>
+                    </div>
                 </details>
 
                 <div class="gruppo-azioni">
-                    <button type="button" id="btn-salva-aggiornamenti" class="button-style button-secondary">Salva</button>
                     <button type="button" id="btn-controlla" class="button-style button-secondary">Controlla adesso</button>
                     <button type="button" id="btn-aggiorna" class="button-style" hidden>Aggiorna</button>
                     <span id="stato-controllo" class="nota"></span>
@@ -204,16 +206,7 @@
             <div class="modal-body" style="padding: 20px;">
                 <p class="riga-backup-scelto" id="versione-scelta"></p>
 
-                <div class="riquadro-pericolo">
-                    <p>L'aggiornamento sostituisce i file del programma e aggiorna il database.
-                       <strong>I dati non si perdono</strong>: prima parte un backup, e le
-                       migrazioni vengono applicate prima di toccare qualunque file, così se il
-                       database le rifiuta l'installazione resta quella di adesso.</p>
-                    <p>Viene messa da parte anche una copia del codice attuale, per poter tornare
-                       indietro.</p>
-                    <p>Durante l'operazione l'applicazione non è utilizzabile: fallo quando non c'è
-                       un'emergenza in corso.</p>
-                </div>
+                <p class="avviso-aggiornamento">ORION resta fermo per qualche minuto. Prima viene salvato un backup del database.</p>
 
                 <label class="campo">
                     La tua password

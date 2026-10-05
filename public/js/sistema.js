@@ -308,9 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contenitore.appendChild(voceStato('Versione installata', versione.versione_installata));
 
         const controllo = versione.ultimo_controllo || {};
-        if (!versione.aggiornamenti.attivo) {
-            contenitore.appendChild(voceStato('Controllo aggiornamenti', 'spento'));
-        } else if (controllo.errore) {
+        if (controllo.errore) {
             contenitore.appendChild(voceStato('Ultimo controllo', controllo.errore, 'attenzione'));
         } else if (controllo.versione) {
             contenitore.appendChild(voceStato(
@@ -366,7 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('aggiornamenti-origine').addEventListener('change', mostraCampiOrigine);
 
-    $('btn-salva-aggiornamenti').addEventListener('click', async () => {
+    async function salvaConfigAggiornamenti(messaggio) {
         try {
             await fetchApi('/api/sistema/aggiornamenti/config', {
                 method: 'PUT',
@@ -377,12 +375,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     manifesto: $('aggiornamenti-manifesto').value.trim()
                 })
             });
-            $('stato-controllo').textContent = 'Impostazioni salvate.';
+            $('stato-controllo').textContent = messaggio;
             await caricaVersione();
         } catch (e) {
             $('stato-controllo').textContent = e.message;
         }
-    });
+    }
+
+    $('btn-salva-aggiornamenti').addEventListener('click', () => salvaConfigAggiornamenti('Origine salvata.'));
+    // La casella vale da sola: niente Salva da ricordarsi.
+    $('aggiornamenti-attivo').addEventListener('change', (e) => salvaConfigAggiornamenti(e.target.checked
+        ? 'Controllo giornaliero acceso.'
+        : 'Controllo giornaliero spento.'));
 
     $('btn-controlla').addEventListener('click', async (evento) => {
         const pulsante = evento.currentTarget;

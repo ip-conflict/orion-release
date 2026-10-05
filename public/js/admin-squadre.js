@@ -266,7 +266,7 @@ async function loadSquadreAdmin() {
                     ${squadra.nome ? escapeHTML(squadra.nome) : '<em style="opacity: 0.6;">Nessuna descrizione</em>'}
                 </td>
                 <td>
-                    <span style="background: rgba(139, 92, 246, 0.15); color: #6d28d9; padding: 4px 12px; border-radius: 50px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.3); display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="bollino info">
                         <i class="fas fa-users"></i> ${memberCount} Volontari
                     </span>
                 </td>

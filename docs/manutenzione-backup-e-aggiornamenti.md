@@ -25,8 +25,8 @@ La vede solo l'amministratore. Contiene, in quest'ordine:
 
 1. lo **stato**: quando è stato fatto l'ultimo backup e quanti ce ne sono, con
    il colore che cambia se l'ultimo è vecchio;
-2. la **versione installata** e, se il controllo è acceso, quella pubblicata,
-   con le sue note e il pulsante per aggiornare;
+2. la **versione installata** e, dopo un controllo, quella pubblicata, con le
+   sue note e il pulsante per aggiornare;
 3. i **backup disponibili**, di entrambe le cartelle (quelli notturni scritti
    da root e quelli che fa l'applicazione), con scarica / ripristina / elimina;
 4. il **caricamento di un archivio da fuori**, per la chiavetta e per il
@@ -173,16 +173,39 @@ dall'utente sono già suoi) o si fanno una volta sola all'installazione.
    cancellata: PM2 restava acceso ma non rispondeva più ai comandi, e
    l'APK messo a mano spariva. Ai file copiati si toglie la scrittura per
    gruppo e altri.
+   L'app Android del pacchetto si copia a parte, e solo se è più nuova di
+   quella installata (`codice` di `versione.json`) e firmata con la stessa
+   chiave (`certificato_sha256`): altrimenti i telefoni non vedrebbero mai la
+   versione nuova. Un APK firmato da altri, o più nuovo, resta com'è; prima
+   si copia l'APK e poi `versione.json`, così non si annuncia una versione
+   che non si scarica. Un errore qui non ferma l'aggiornamento.
 8. **Riavvio**, o l'avviso che va fatto a mano.
 
 La cartella di lavoro si cancella alla fine, anche dopo un errore.
 
-### Il controllo è spento finché non lo si accende
+### Il controllo giornaliero è spento finché non lo si accende
 
 Un'applicazione che contatta da sola un server esterno deve essere una scelta di
 chi la installa, non una sorpresa che si scopre guardando i log del firewall. Di
-base ORION non chiede niente a nessuno; da accesa, il controllo parte solo
-quando si preme il pulsante.
+base ORION non chiede niente a nessuno da solo. "Controlla adesso" funziona
+sempre, perché lo preme una persona.
+
+La casella "Cerca aggiornamenti ogni giorno" accende il controllo automatico:
+il server guarda ogni ora se l'ultimo controllo ha più di un giorno e solo
+allora chiede l'ultima versione, così un server riavviato spesso non
+interroga il servizio a ogni avvio. Quando trova una versione più recente
+avvisa gli amministratori attivi con una notifica sull'app (tipo
+`aggiornamento_disponibile`) e un'email, se la posta è configurata. L'avviso
+parte una volta sola per versione: la versione annunciata resta nello stato
+degli aggiornamenti (`avvisata`).
+
+### In emergenza non si aggiorna
+
+Con un'emergenza aperta l'aggiornamento è bloccato: è uno dei requisiti che la
+pagina mostra prima, insieme alla cartella scrivibile e allo spazio su disco,
+e il pulsante Aggiorna non compare. Il server rifiuta comunque la richiesta
+(409). Durante l'aggiornamento l'applicazione resta ferma qualche minuto, e
+una sala operativa non può permetterselo.
 
 Due origini possibili: le *release* di un progetto su GitHub (il caso normale) o
 un **manifesto JSON** su un indirizzo qualunque, per chi distribuisce il
@@ -215,9 +238,9 @@ riallineano le migrazioni, a ogni aggiornamento e a ogni avvio.
 
 ### Cosa non fa
 
-- **Non aggiorna da solo.** Nessun aggiornamento automatico: è
-  l'amministratore che decide quando, perché durante un'emergenza
-  l'applicazione non deve fermarsi mai.
+- **Non aggiorna da solo.** Il controllo giornaliero avvisa e basta: è
+  l'amministratore che decide quando aggiornare, e con un'emergenza aperta
+  non può farlo.
 - **Non torna indietro da solo.** La copia del codice c'è e il messaggio dice
   dov'è, ma il ritorno alla versione precedente si fa a mano: automatizzare un
   rollback significa scrivere un secondo percorso rischioso che si prova una

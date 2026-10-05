@@ -30,7 +30,8 @@ export function registraRotteManutenzione(app, ctx) {
         pool, logger, registraAudit, soloAdmin,
         eseguiBackup, cartellaApp, cartellaCron, cartellaFile,
         connessioneDb, cartellaApplicazione, versioneInstallata,
-        impostaManutenzione, avvisaClienti, caricaArchivio
+        impostaManutenzione, avvisaClienti, caricaArchivio,
+        emergenzaAttiva = () => null, notificaA = null, inviaEmail = null
     } = ctx;
 
     // Dove finisce il resoconto dell'ultimo ripristino: l'applicazione si
@@ -593,7 +594,9 @@ export function registraRotteManutenzione(app, ctx) {
     // leggendole dal pacchetto nuovo: se falliscono, gira ancora la versione
     // di prima. Prima di sostituire i file si mette da parte il codice attuale.
     const CONFIG_AGGIORNAMENTI = {
-        // Di base non si contatta nessun server esterno.
+        // attivo: il controllo giornaliero automatico, con l'avviso agli
+        // amministratori. Di base spento: da solo ORION non contatta nessuno.
+        // "Controlla adesso" funziona sempre, perché lo preme una persona.
         attivo: false,
         origine: 'github',
         repo: 'ip-conflict/orion-release',
@@ -682,6 +685,12 @@ export function registraRotteManutenzione(app, ctx) {
             }
         } catch { /* statfs non disponibile: si prosegue, il download fallira' semmai da solo */ }
 
+        // In emergenza l'applicazione non si ferma, nemmeno per pochi minuti.
+        const emergenza = emergenzaAttiva();
+        if (emergenza) {
+            problemi.push(`C'è un'emergenza aperta (${emergenza.code}): si aggiorna dopo averla chiusa.`);
+        }
+
         if (process.env.pm_id === undefined && !process.env.PM2_HOME) {
             avvertenze.push('L\'applicazione non risulta avviata con PM2: al termine dell\'aggiornamento resterà ferma finché qualcuno non la riavvia sul server.');
         }
@@ -766,36 +775,88 @@ export function registraRotteManutenzione(app, ctx) {
         res.json(nuova);
     });
 
-    app.post('/api/sistema/aggiornamenti/controlla', soloAdmin, async (req, res) => {
-        const config = await leggiImpostazione('aggiornamenti_config', CONFIG_AGGIORNAMENTI);
-        if (!config.attivo) {
-            return res.status(400).json({
-                message: 'Il controllo degli aggiornamenti e\' spento. Si accende qui sopra, e da quel momento l\'applicazione contattera\' il servizio indicato.'
-            });
-        }
+    // Un controllo: chiede l'ultima versione e ne salva l'esito. Lancia se il
+    // servizio non risponde, dopo aver salvato l'errore.
+    async function controllaVersione(config) {
+        const precedente = await leggiImpostazione('aggiornamenti_stato', {});
         try {
             const trovata = await cercaVersione(config);
-            const stato = {
+            await scriviImpostazione('aggiornamenti_stato', {
                 controllato_il: new Date().toISOString(),
                 versione: trovata.versione,
                 note: trovata.note,
                 pubblicata_il: trovata.pubblicata_il,
                 pacchetto: trovata.pacchetto,
                 sha256: trovata.sha256,
-                errore: null
-            };
-            await scriviImpostazione('aggiornamenti_stato', stato);
-            res.json(await statoAggiornamenti());
+                errore: null,
+                // L'ultima versione già annunciata: un avviso per versione.
+                avvisata: precedente.avvisata || null
+            });
+            return trovata;
         } catch (e) {
-            logger.error('[Manutenzione] Controllo aggiornamenti non riuscito:', { error: e.message });
             await scriviImpostazione('aggiornamenti_stato', {
                 controllato_il: new Date().toISOString(),
                 versione: null, note: null, pubblicata_il: null,
-                errore: e.message
+                errore: e.message,
+                avvisata: precedente.avvisata || null
             });
+            throw e;
+        }
+    }
+
+    app.post('/api/sistema/aggiornamenti/controlla', soloAdmin, async (req, res) => {
+        const config = await leggiImpostazione('aggiornamenti_config', CONFIG_AGGIORNAMENTI);
+        try {
+            await controllaVersione(config);
+            res.json(await statoAggiornamenti());
+        } catch (e) {
+            logger.error('[Manutenzione] Controllo aggiornamenti non riuscito:', { error: e.message });
             res.status(502).json({ message: `Controllo non riuscito: ${e.message}` });
         }
     });
+
+    // Il controllo giornaliero, se acceso. Il server lo chiama ogni ora e
+    // parte solo quando l'ultimo controllo ha più di un giorno: un server
+    // riavviato spesso non interroga GitHub a ogni avvio.
+    const ORE_TRA_CONTROLLI = 24;
+    async function controlloAutomatico() {
+        try {
+            const config = await leggiImpostazione('aggiornamenti_config', CONFIG_AGGIORNAMENTI);
+            if (!config.attivo) return;
+            const stato = await leggiImpostazione('aggiornamenti_stato', {});
+            const ultimo = stato.controllato_il ? new Date(stato.controllato_il).getTime() : 0;
+            if (Date.now() - ultimo < (ORE_TRA_CONTROLLI - 0.5) * 3600000) return;
+            const trovata = await controllaVersione(config);
+            if (versionePiuRecente(trovata.versione, versioneInstallata)) await avvisaAmministratori(trovata.versione);
+        } catch (e) {
+            logger.warn('[Manutenzione] Controllo automatico degli aggiornamenti non riuscito:', { error: e.message });
+        }
+    }
+
+    // Una notifica sull'app e un'email agli amministratori, una volta sola
+    // per versione.
+    async function avvisaAmministratori(nuova) {
+        const stato = await leggiImpostazione('aggiornamenti_stato', {});
+        if (stato.avvisata === nuova) return;
+        const { rows } = await pool.query(
+            `SELECT DISTINCT u.id, u.email FROM users u JOIN utenti_ruoli ur ON ur.user_id = u.id
+             WHERE COALESCE(u.is_active, true) = true AND ur.ruolo = 'admin'`);
+        const titolo = `ORION ${nuova} disponibile`;
+        const testo = `Installata la ${versioneInstallata}. Si aggiorna dalla pagina Sistema, a emergenza chiusa.`;
+        if (typeof notificaA === 'function') {
+            await notificaA(rows.map(r => r.id), { tipo: 'aggiornamento_disponibile', titolo, testo, chiave: `aggiornamento:${nuova}` });
+        }
+        if (typeof inviaEmail === 'function') {
+            for (const { email } of rows) {
+                if (!email) continue;
+                const esito = await inviaEmail(email, `[ORION] ${titolo}`, `${testo}\n`);
+                // Senza posta configurata è inutile riprovare con gli altri.
+                if (!esito?.success) break;
+            }
+        }
+        await scriviImpostazione('aggiornamenti_stato', { ...stato, avvisata: nuova });
+        logger.info(`[Manutenzione] Avvisati ${rows.length} amministratori della versione ${nuova}.`);
+    }
 
     app.post('/api/sistema/aggiornamenti/applica', soloAdmin, async (req, res) => {
         const { password, conferma } = req.body || {};
@@ -938,6 +999,7 @@ export function registraRotteManutenzione(app, ctx) {
                 throw new Error('Dopo la copia le dipendenze non risultano al loro posto.');
             }
             ultimoPasso('fatto');
+            await aggiornaAppAndroid(radice);
         } catch (e) {
             ultimoPasso('errore');
             impostaManutenzione(null);
@@ -1034,6 +1096,55 @@ export function registraRotteManutenzione(app, ctx) {
     const ESCLUSIONI = ['/.*', '/uploads', '/protected_uploads', '/logs', '/app-android',
                         '/public/uploads', '/public/logo.png', '/public/logo2.png'];
 
+    // L'app Android arriva con la release. app-android resta fuori dalla
+    // sostituzione (un APK messo a mano non si perde), ma l'APK del pacchetto
+    // si copia quando e' piu' nuovo di quello installato e firmato con la
+    // stessa chiave: senza, i telefoni non vedrebbero mai la versione nuova.
+    // Un APK firmato da altri o piu' nuovo resta com'e'. Un errore qui non
+    // ferma l'aggiornamento del server.
+    async function aggiornaAppAndroid(radice) {
+        const leggi = async (cartella) => {
+            try {
+                return JSON.parse(await fs.promises.readFile(path.join(cartella, 'versione.json'), 'utf8'));
+            } catch {
+                return null;
+            }
+        };
+        const origine = path.join(radice, 'app-android');
+        const destinazione = path.join(cartellaApplicazione, 'app-android');
+        const nuova = await leggi(origine);
+        if (!Number.isInteger(nuova?.codice) || !fs.existsSync(path.join(origine, 'orion.apk'))) return;
+        const attuale = await leggi(destinazione);
+        const apkPresente = fs.existsSync(path.join(destinazione, 'orion.apk'));
+        let motivo = null;
+        if (attuale && apkPresente) {
+            if (Number.isInteger(attuale.codice) && attuale.codice >= nuova.codice) return;
+            if (attuale.certificato_sha256 && nuova.certificato_sha256 && attuale.certificato_sha256 !== nuova.certificato_sha256) {
+                motivo = 'l\'APK installato e\' firmato con un\'altra chiave';
+            }
+        }
+        if (motivo) {
+            passo(`App Android ${nuova.nome || nuova.codice}: lasciata quella installata (${motivo})`, 'saltato');
+            return;
+        }
+        passo(`App Android ${nuova.nome || nuova.codice}`);
+        try {
+            await fs.promises.mkdir(destinazione, { recursive: true });
+            // Prima l'APK, poi versione.json: un telefono non deve vedere
+            // annunciata una versione che non si scarica ancora.
+            const temporaneo = path.join(destinazione, `.orion.apk.${process.pid}`);
+            await fs.promises.copyFile(path.join(origine, 'orion.apk'), temporaneo);
+            await fs.promises.rename(temporaneo, path.join(destinazione, 'orion.apk'));
+            await fs.promises.copyFile(path.join(origine, 'versione.json'), path.join(destinazione, 'versione.json'));
+            for (const nome of ['orion.apk', 'versione.json']) await fs.promises.chmod(path.join(destinazione, nome), 0o644).catch(() => {});
+            ultimoPasso('fatto');
+        } catch (e) {
+            await fs.promises.rm(path.join(destinazione, `.orion.apk.${process.pid}`), { force: true }).catch(() => {});
+            logger.error('[Manutenzione] Copia dell\'app Android non riuscita:', { error: e.message });
+            ultimoPasso('errore');
+        }
+    }
+
     async function copiaVersione(radice) {
         if (eseguibilePresente('rsync')) {
             // --delete-after toglie i file che la versione nuova non ha più,
@@ -1096,5 +1207,5 @@ export function registraRotteManutenzione(app, ctx) {
         });
     }
 
-    return { elencoBackup, verificaArchivio, statoOperazione: () => operazione };
+    return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico };
 }

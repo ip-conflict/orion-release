@@ -71,8 +71,8 @@
     overflow-wrap: anywhere;
 }
 
-.voce-stato .valore.allarme { color: #dc2626; }
-.voce-stato .valore.attenzione { color: #b45309; }
+.voce-stato .valore.allarme { color: var(--danger-text); }
+.voce-stato .valore.attenzione { color: var(--warning-text); }
 
 /* --- Passi di un'operazione -------------------------------------------- */
 .passi {
@@ -179,7 +179,7 @@
 
 .errore {
     margin-top: 14px;
-    color: #dc2626;
+    color: var(--danger-text);
     font-size: 0.9rem;
 }
 
@@ -288,4 +288,62 @@
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 12px 14px;
+}
+
+/* Le finestre di conferma (ripristino, aggiornamento): sopra la pagina, al
+   centro dello schermo, con la X in alto a destra. Senza questi stili
+   finivano in fondo alla pagina e bisognava scorrere per trovarle. */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+    box-sizing: border-box;
+}
+.modal-overlay[hidden] { display: none; }
+.modal-overlay .modal-content {
+    width: 100%;
+    min-width: 0; /* il min-width di 400px dei modali del centro operativo */
+    box-sizing: border-box;
+    max-height: calc(100dvh - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.modal-overlay .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.modal-overlay .modal-body { overflow-y: auto; }
+.modal-overlay .close-modal-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 2px 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+}
+.modal-overlay .close-modal-btn:hover { color: var(--text-color); background: var(--secondary-bg-color); }
+
+
+.avviso-aggiornamento {
+    margin: 12px 0 0 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--warning-soft-bg);
+    color: var(--warning-text);
+    font-size: 0.92rem;
 }

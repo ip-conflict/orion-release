@@ -506,11 +506,13 @@ scaricata una copia e tenuta altrove.
 
 ### Aggiornamenti
 
-Sempre dalla pagina **Sistema**: si vede la versione installata e, se il
-controllo è acceso, se ne esiste una più recente, con le note di quella versione.
+Sempre dalla pagina **Sistema**: si vede la versione installata e, con
+"Controlla adesso", se ne esiste una più recente, con le note di quella versione.
 
-- **Di base il controllo è spento**: finché non lo si accende, ORION non
-  contatta nessun servizio esterno. Le versioni si possono cercare fra le
+- **Di base il controllo giornaliero è spento**: finché non lo si accende,
+  ORION contatta il servizio solo quando un amministratore preme il pulsante.
+  Acceso, controlla una volta al giorno e avvisa gli amministratori con una
+  notifica sull'app e un'email. Le versioni si possono cercare fra le
   *release* del progetto su GitHub oppure su un indirizzo proprio, indicando un
   piccolo manifesto JSON.
 - **L'ordine dell'aggiornamento è pensato perché un guasto non lasci
@@ -524,8 +526,8 @@ controllo è acceso, se ne esiste una più recente, con le note di quella versio
   nascosti della cartella (che è anche la home dell'utente di sistema, con la
   configurazione di PM2 e di npm), i dati caricati, i loghi, i registri e la
   cartella `app-android` con l'APK.
-- **Non si aggiorna da solo**: decide l'amministratore, che sa se c'è
-  un'emergenza in corso.
+- **Non si aggiorna da solo**: decide l'amministratore, e con un'emergenza
+  aperta l'aggiornamento è bloccato.
 - Il numero di versione è quello delle release pubbliche, dalla 1.0.0 in poi.
   Le versioni 3.x citate nella documentazione sono la numerazione interna di
   sviluppo, precedente alla 1.0.

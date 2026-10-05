@@ -26,7 +26,8 @@ const CATEGORIA_DEL_TIPO = {
     dpi_da_confermare: 'personale',
     scadenza: 'personale',
     segreteria_riepilogo: 'segreteria',
-    magazzino_riepilogo: 'magazzino'
+    magazzino_riepilogo: 'magazzino',
+    aggiornamento_disponibile: 'personale'
 };
 
 // Una notifica che non è ancora scaduta.

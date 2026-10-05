@@ -1496,15 +1496,15 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     box-shadow: -4px 0 16px var(--shadow-color, rgba(0,0,0,0.2));
 }
 #pannello-eventi.chiuso #contenuto-eventi { display: none; }
-/* A colonna chiusa la linguetta scende sotto ai comandi della mappa (livelli e
-   ricerca), che stanno nello stesso angolo e le finirebbero sopra. */
+/* Livelli e ricerca stanno in basso a sinistra: la linguetta sale in cima,
+   alla stessa altezza degli avvisi a comparsa. */
 #pannello-eventi.chiuso #toggle-eventi-btn {
     border-right: 1px solid var(--border-color);
     border-radius: 10px 0 0 10px;
-    margin-top: 100px;
+    margin-top: 12px;
 }
-/* A colonna aperta la linguetta sparisce: resterebbe a cavallo del bordo,
-   sotto ai comandi della mappa, e per chiudere basta la X nell'intestazione. */
+/* A colonna aperta la linguetta sparisce: per chiudere basta la X
+   nell'intestazione. */
 #pannello-eventi:not(.chiuso) #toggle-eventi-btn { display: none; }
 #chiudi-eventi-btn {
     border: none;
@@ -1585,10 +1585,10 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
    nulla: chi sta scrivendo l'indirizzo di un intervento continua a scrivere. */
 #contenitore-avvisi {
     position: fixed;
-    /* Spostato a sinistra dei comandi della mappa (livelli e ricerca): un avviso
-       che copre i pulsanti costringerebbe a chiuderlo per poter lavorare. */
-    top: 84px;
-    right: 96px;
+    /* In cima alla mappa, accanto alla linguetta degli eventi e alla sua
+       altezza (intestazione 60px + 12px). */
+    top: 72px;
+    right: 136px;
     z-index: 4000;
     display: flex;
     flex-direction: column;
@@ -1928,3 +1928,174 @@ body.eventi-aperti #contenitore-avvisi {
     body.dettaglio-aperto #map-container { flex: 1 1 auto !important; }
     #report-detail-side-panel { max-width: none !important; }
 }
+
+/* ==========================================================================
+   Strumenti della mappa: ricerca e livelli in basso a sinistra, riquadro
+   delle squadre, percorso verso la segnalazione.
+   ========================================================================== */
+.leaflet-bottom.leaflet-left .leaflet-control { margin-left: 12px; margin-bottom: 12px; }
+/* La barra delle squadre non arriva sotto ai comandi degli angoli. */
+#team-status-panel { max-width: min(800px, calc(100% - 150px)) !important; }
+
+.ricerca-mappa {
+    position: relative;
+    background: var(--surface-color);
+    border-radius: 10px !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 2px 8px var(--shadow-color, rgba(0,0,0,0.18)) !important;
+}
+.ricerca-riga { display: flex; align-items: center; }
+.ricerca-apri {
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: transparent; color: var(--text-color);
+    cursor: pointer; border-radius: 10px;
+}
+.ricerca-apri:hover { background: var(--secondary-bg-color); }
+.ricerca-campo {
+    width: 300px;
+    border: none !important;
+    border-left: 1px solid var(--border-color) !important;
+    border-radius: 0 10px 10px 0 !important;
+    padding: 9px 12px !important;
+    background: transparent !important;
+    color: var(--text-color);
+    font-size: 0.92rem;
+    box-shadow: none !important;
+}
+.ricerca-risultati {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: 340px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px var(--shadow-color, rgba(0,0,0,0.22));
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ricerca-risultati[hidden] { display: none; }
+.ricerca-voce {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    align-items: baseline;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+}
+.ricerca-voce:hover, .ricerca-voce.scelta { background: var(--secondary-bg-color); }
+.ricerca-tipo {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+.ricerca-tipo.tipo-segnalazione { color: var(--danger-text); }
+.ricerca-tipo.tipo-squadra { color: var(--primary-color); }
+.ricerca-nome { font-size: 0.9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ricerca-dettaglio { grid-column: 2; font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ricerca-nota { font-size: 0.8rem; color: var(--text-muted); padding: 6px 10px; }
+
+/* I livelli come la ricerca: stessa forma. */
+.leaflet-bottom.leaflet-left .leaflet-control-layers {
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px var(--shadow-color, rgba(0,0,0,0.18));
+    background: var(--surface-color);
+    color: var(--text-color);
+}
+.leaflet-bottom.leaflet-left .leaflet-control-layers-toggle {
+    width: 38px !important; height: 38px !important; border-radius: 10px;
+}
+
+/* --- Il riquadro di una squadra ------------------------------------------- */
+.popup-orion .leaflet-popup-content-wrapper {
+    background: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+.popup-orion .leaflet-popup-tip { background: var(--surface-color); }
+.popup-orion .leaflet-popup-content { margin: 12px 14px; }
+.riquadro-squadra { display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; }
+.rs-testa { display: flex; align-items: center; gap: 10px; padding-right: 14px; }
+.rs-testa div { display: flex; flex-direction: column; min-width: 0; }
+.rs-testa strong { font-size: 1.05rem; }
+.rs-testa div span { color: var(--text-muted); font-size: 0.82rem; }
+.rs-lettera {
+    flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #F28100; border: 1.5px solid #0B233F; color: #fff;
+    font-weight: 700; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+.rs-stato {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 7px 10px; border-radius: 8px; font-weight: 600;
+}
+.rs-stato.libera { background: var(--success-soft-bg); color: var(--success-text); }
+.rs-stato.in-viaggio { background: var(--info-soft-bg, var(--secondary-bg-color)); color: var(--info-text); }
+.rs-stato.sul-posto { background: var(--warning-soft-bg); color: var(--warning-text); }
+.rs-distanza { font-weight: 400; font-size: 0.8rem; opacity: 0.9; }
+.rs-righe { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
+.rs-righe dt { color: var(--text-muted); }
+.rs-righe dd { margin: 0; }
+.rs-righe dd.attenzione { color: var(--warning-text); }
+.rs-azioni { display: flex; gap: 8px; justify-content: flex-end; }
+.rs-azioni .button-style { padding: 6px 12px; font-size: 0.85rem; }
+
+/* La squadra appena cercata pulsa per qualche istante. */
+.team-marker-div-icon.team-marker-cercato { animation: squadraCercata 0.8s ease-out 4; }
+@keyframes squadraCercata {
+    0%   { box-shadow: 0 0 0 0 rgba(36, 119, 179, 0.7); }
+    100% { box-shadow: 0 0 0 18px rgba(36, 119, 179, 0); }
+}
+
+/* --- Il percorso in corso di visione -------------------------------------- */
+/* In basso, sopra la barra delle squadre: in alto stanno gli avvisi. */
+#info-percorso {
+    position: absolute;
+    bottom: 88px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100% - 260px);
+    padding: 8px 10px 8px 14px;
+    background: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 10px;
+    box-shadow: 0 4px 14px var(--shadow-color, rgba(0,0,0,0.2));
+    font-size: 0.88rem;
+}
+#info-percorso > span { display: flex; flex-direction: column; min-width: 0; }
+#info-percorso .dettaglio-percorso { color: var(--text-muted); font-size: 0.82rem; }
+#info-percorso button {
+    border: none; background: none; color: var(--text-muted);
+    font-size: 1.3rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+#info-percorso button:hover { color: var(--text-color); }
+
+@media (max-width: 760px) {
+    /* Sopra alla barra delle squadre, che sul telefono prende tutta la larghezza. */
+    .leaflet-bottom.leaflet-left { bottom: 64px; }
+    .ricerca-campo { width: min(240px, calc(100vw - 90px)); }
+    .ricerca-risultati { width: min(300px, calc(100vw - 32px)); }
+    #info-percorso { max-width: calc(100% - 24px); bottom: auto; top: 8px; }
+    #team-status-panel { max-width: none !important; }
+}
+

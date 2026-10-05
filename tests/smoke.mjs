@@ -437,9 +437,10 @@ async function eseguiTest() {
     const impostazioniBase = {};
     // Senza la posta e senza le configurazioni dei moduli (magazzino_config,
     // segreteria_config...): hanno le loro rotte, e riscriverle da questa
-    // foto rimetterebbe le opzioni di prima a meta' delle prove.
+    // foto rimetterebbe le opzioni di prima a meta' delle prove. Lo stato
+    // degli aggiornamenti lo scrive solo il programma: da qui e' rifiutato.
     Object.entries(impostazioniPrima.corpo || {}).forEach(([k, v]) => {
-        if (!k.startsWith('smtp_') && !k.endsWith('_config')) impostazioniBase[k] = v;
+        if (!k.startsWith('smtp_') && !k.endsWith('_config') && !k.startsWith('aggiornamenti_')) impostazioniBase[k] = v;
     });
 
     await admin.chiamata('/api/branding/settings', {
@@ -1970,6 +1971,33 @@ async function eseguiTest() {
         const caricato = await admin.chiamata('/api/sistema/backup/carica', { method: 'POST', body: modulo });
         verifica('un backup con un comando di psql viene rifiutato al caricamento -> 400',
             caricato.stato === 400 && /comando di psql/.test(caricato.corpo?.message || ''), `HTTP ${caricato.stato} ${JSON.stringify(caricato.corpo)}`);
+    }
+
+    // "Controlla adesso" funziona anche con il controllo giornaliero spento.
+    // Il servizio è una porta chiusa sulla macchina stessa: niente rete.
+    {
+        const configPrima = (await admin.chiamata('/api/sistema/versione')).corpo?.aggiornamenti || {};
+        await admin.chiamata('/api/sistema/aggiornamenti/config', {
+            method: 'PUT', body: { attivo: false, origine: 'manifesto', manifesto: 'http://127.0.0.1:1/orion.json' }
+        });
+        const aMano = await admin.chiamata('/api/sistema/aggiornamenti/controlla', { method: 'POST' });
+        verifica('il controllo a mano parte anche col giornaliero spento (servizio irraggiungibile -> 502)',
+            aMano.stato === 502 && !/spento/.test(aMano.corpo?.message || ''), `HTTP ${aMano.stato} ${JSON.stringify(aMano.corpo)}`);
+        await admin.chiamata('/api/sistema/aggiornamenti/config', {
+            method: 'PUT', body: { attivo: !!configPrima.attivo, origine: configPrima.origine || 'github', manifesto: configPrima.manifesto || '' }
+        });
+    }
+
+    // Con un'emergenza aperta non si aggiorna: lo dicono già i requisiti.
+    {
+        const stato = await admin.chiamata('/api/emergencies/status');
+        const giaAperta = !!(stato.corpo?.emergency || stato.corpo?.active);
+        if (!giaAperta) await admin.chiamata('/api/emergencies/open', { method: 'POST', body: { external_code: `AGG-${Date.now().toString().slice(-6)}` } });
+        const inEmergenza = await admin.chiamata('/api/sistema/versione');
+        verifica('con un\'emergenza aperta l\'aggiornamento è bloccato',
+            inEmergenza.corpo?.requisiti?.pronto === false && (inEmergenza.corpo?.requisiti?.problemi || []).some(p => /emergenza aperta/.test(p)),
+            JSON.stringify(inEmergenza.corpo?.requisiti));
+        if (!giaAperta) await admin.chiamata('/api/emergencies/close', { method: 'POST', body: {} });
     }
 
     const aggiornaSenzaConferma = await admin.chiamata('/api/sistema/aggiornamenti/applica', {
