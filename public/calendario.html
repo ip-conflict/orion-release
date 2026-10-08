@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Calendario</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/calendario.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body>
+<div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+    <nav class="admin-sidebar">
+        <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+            <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+            <h2 style="margin: 0;">ORION</h2>
+        </div>
+        <ul class="sidebar-menu"></ul>
+    </nav>
+
+    <main class="admin-content">
+        <header class="content-header">
+            <h1>Calendario</h1>
+            <p class="sottotitolo">Attività del gruppo, emergenze e scadenze. Le presenze di ognuno finiscono nel suo libretto.</p>
+        </header>
+
+        <section id="modulo-spento" class="riquadro-avviso" hidden>
+            <strong>Il modulo Attività è spento.</strong>
+            Un amministratore lo accende da Impostazioni. Attività e presenze non sono andate perse.
+        </section>
+
+        <div id="da-rispondere" class="riquadro-avviso" hidden></div>
+
+        <div class="barra-calendario">
+            <div class="navigazione-mese">
+                <button type="button" class="btn-icona" id="mese-prima" aria-label="Mese precedente"><i class="fas fa-chevron-left"></i></button>
+                <h2 id="titolo-mese" aria-live="polite"></h2>
+                <button type="button" class="btn-icona" id="mese-dopo" aria-label="Mese successivo"><i class="fas fa-chevron-right"></i></button>
+                <button type="button" class="button-style button-secondary btn-piccolo" id="mese-oggi">Oggi</button>
+            </div>
+            <div class="gruppo-azioni">
+                <button type="button" class="button-style button-secondary" id="btn-assenza">Segna un'assenza</button>
+                <button type="button" class="button-style button-secondary" id="btn-turno" hidden>Reperibilità</button>
+                <button type="button" class="button-style button-secondary" id="btn-presenze" hidden>Presenze</button>
+                <button type="button" class="button-style" id="btn-nuova" hidden>Nuova attività</button>
+            </div>
+        </div>
+        <div class="filtri-calendario" id="filtri" role="group" aria-label="Cosa mostrare"></div>
+
+        <div id="griglia" class="griglia-mese" aria-busy="true"></div>
+        <div id="agenda" class="agenda" hidden></div>
+    </main>
+</div>
+
+<!-- Un'attività: i dettagli, la risposta, e per chi organizza le persone e le azioni. -->
+<div id="modale-attivita" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="att-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <div class="segni" id="att-segni"></div>
+        <h2 id="att-titolo"></h2>
+        <dl class="dati-attivita" id="att-dati"></dl>
+        <p id="att-descrizione" class="descrizione"></p>
+
+        <p id="att-conduci" class="nota nota-conduci" hidden></p>
+        <section id="att-risposta" class="riquadro-risposta" hidden>
+            <h3 id="att-domanda">Ci sei?</h3>
+            <p id="att-risposta-attuale" class="nota"></p>
+            <input type="text" id="att-nota" maxlength="300" placeholder="Una nota per chi organizza (facoltativa)">
+            <div class="gruppo-azioni">
+                <button type="button" class="button-style" id="att-si">Ci sono</button>
+                <button type="button" class="button-style button-secondary" id="att-no">Non posso</button>
+            </div>
+        </section>
+
+        <!-- La simulazione: copione, sala, allertamento. Per la regia. -->
+        <section id="att-simulazione" class="riquadro-simulazione-scheda" hidden>
+            <div class="gruppo-azioni" id="att-sim-azioni"></div>
+        </section>
+
+        <section id="att-gestione" hidden>
+            <div class="gruppo-azioni azioni-gestione">
+                <button type="button" class="button-style" id="att-concludi">Chiudi con i presenti</button>
+                <button type="button" class="button-style button-secondary" id="att-modifica">Modifica</button>
+                <button type="button" class="button-style button-secondary" id="att-annulla">Annulla l'attività</button>
+                <button type="button" class="button-style btn-pericolo" id="att-elimina">Elimina</button>
+            </div>
+            <h3 id="att-titolo-persone">Convocati</h3>
+            <p id="att-conteggi" class="nota"></p>
+            <ul id="att-persone" class="elenco-persone"></ul>
+        </section>
+
+        <form id="form-presenze" class="riquadro-presenze" hidden>
+            <h3>Chi c'era</h3>
+            <p class="nota">Spunta i presenti e correggi gli orari di chi è arrivato dopo o andato via prima. Le ore finiscono nelle presenze di ognuno<span id="presenze-corso"></span>.</p>
+            <input type="search" id="cerca-presenti" placeholder="Cerca fra le persone..." aria-label="Cerca fra le persone">
+            <ul id="elenco-presenti" class="elenco-presenti"></ul>
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" id="annulla-presenze">Annulla</button>
+                <button type="submit" class="button-style">Salva le presenze</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Creare o cambiare un'attività. -->
+<div id="modale-form" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="form-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="form-titolo">Nuova attività</h2>
+        <form id="form-attivita">
+            <div class="griglia-campi">
+                <label>Tipo <button type="button" class="link-piccolo" id="gestisci-tipi">gestisci i tipi</button>
+                    <select id="f-tipo"></select>
+                </label>
+                <label class="campo-largo">Titolo <span class="obbligatorio">*</span>
+                    <input type="text" id="f-titolo" maxlength="150" required placeholder="Per esempio: addestramento motosega">
+                </label>
+                <label>Inizio <span class="obbligatorio">*</span>
+                    <input type="datetime-local" id="f-inizio" required>
+                </label>
+                <label>Fine <span class="obbligatorio">*</span>
+                    <input type="datetime-local" id="f-fine" required>
+                </label>
+                <label class="campo-largo">Dove
+                    <input type="text" id="f-luogo" maxlength="200" placeholder="Sede, campo sportivo, magazzino...">
+                </label>
+                <label class="campo-largo">Descrizione
+                    <textarea id="f-descrizione" rows="3" maxlength="4000" placeholder="Cosa si fa, cosa portare, abbigliamento..."></textarea>
+                </label>
+                <label>Responsabile
+                    <select id="f-responsabile"></select>
+                </label>
+                <label>Vale come corso
+                    <select id="f-corso"></select>
+                </label>
+            </div>
+
+            <!-- Solo per addestramenti ed esercitazioni. -->
+            <fieldset class="riquadro-scelte riquadro-simulazione" id="campo-simulazione" hidden>
+                <legend>Simulazione</legend>
+                <label class="scelta"><input type="radio" name="simulazione" value="" checked> <span><strong>Nessuna</strong></span></label>
+                <label class="scelta"><input type="radio" name="simulazione" value="allertamento"> <span><strong>Solo allertamento</strong>: si prova la chiamata dei volontari, senza aprire la sala</span></label>
+                <label class="scelta"><input type="radio" name="simulazione" value="sala"> <span><strong>Scenario in sala</strong>: il giorno stesso si apre la sala come in un'emergenza, con la scritta SIMULAZIONE, e la regia fa uscire gli eventi del copione</span></label>
+                <div id="dettagli-simulazione" class="griglia-campi" hidden>
+                    <label class="campo-largo">Scenario <span class="nota">(lo leggono tutti i partecipanti)</span>
+                        <textarea id="f-scenario" rows="3" maxlength="4000" placeholder="Per esempio: piena del torrente, allagamenti nella zona industriale, una frana sulla provinciale."></textarea>
+                    </label>
+                    <label class="campo-largo">Obiettivi
+                        <textarea id="f-obiettivi" rows="2" maxlength="4000" placeholder="Cosa si vuole provare: i tempi della sala, le idrovore, il collegamento radio..."></textarea>
+                    </label>
+                    <label class="campo-largo" id="campo-enti">Enti che partecipano
+                        <input type="text" id="f-enti" maxlength="500" placeholder="Comune, Vigili del fuoco...">
+                    </label>
+                    <div class="campo-largo">
+                        <strong>La regia</strong>
+                        <p class="nota">Il responsabile e le persone scelte qui: preparano il copione e lo conducono in sala. Il copione lo vedono solo loro, finché non decidono di pubblicarlo.</p>
+                        <select id="aggiungi-regia" aria-label="Aggiungi una persona alla regia"></select>
+                        <ul id="elenco-regia" class="chip-regia" aria-label="Le persone della regia"></ul>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="riquadro-scelte">
+                <legend>Chi è convocato</legend>
+                <label class="scelta"><input type="radio" name="convocazione" value="tutti" checked> <span><strong>Tutti gli interni</strong></span></label>
+                <label class="scelta"><input type="radio" name="convocazione" value="scelti"> <span><strong>Solo alcuni</strong>: la vedono solo loro</span></label>
+                <label class="scelta"><input type="radio" name="convocazione" value="aperta"> <span><strong>Aperta</strong>: la vedono tutti e aderisce chi vuole</span></label>
+                <div id="campo-posti" class="campo-posti" hidden>
+                    <label>Posti <input type="number" id="f-posti" min="1" step="1" placeholder="senza limite"></label>
+                </div>
+                <div id="scelta-persone" hidden>
+                    <input type="search" id="cerca-persone" placeholder="Cerca per nome..." aria-label="Cerca le persone da convocare">
+                    <p class="nota" id="conta-scelti"></p>
+                    <ul id="elenco-scelta" class="elenco-scelta"></ul>
+                </div>
+            </fieldset>
+
+            <fieldset class="riquadro-scelte">
+                <legend>Come avvisare</legend>
+                <label class="scelta"><input type="checkbox" id="f-app" checked> <span>Avviso nell'app</span></label>
+                <label class="scelta"><input type="checkbox" id="f-email"> <span>Email</span></label>
+                <p class="nota">Senza nessuno dei due la convocazione si vede solo nel calendario. Chi non è raggiungibile in nessun modo è segnato fra i convocati: va chiamato.</p>
+                <label class="scelta" id="campo-avvisa" hidden><input type="checkbox" id="f-avvisa" checked> <span>Avvisa del cambio chi non ha già detto di no</span></label>
+            </fieldset>
+
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" data-chiudi>Annulla</button>
+                <button type="submit" class="button-style" id="salva-attivita">Crea e convoca</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- I tipi di attività, con la loro natura: chi organizza. -->
+<div id="modale-tipi" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="tipi-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="tipi-titolo">Tipi di attività</h2>
+        <p class="nota">La natura decide cosa si può fare: gli addestramenti possono valere come corso, addestramenti ed esercitazioni possono avere la simulazione in sala.</p>
+        <table class="tabella-tipi"><thead><tr><th>Nome</th><th>Natura</th><th>In uso</th><th></th></tr></thead><tbody id="tipi-corpo"></tbody></table>
+        <form id="form-tipo" class="riga-nuovo-tipo">
+            <input type="text" id="nuovo-tipo-nome" maxlength="60" placeholder="Nuovo tipo, per esempio: Prova di evacuazione" required>
+            <select id="nuovo-tipo-natura"><option value="generica">Generica</option><option value="addestramento">Addestramento</option><option value="esercitazione">Esercitazione</option></select>
+            <button type="submit" class="button-style btn-piccolo">Aggiungi</button>
+        </form>
+    </div>
+</div>
+
+<!-- Un periodo di assenza: chi è assente non riceve le chiamate per tutti. -->
+<div id="modale-assenza" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="assenza-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="assenza-titolo">Segna un'assenza</h2>
+        <p class="nota">Ferie, lavoro, malattia: nei giorni indicati la sala sa che non ci sei e non ti chiama con gli altri. Il motivo è facoltativo e lo vede solo chi organizza.</p>
+        <form id="form-assenza">
+            <div class="griglia-campi">
+                <label>Dal <span class="obbligatorio">*</span> <input type="date" id="as-dal" required></label>
+                <label>Al <span class="obbligatorio">*</span> <input type="date" id="as-al" required></label>
+                <label class="campo-largo">Nota <input type="text" id="as-nota" maxlength="300" placeholder="facoltativa"></label>
+            </div>
+            <h3>Le tue assenze</h3>
+            <ul id="as-elenco" class="elenco-semplice"></ul>
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" data-chiudi>Chiudi</button>
+                <button type="submit" class="button-style">Salva l'assenza</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Un turno di reperibilità: chi organizza sceglie le persone e il periodo. -->
+<div id="modale-turno" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="turno-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="turno-titolo">Turno di reperibilità</h2>
+        <p class="nota">In emergenza la sala può chiamare con un clic solo i reperibili del giorno.</p>
+        <form id="form-turno">
+            <div class="griglia-campi">
+                <label>Dal <span class="obbligatorio">*</span> <input type="date" id="tu-dal" required></label>
+                <label>Al <span class="obbligatorio">*</span> <input type="date" id="tu-al" required></label>
+                <label class="campo-largo">Nota <input type="text" id="tu-nota" maxlength="300" placeholder="per esempio: settimana 42"></label>
+            </div>
+            <input type="search" id="tu-cerca" placeholder="Cerca per nome..." aria-label="Cerca le persone">
+            <p class="nota" id="tu-conta"></p>
+            <ul id="tu-elenco" class="elenco-scelta"></ul>
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" data-chiudi>Annulla</button>
+                <button type="submit" class="button-style">Metti di turno</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Un giorno di scadenze, o un'emergenza con le sue presenze. -->
+<div id="modale-info" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="info-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="info-titolo"></h2>
+        <div id="info-corpo"></div>
+    </div>
+</div>
+
+<!-- Il riepilogo delle presenze dell'anno. -->
+<div id="modale-presenze" class="modale" hidden>
+    <div class="contenuto-modale largo" role="dialog" aria-modal="true" aria-labelledby="pres-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="pres-titolo">Presenze</h2>
+        <div class="barra-presenze">
+            <label>Anno <select id="pres-anno"></select></label>
+            <a class="button-style button-secondary btn-piccolo" id="pres-csv" href="#">Scarica per il foglio di calcolo</a>
+        </div>
+        <div id="pres-corpo"></div>
+    </div>
+</div>
+
+<script src="/vendor/js-cookie/js.cookie.min.js"></script>
+<script src="/js/apiHelper.js"></script>
+<script src="/js/menu-laterale.js"></script>
+<script src="/js/chiamata-co.js"></script>
+<script src="/js/calendario.js"></script>
+</body>
+</html>

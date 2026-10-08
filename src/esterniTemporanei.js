@@ -206,19 +206,37 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                 }], req);
             }
 
+            // Nella funzione di supporto che lo ha chiamato (il medico nella F2),
+            // se il modulo è acceso: un accesso temporaneo lo può mettere ogni operatore.
+            let funzione = null;
+            const funzioneId = parseInt(req.body?.funzione_id, 10);
+            if (Number.isInteger(funzioneId) && funzioneId > 0) {
+                const f = await client.query(
+                    `SELECT f.id, f.sigla, f.nome FROM funzioni f
+                     WHERE f.id = $1 AND f.attiva
+                       AND EXISTS (SELECT 1 FROM branding_settings b WHERE b.setting_key = 'funzioni_enabled' AND b.setting_value = 'true')`,
+                    [funzioneId]);
+                if (f.rowCount === 0) throw erroreRichiesta('La funzione scelta non è attiva.');
+                funzione = f.rows[0];
+                await client.query('INSERT INTO funzione_membri (funzione_id, user_id, aggiunto_da) VALUES ($1, $2, $3)',
+                    [funzione.id, userId, chi]);
+            }
+
             const { codice, scade_il } = await nuovoCodice(client, userId, chi);
             await client.query('COMMIT');
 
             const link = indirizzo(codice);
             registraAudit(req, 'esterno_temporaneo.creato', {
                 tipo: 'utente', id: userId,
-                dettagli: { username, nome, ente, squadra: squadra?.nome_radio || null, emergenza: emergenza.code }
+                dettagli: { username, nome, ente, squadra: squadra?.nome_radio || null, funzione: funzione?.sigla || null, emergenza: emergenza.code }
             });
             if (squadra && typeof avvisaClienti === 'function') avvisaClienti('reload_squadre');
+            if (funzione && typeof avvisaClienti === 'function') avvisaClienti('reload_funzioni');
             const emailInviata = email ? await inviaInvito(email, nomeU, link, emergenza) : false;
             res.status(201).json({
                 id: userId, username, nome: nomeU, cognome: cognomeU, ente,
                 squadra: squadra ? { id: squadra.id, nome_radio: squadra.nome_radio, nome: squadra.nome } : null,
+                funzione,
                 codice, link, scade_il, email_inviata: emailInviata
             });
         } catch (e) {
@@ -245,7 +263,7 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                  LEFT JOIN accessi_temporanei a ON a.user_id = u.id
                  LEFT JOIN squadra_membri sm ON sm.username = u.username
                  LEFT JOIN squadre s ON s.id = sm.squadra_id
-                 WHERE u.temporaneo = true AND u.temporaneo_emergenza_id = $1
+                 WHERE u.temporaneo = true AND u.temporaneo_emergenza_id = $1 AND u.eliminato_il IS NULL
                  ORDER BY COALESCE(u.is_active, true) DESC, u.id DESC`, [emergenza.id]);
             res.json(r.rows);
         } catch (e) {

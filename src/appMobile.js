@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { haPermesso } from './permessi.js';
 
 // Il formato delle risposte: si incrementa solo per cambi che rompono l'app.
 export const VERSIONE_CONTRATTO = 1;
@@ -22,19 +23,26 @@ const GIORNI_TENUTA_NON_LETTE = 90;
 const CATEGORIE_NOTIFICHE = ['emergenza', 'personale', 'segreteria', 'magazzino'];
 const CATEGORIA_DEL_TIPO = {
     emergenza_aperta: 'emergenza',
+    in_squadra: 'emergenza',
     intervento_assegnato: 'emergenza',
+    incarico_funzione: 'emergenza',
+    caposquadra: 'emergenza',
+    chiamata: 'emergenza',
+    imprevisto: 'emergenza',
+    regia_telefona: 'emergenza',
     dpi_da_confermare: 'personale',
     scadenza: 'personale',
     segreteria_riepilogo: 'segreteria',
     magazzino_riepilogo: 'magazzino',
-    aggiornamento_disponibile: 'personale'
+    aggiornamento_disponibile: 'personale',
+    prova: 'personale'
 };
 
 // Una notifica che non è ancora scaduta.
 const VALIDA = '(scade_il IS NULL OR scade_il > NOW())';
 
 // La coda di notifiche, separata dalle rotte: la usano anche magazzino e scadenze.
-export function creaNotifiche({ pool, logger, avvisaUtente }) {
+export function creaNotifiche({ pool, logger, avvisaUtente, inSimulazione = () => false }) {
 
     // Mette una notifica nella coda e la consegna subito a chi è collegato.
     // Non lancia: restituisce la notifica o null (doppione o errore).
@@ -45,6 +53,8 @@ export function creaNotifiche({ pool, logger, avvisaUtente }) {
             return null;
         }
         const cat = CATEGORIE_NOTIFICHE.includes(categoria) ? categoria : (CATEGORIA_DEL_TIPO[tipo] || 'personale');
+        // Durante una simulazione in sala ogni avviso dell'emergenza lo dice nel titolo.
+        if (cat === 'emergenza' && inSimulazione() && !String(titolo).startsWith('[SIMULAZIONE]')) titolo = `[SIMULAZIONE] ${titolo}`;
         try {
             const r = await esecutore.query(
                 `INSERT INTO notifiche (user_id, tipo, titolo, testo, riferimento_tipo, riferimento_id, chiave, categoria, scade_il)
@@ -116,6 +126,23 @@ export function creaNotifiche({ pool, logger, avvisaUtente }) {
     return { notifica, notificaA, scadi, consegna, pulisci };
 }
 
+// La coda di una persona: le ultime 50, o quelle dopo "dopo" in ordine
+// crescente. La leggono l'app con la sessione e il telefono col token degli avvisi.
+export async function leggiNotifiche(pool, userId, dopo = null) {
+    const elenco = dopo === null
+        ? await pool.query(
+            `SELECT * FROM (
+                SELECT id, tipo, categoria, titolo, testo, riferimento_tipo, riferimento_id, creata_il, letta_il, scade_il
+                FROM notifiche WHERE user_id = $1 AND ${VALIDA} ORDER BY id DESC LIMIT 50
+             ) ultime ORDER BY id`, [userId])
+        : await pool.query(
+            `SELECT id, tipo, categoria, titolo, testo, riferimento_tipo, riferimento_id, creata_il, letta_il, scade_il
+             FROM notifiche WHERE user_id = $1 AND id > $2 AND ${VALIDA} ORDER BY id LIMIT 100`, [userId, dopo]);
+    const nonLette = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM notifiche WHERE user_id = $1 AND letta_il IS NULL AND ${VALIDA}`, [userId]);
+    return { notifiche: elenco.rows, non_lette: nonLette.rows[0].n };
+}
+
 // L'APK nella cartella app-android, con versione.json: la versione e la più
 // vecchia che questo server accetta.
 export function leggiVersioneApp(cartella, logger) {
@@ -160,17 +187,32 @@ export function registraRotteApp(app, ctx) {
     }
 
     // Cosa può fare questa persona: l'app mostra solo questo, ma decidono le rotte.
-    function capacita(req, moduli) {
-        // Gli esterni hanno solo l'emergenza.
+    // L'emergenza la vede nell'app solo chi è in una squadra: gli altri non
+    // c'entrano finché il centro operativo non li mette in squadra. Gli esterni
+    // esistono solo per l'emergenza e la vedono sempre, anche in attesa di squadra.
+    // L'archivio dei documenti lo consultano tutti gli interni.
+    function capacita(req, moduli, inSquadra, inSala = false, regia = false) {
         const esterno = ruoliDi(req.user).includes('esterno');
         const elenco = [];
+        // La squadra COC: in sala si seguono tutte le segnalazioni, anche dall'app.
+        if (inSala) elenco.push('emergenza.sala');
+        // La regia di una simulazione in sala: dal telefono annota le osservazioni.
+        if (regia) elenco.push('regia');
         if (esterno) {
             elenco.push('emergenza');
+            // I documenti del gruppo segnati per l'emergenza (il piano comunale).
+            if (emergenzaAttiva()) elenco.push('documenti');
         } else {
-            elenco.push('io', 'emergenza');
-            // Consegna e rientro nell'app: magazziniere e amministratore.
-            if (moduli.magazzino && haRuolo(req, 'magazziniere')) elenco.push('magazzino.consegna', 'magazzino.inventario');
-            if (moduli.segreteria && haRuolo(req, 'segreteria')) elenco.push('segreteria');
+            elenco.push('io', 'documenti');
+            if (inSquadra) elenco.push('emergenza');
+            // Il calendario con le attività e le scadenze, a modulo acceso.
+            if (moduli.attivita) elenco.push('calendario');
+            // Dai permessi (permessi.js): consegna e rientro a chi ha quello delle
+            // consegne, l'inventario a chi gestisce il magazzino, la segreteria a
+            // chi gestisce visite e corsi.
+            if (moduli.magazzino && haPermesso(req, 'magazzino.consegne')) elenco.push('magazzino.consegna');
+            if (moduli.magazzino && haPermesso(req, 'magazzino.gestione')) elenco.push('magazzino.inventario');
+            if (moduli.segreteria && haPermesso(req, 'volontari.sanitario')) elenco.push('segreteria');
         }
         return elenco;
     }
@@ -191,29 +233,50 @@ export function registraRotteApp(app, ctx) {
 
     app.get('/api/app/contesto', async (req, res) => {
         try {
-            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica] = await Promise.all([
+            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica, funzioniAcceso, attivitaAcceso] = await Promise.all([
                 impostazione('magazzino_enabled'),
                 impostazione('segreteria_config'),
                 impostazione('association_name'),
                 pool.query(
-                    `SELECT s.id, s.nome, s.nome_radio
+                    // Con il caposquadra: l'app dice chi manda la posizione della squadra.
+                    `SELECT s.id, s.nome, s.nome_radio, s.coc, sm.caposquadra AS sono_caposquadra,
+                            (SELECT json_build_object('username', c.username, 'nome', c.nome, 'cognome', c.cognome)
+                               FROM squadra_membri c WHERE c.squadra_id = s.id AND c.caposquadra LIMIT 1) AS caposquadra
                      FROM squadre s JOIN squadra_membri sm ON s.id = sm.squadra_id
                      WHERE sm.username = $1 LIMIT 1`, [req.user.username]),
                 pool.query(`SELECT COUNT(*)::int AS n FROM notifiche WHERE user_id = $1 AND letta_il IS NULL AND ${VALIDA}`, [req.user.id]),
                 impostazione('badge_qr_enabled'),
-                pool.query('SELECT temporaneo, ente FROM users WHERE id = $1', [req.user.id])
+                pool.query('SELECT temporaneo, ente FROM users WHERE id = $1', [req.user.id]),
+                impostazione('funzioni_enabled'),
+                impostazione('attivita_enabled')
             ]);
 
             const moduli = {
                 magazzino: String(magazzinoAcceso) === 'true',
                 segreteria: configSegreteria?.enabled === true,
 
-                tesserini_qr: String(qrTesserini) !== 'false'
+                tesserini_qr: String(qrTesserini) !== 'false',
+                attivita: String(attivitaAcceso ?? 'true') !== 'false'
             };
             const configMagazzino = moduli.magazzino ? await leggiConfigMagazzino() : null;
             const emergenza = emergenzaAttiva();
+            // Le funzioni di supporto di cui fa parte, con gli incarichi ancora
+            // aperti in questa emergenza: l'app mostra "Le mie attività".
+            const funzioniAccese = String(funzioniAcceso) === 'true';
+            const mieFunzioni = funzioniAccese ? (await pool.query(`
+                SELECT f.id, f.sigla, f.nome, m.referente,
+                       (SELECT COUNT(*)::int FROM incarichi i JOIN reports r ON r.id = i.report_id
+                         WHERE i.funzione_id = f.id AND i.stato <> 'concluso' AND r.emergency_id = $2) AS aperti
+                FROM funzione_membri m JOIN funzioni f ON f.id = m.funzione_id
+                WHERE m.user_id = $1 AND f.attiva ORDER BY f.ordine, f.sigla`, [req.user.id, emergenza?.id ?? null])).rows : [];
             const versioneApp = await appDistribuita(pool) ? leggiVersioneApp(cartellaApk, logger) : null;
             const ruoli = ruoliDi(req.user);
+            // Chi conduce la simulazione aperta: chi organizza, il responsabile, la regia.
+            const regia = emergenza?.simulazione === true && emergenza.attivita_id && !ruoli.includes('esterno')
+                && (haPermesso(req, 'gruppo.attivita') || (await pool.query(
+                    `SELECT 1 FROM attivita a WHERE a.id = $1 AND (a.responsabile_id = $2
+                        OR EXISTS (SELECT 1 FROM attivita_regia g WHERE g.attivita_id = a.id AND g.user_id = $2))`,
+                    [emergenza.attivita_id, req.user.id])).rowCount > 0);
 
             res.json({
                 contratto: VERSIONE_CONTRATTO,
@@ -234,26 +297,36 @@ export function registraRotteApp(app, ctx) {
                     cognome: req.user.cognome || null,
                     ruoli,
                     ruolo_principale: ruoloPrincipale(ruoli),
+                    // Cosa può fare oltre alla base (permessi.js): l'app lo mostra nel profilo.
+                    permessi: req.user.permessi || [],
                     // Gli esterni temporanei: l'app dice fino a quando vale.
                     temporaneo: anagrafica.rows[0]?.temporaneo === true,
                     ente: anagrafica.rows[0]?.ente || null
                 },
                 moduli,
-                capacita: capacita(req, moduli),
+                capacita: capacita(req, moduli, squadra.rowCount > 0, squadra.rows[0]?.coc === true && !!emergenza, regia),
                 magazzino: configMagazzino ? {
                     conferma_dpi: !!configMagazzino.conferma_dpi,
                     verbale_consegna: !!configMagazzino.verbale_consegna,
-                    verbale_rientro: !!configMagazzino.verbale_rientro
+                    verbale_rientro: !!configMagazzino.verbale_rientro,
+                    verbale_consegna_attrezzature: !!configMagazzino.verbale_consegna_attrezzature,
+                    verbale_rientro_attrezzature: !!configMagazzino.verbale_rientro_attrezzature
                 } : null,
                 emergenza: emergenza ? {
                     id: emergenza.id,
                     codice: emergenza.code,
                     nome: emergenza.name || null,
-                    inizio: emergenza.start_time || null
+                    inizio: emergenza.start_time || null,
+                    // Una simulazione in sala: l'app la segna su ogni schermata.
+                    simulazione: emergenza.simulazione === true,
+                    attivita_id: emergenza.attivita_id ?? null
                 } : null,
                 squadra: squadra.rows[0] || null,
+                funzioni: funzioniAccese ? { mie: mieFunzioni } : null,
                 notifiche: {
                     non_lette: nonLette.rows[0].n,
+                    // In emergenza più spesso per tutti: chi viene messo in
+                    // squadra lo deve sapere presto anche ad app chiusa.
                     controllo_minuti: emergenza ? MINUTI_CONTROLLO_IN_EMERGENZA : MINUTI_CONTROLLO_PERIODICO
                 }
             });
@@ -270,18 +343,7 @@ export function registraRotteApp(app, ctx) {
             return res.status(400).json({ message: 'Il parametro "dopo" deve essere un numero intero.' });
         }
         try {
-            const elenco = dopo === null
-                ? await pool.query(
-                    `SELECT * FROM (
-                        SELECT id, tipo, categoria, titolo, testo, riferimento_tipo, riferimento_id, creata_il, letta_il, scade_il
-                        FROM notifiche WHERE user_id = $1 AND ${VALIDA} ORDER BY id DESC LIMIT 50
-                     ) ultime ORDER BY id`, [req.user.id])
-                : await pool.query(
-                    `SELECT id, tipo, categoria, titolo, testo, riferimento_tipo, riferimento_id, creata_il, letta_il, scade_il
-                     FROM notifiche WHERE user_id = $1 AND id > $2 AND ${VALIDA} ORDER BY id LIMIT 100`, [req.user.id, dopo]);
-            const nonLette = await pool.query(
-                `SELECT COUNT(*)::int AS n FROM notifiche WHERE user_id = $1 AND letta_il IS NULL AND ${VALIDA}`, [req.user.id]);
-            res.json({ notifiche: elenco.rows, non_lette: nonLette.rows[0].n });
+            res.json(await leggiNotifiche(pool, req.user.id, dopo));
         } catch (e) {
             logger.error('Errore GET /api/notifiche:', e);
             res.status(500).json({ message: 'Errore nel leggere le notifiche.' });

@@ -61,6 +61,8 @@
         </nav>
 
         <div id="avviso-magazzino" class="avviso" hidden></div>
+        <!-- Dal QR di un'etichetta, per chi non tiene l'inventario: i libretti del bene. -->
+        <ul id="documenti-qr" class="elenco-documenti-bene riquadro-documenti-qr" hidden></ul>
 
         <!-- Modulo spento: si dice perché e cosa fare, invece di lasciare la
              pagina vuota o piena di errori. -->
@@ -79,6 +81,7 @@
             <div class="passo">
                 <h2><span class="numero-passo">1</span> A chi va</h2>
                 <select id="destinatario" class="campo-grande" aria-label="Persona a cui consegnare"></select>
+                <p class="nota" id="taglie-persona" hidden></p>
             </div>
 
             <div class="passo">
@@ -89,12 +92,12 @@
 
             <div class="passo" id="passo-conferma-consegna">
                 <h2><span class="numero-passo">3</span> Fatto</h2>
-                <label class="riga-opzione" id="riga-verbale">
+                <label class="riga-opzione" id="riga-verbale" hidden>
                     <input type="checkbox" id="genera-verbale" checked>
-                    Preparare il verbale di consegna: da stampare e far firmare, oppure fotografare il foglio firmato
+                    <span id="testo-verbale">Preparare il verbale di consegna: da stampare e far firmare, oppure fotografare il foglio firmato</span>
                 </label>
                 <p class="nota" id="nota-conferma-dpi" hidden>
-                    Riceverà la richiesta di conferma sul telefono o nel suo profilo: il verbale si prepara da sé.
+                    Per i DPI riceverà la richiesta di conferma sul telefono o nel suo profilo: il verbale si prepara e si compila da sé.
                 </p>
                 <div id="riepilogo-consegna" class="riepilogo">Nessun oggetto scelto.</div>
                 <button id="btn-consegna" class="button-style primary bottone-grande" disabled>
@@ -118,8 +121,8 @@
                 </p>
                 <div id="elenco-rientro" class="elenco-beni"></div>
                 <label class="riga-opzione" id="riga-verbale-rientro" hidden>
-                    <input type="checkbox" id="genera-verbale-rientro">
-                    Preparare il verbale di rientro da far firmare a chi restituisce
+                    <input type="checkbox" id="genera-verbale-rientro" checked>
+                    <span id="testo-verbale-rientro">Preparare il verbale di rientro da far firmare a chi restituisce</span>
                 </label>
                 <button id="btn-rientro" class="button-style primary bottone-grande" disabled>
                     Registra il rientro
@@ -129,7 +132,12 @@
 
         <!-- ============ 3. CHI HA COSA ============ -->
         <section class="pannello-scheda" id="pannello-chi-ha-cosa" hidden>
-            <input type="search" id="cerca-detentori" class="campo-grande" placeholder="Cerca persona, squadra o oggetto...">
+            <div class="barra-inventario">
+                <input type="search" id="cerca-detentori" class="campo-grande" placeholder="Cerca persona, squadra o oggetto...">
+                <select id="filtro-categoria-detentori" aria-label="Categoria">
+                    <option value="">Tutte le categorie</option>
+                </select>
+            </div>
             <div id="elenco-detentori" class="elenco-detentori"></div>
         </section>
 
@@ -152,6 +160,10 @@
                     <option value="attrezzatura">Attrezzature</option>
                     <option value="veicolo">Veicoli</option>
                 </select>
+                <!-- Categoria e, per i DPI a taglie, il singolo modello: "solo le scarpe". -->
+                <select id="filtro-categoria" aria-label="Categoria">
+                    <option value="">Tutte le categorie</option>
+                </select>
                 <a id="btn-etichette" class="bottone-contorno" href="/magazzino-etichette.html">
                     Etichette
                 </a>
@@ -164,11 +176,11 @@
             <div class="testata-modelli">
                 <h2 class="titolo-blocco">DPI a taglie</h2>
                 <div class="gruppo-azioni">
-                    <label class="riga-opzione" style="margin: 0;"><input type="checkbox" id="mostra-modelli-nascosti"> Mostra anche i nascosti</label>
+                    <label class="riga-opzione" style="margin: 0;"><input type="checkbox" id="mostra-modelli-nascosti"> <span id="etichetta-non-usati">Mostra anche quelli non usati</span></label>
                     <button id="btn-nuovo-modello" class="bottone-contorno" type="button">Nuovo DPI a taglie</button>
                 </div>
             </div>
-            <p class="nota">Guanti, scarpe, divise: un DPI con le sue taglie. «Carica» registra una fornitura intera (per esempio 4 L e 5 XL); ogni taglia ha la sua etichetta e si consegna come sempre.</p>
+            <p class="nota">Guanti, scarpe, divise: un DPI con le sue taglie. «Carica» registra una fornitura intera (per esempio 4 L e 5 XL); ogni taglia ha la sua etichetta e si consegna come sempre. ORION propone all'installazione i DPI più comuni: quelli che l'associazione non usa si mettono da parte con «Non lo usiamo», nella scheda del modello, e spariscono dagli elenchi senza perdere lo storico.</p>
             <div id="elenco-modelli" class="elenco-modelli"></div>
 
             <h2 class="titolo-blocco">Tutti gli altri beni</h2>
@@ -227,17 +239,27 @@
                         <option value="disattivato">Nessun controllo</option>
                     </select>
                 </label>
+                <h3 class="titolo-opzioni">DPI</h3>
                 <label class="riga-opzione">
                     <input type="checkbox" id="conferma-dpi">
-                    Chiedere al volontario di confermare la consegna dei DPI (dall'app o dal suo profilo)
+                    Chiedere al volontario di confermare la consegna dei DPI (dall'app o dal suo profilo): la conferma compila il verbale
                 </label>
                 <label class="riga-opzione">
                     <input type="checkbox" id="verbale-consegna">
-                    Preparare il verbale di consegna quando il materiale va a una persona (con la conferma dei DPI accesa c'è sempre)
+                    Proporre il verbale di consegna dei DPI (con la conferma dei DPI accesa c'è sempre)
                 </label>
                 <label class="riga-opzione">
                     <input type="checkbox" id="verbale-rientro">
-                    Preparare il verbale di rientro quando una persona restituisce il materiale (da firmare, anche fotografato dall'app)
+                    Proporre il verbale di rientro dei DPI (da firmare, anche fotografato dall'app)
+                </label>
+                <h3 class="titolo-opzioni">Attrezzature e mezzi</h3>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="verbale-consegna-attrezzature">
+                    Proporre il verbale di consegna di attrezzature e mezzi (chi consegna può sempre toglierlo)
+                </label>
+                <label class="riga-opzione">
+                    <input type="checkbox" id="verbale-rientro-attrezzature">
+                    Proporre il verbale di rientro di attrezzature e mezzi
                 </label>
                 <label class="riga-numero">
                     <span>Avvisare il magazziniere per il materiale fuori da più di</span>
@@ -338,6 +360,16 @@
                         <option value="pezzi">pezzi</option>
                         <option value="paia">paia</option>
                         <option value="kit">kit</option>
+                    </select>
+                </label>
+                <!-- Alla consegna, per un DPI mai ricevuto si propone la taglia
+                     che la persona ha in un altro DPI dello stesso gruppo. -->
+                <label class="campo-largo">Taglia come
+                    <select id="modello-gruppo">
+                        <option value="">Nessun gruppo: la taglia non si propone dagli altri DPI</option>
+                        <option value="busto">Busto: giacche, polo, gilet, giubbotti</option>
+                        <option value="pantaloni">Pantaloni</option>
+                        <option value="scarpe">Scarpe e stivali</option>
                     </select>
                 </label>
                 <label class="campo-largo">Taglie <span class="obbligatorio">*</span>
@@ -526,6 +558,21 @@
             </form>
 
             <div id="elenco-interventi" class="elenco-storia"></div>
+        </div>
+
+        <!-- I libretti e gli altri documenti dell'archivio del gruppo collegati a questo bene. -->
+        <div id="documenti-bene" hidden>
+            <h3>Libretti e documenti</h3>
+            <ul id="elenco-documenti-bene" class="elenco-documenti-bene"></ul>
+            <p id="documenti-bene-vuoto" class="nota" hidden>Nessun documento collegato: il libretto d'uso e manutenzione si carica qui sotto, e finisce anche in <a href="/documenti.html">Documenti del gruppo</a>.</p>
+            <div id="documenti-bene-azioni" class="azioni-documenti-bene" hidden>
+                <label id="riga-doc-simili" class="scelta-simili" hidden><input type="checkbox" id="doc-simili"> <span id="testo-doc-simili"></span></label>
+                <div class="gruppo-azioni">
+                    <select id="doc-da-collegare" aria-label="Collega un documento dell'archivio"></select>
+                    <button type="button" class="button-style button-secondary" id="carica-libretto"><i class="fas fa-upload"></i> Carica il libretto</button>
+                    <input type="file" id="file-libretto" hidden accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.odt,.xls,.xlsx,.ods,.txt">
+                </div>
+            </div>
         </div>
 
         <div id="storia-bene" hidden>

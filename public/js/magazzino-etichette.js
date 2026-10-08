@@ -301,6 +301,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let scelti = tutti;
             if (soloQuesti.length) scelti = tutti.filter(b => soloQuesti.includes(b.id));
             else if (modello) scelti = tutti.filter(b => b.modello_id === modello);
+            const categoria = parametri.has('categoria') ? parseInt(parametri.get('categoria'), 10) : null;
+            if (!soloQuesti.length && !modello && categoria !== null && !Number.isNaN(categoria)) {
+                scelti = scelti.filter(b => categoria === 0 ? !b.categoria_id : b.categoria_id === categoria);
+            }
             beni = ordinaTaglie(scelti, modelli);
             disegna();
         } catch (e) {

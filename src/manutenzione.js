@@ -16,6 +16,7 @@ import { allineaMigrazioni } from './allineaMigrazioni.js';
 import readline from 'readline';
 import { PassThrough, Transform } from 'stream';
 import { StringDecoder } from 'string_decoder';
+import { apriFile, cifraturaPronta, fileCifrato } from './cifratura.js';
 
 // Il nome di un file di backup: lettere, cifre, punto, trattino e underscore.
 // Tutto il resto è un tentativo di uscire dalla cartella.
@@ -139,22 +140,31 @@ export function registraRotteManutenzione(app, ctx) {
         if (!info || !info.isFile()) return { valido: false, motivo: 'il file non esiste' };
         if (info.size < 1000) return { valido: false, motivo: `il file è troppo piccolo (${info.size} byte)` };
 
-        const magici = Buffer.alloc(2);
-        const handle = await fs.promises.open(percorso, 'r');
-        try {
-            await handle.read(magici, 0, 2, 0);
-        } finally {
-            await handle.close();
+        // Un backup cifrato si legge solo con la chiave dei dati: il controllo
+        // del contenuto (e del tag di autenticità) si fa sul flusso decifrato.
+        const cifrato = await fileCifrato(percorso);
+        if (cifrato && !cifraturaPronta()) {
+            return { valido: false, motivo: 'è cifrato e la chiave dei dati non è disponibile: inserisci prima la chiave di recupero (riquadro Cifratura)' };
         }
-        if (magici[0] !== 0x1f || magici[1] !== 0x8b) {
-            return { valido: false, motivo: 'non è un file compresso con gzip' };
+        if (!cifrato) {
+            const magici = Buffer.alloc(2);
+            const handle = await fs.promises.open(percorso, 'r');
+            try {
+                await handle.read(magici, 0, 2, 0);
+            } finally {
+                await handle.close();
+            }
+            if (magici[0] !== 0x1f || magici[1] !== 0x8b) {
+                return { valido: false, motivo: 'non è un file compresso con gzip' };
+            }
         }
 
         // Basta l'inizio per riconoscere un dump di PostgreSQL.
-        const inizio = await new Promise((risolvi, rifiuta) => {
+        const inizio = await new Promise(async (risolvi, rifiuta) => {
             let letto = '';
-            const lettura = fs.createReadStream(percorso);
             const decompressore = zlib.createGunzip();
+            let lettura;
+            try { lettura = await apriFile(percorso); } catch (e) { return rifiuta(e); }
             decompressore.on('data', pezzo => {
                 letto += pezzo.toString('utf8');
                 if (letto.length > 4000) {
@@ -174,7 +184,7 @@ export function registraRotteManutenzione(app, ctx) {
             return { valido: false, motivo: 'non sembra un backup del database di ORION' };
         }
         const comando = await primoComandoPsql(percorso);
-        if (comando === false) return { valido: false, motivo: 'il file è compresso male o troncato' };
+        if (comando === false) return { valido: false, motivo: cifrato ? 'il file è troncato, alterato o cifrato con un\'altra chiave' : 'il file è compresso male o troncato' };
         if (comando) {
             logger.warn(`[Manutenzione] Archivio ${path.basename(percorso)} rifiutato: contiene un comando di psql alla riga ${comando.riga}.`);
             return { valido: false, motivo: `contiene un comando di psql che un backup di ORION non ha (riga ${comando.riga})` };
@@ -205,8 +215,13 @@ export function registraRotteManutenzione(app, ctx) {
         const stato = { inCopy: false };
         let numero = 0;
         try {
+            // .pipe() non passa gli errori: un tag di autenticità sbagliato
+            // (backup cifrato alterato) deve far fallire la lettura.
+            const sorgente = await apriFile(percorso);
+            const decompresso = zlib.createGunzip();
+            sorgente.on('error', e => decompresso.destroy(e));
             const righe = readline.createInterface({
-                input: fs.createReadStream(percorso).pipe(zlib.createGunzip()),
+                input: sorgente.pipe(decompresso),
                 crlfDelay: Infinity
             });
             for await (const riga of righe) {
@@ -301,7 +316,7 @@ export function registraRotteManutenzione(app, ctx) {
         // Se psql si ferma, EPIPE non aggiunge niente al suo messaggio.
         let erroreFiltro = null;
         const fermaPsql = () => processo.kill('SIGKILL');
-        const invio = pipeline(fs.createReadStream(percorso), zlib.createGunzip(), filtroComandiPsql(fermaPsql), flusso)
+        const invio = pipeline(await apriFile(percorso), zlib.createGunzip(), filtroComandiPsql(fermaPsql), flusso)
             .catch(e => { erroreFiltro = e; });
         const scrittura = pipeline(flusso, processo.stdin).catch(() => {});
 
@@ -1078,6 +1093,8 @@ export function registraRotteManutenzione(app, ctx) {
                 '--exclude=node_modules', '--exclude=.git', '--exclude=uploads',
                 '--exclude=protected_uploads', '--exclude=logs', '--exclude=.env',
                 '--exclude=.pm2', '--exclude=.npm', '--exclude=.cache', '--exclude=app-android',
+                // La chiave dei dati non va mai accanto ai backup che apre.
+                '--exclude=chiave-dati.key', '--exclude=PRIMO-ACCESSO.txt',
                 '.'
             ]);
             await fs.promises.chmod(destinazione, 0o640).catch(() => {});
@@ -1093,8 +1110,11 @@ export function registraRotteManutenzione(app, ctx) {
     // processi e i suoi canali di controllo), la cache e la configurazione di
     // npm. Tutto ciò che comincia col punto resta com'è, e così i dati, i
     // loghi e l'app Android messa a mano in app-android.
+    // chiave-dati.key: con --delete-after l'aggiornamento la cancellerebbe, e
+    // senza chiave file e backup cifrati non si leggono più.
     const ESCLUSIONI = ['/.*', '/uploads', '/protected_uploads', '/logs', '/app-android',
-                        '/public/uploads', '/public/logo.png', '/public/logo2.png'];
+                        '/public/uploads', '/public/logo.png', '/public/logo2.png',
+                        '/chiave-dati.key', '/PRIMO-ACCESSO.txt'];
 
     // L'app Android arriva con la release. app-android resta fuori dalla
     // sostituzione (un APK messo a mano non si perde), ma l'APK del pacchetto

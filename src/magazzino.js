@@ -6,9 +6,11 @@
 // beni_situazione).
 
 import fs from 'fs';
+import { haPermesso, richiedePermesso, sqlHaPermesso } from './permessi.js';
 import path from 'path';
 import crypto from 'crypto';
 import { dataItaliana } from './date.js';
+import { inviaFile, proteggiCaricati } from './cifratura.js';
 
 // L'ordine conta: è quello in cui si leggono gli elenchi.
 export const TIPI_BENE = ['dpi', 'attrezzatura', 'veicolo'];
@@ -93,9 +95,9 @@ export function registraRotteMagazzino(app, ctx) {
     // Permessi
     // Chi tiene l'inventario: anagrafica, carichi, dismissioni, rettifiche.
     function soloMagazziniere(req, res, next) {
-        if (haRuolo(req, 'magazziniere')) return next();
+        if (haPermesso(req, 'magazzino.gestione')) return next();
         logger.warn(`[Magazzino] Accesso negato a ${req.user?.username} (ruoli: ${ruoliDi(req.user).join(', ')}) su ${req.originalUrl}`);
-        return res.status(403).json({ message: 'Serve il ruolo magazziniere per questa operazione.' });
+        return res.status(403).json({ message: 'Ti serve il permesso "Gestire il magazzino".' });
     }
 
     // Chi può muovere materiale sul campo: qualunque operatore, non gli
@@ -151,11 +153,26 @@ export function registraRotteMagazzino(app, ctx) {
         blocco_mezzi_scaduti: 'segnalazione',
         conferma_dpi: false,
         giorni_avviso_recupero: 7,
-        // Verbali di consegna e di rientro: un di più, spenti di base.
+        // Verbali di consegna e di rientro: un di più, spenti di base, e
+        // separati per i DPI (verbale_consegna, verbale_rientro) e per
+        // attrezzature e mezzi (..._attrezzature). Con la conferma dei DPI il
+        // verbale dei DPI c'è comunque; attrezzature e mezzi non lo impongono mai.
         verbale_rientro: false,
-        // Con la conferma dei DPI il verbale di consegna c'è comunque.
-        verbale_consegna: false
+        verbale_consegna: false,
+        verbale_rientro_attrezzature: false,
+        verbale_consegna_attrezzature: false
     };
+
+    // Quali righe di una consegna o di un rientro finiscono nel verbale.
+    // richiesto: chi registra ha lasciato spuntato "Preparare il verbale".
+    function nelVerbale(config, tipoBene, movimento, richiesto) {
+        const dpi = tipoBene === 'dpi';
+        if (movimento === 'consegna') {
+            if (dpi) return !!config.conferma_dpi || (!!config.verbale_consegna && richiesto);
+            return !!config.verbale_consegna_attrezzature && richiesto;
+        }
+        return richiesto && !!(dpi ? config.verbale_rientro : config.verbale_rientro_attrezzature);
+    }
 
     async function leggiConfig() {
         try {
@@ -186,7 +203,11 @@ export function registraRotteMagazzino(app, ctx) {
             conferma_dpi: corpo.conferma_dpi === undefined ? attuale.conferma_dpi : !!corpo.conferma_dpi,
             giorni_avviso_recupero: interoPositivo(corpo.giorni_avviso_recupero) || attuale.giorni_avviso_recupero,
             verbale_rientro: corpo.verbale_rientro === undefined ? attuale.verbale_rientro : !!corpo.verbale_rientro,
-            verbale_consegna: corpo.verbale_consegna === undefined ? attuale.verbale_consegna : !!corpo.verbale_consegna
+            verbale_consegna: corpo.verbale_consegna === undefined ? attuale.verbale_consegna : !!corpo.verbale_consegna,
+            verbale_rientro_attrezzature: corpo.verbale_rientro_attrezzature === undefined
+                ? attuale.verbale_rientro_attrezzature : !!corpo.verbale_rientro_attrezzature,
+            verbale_consegna_attrezzature: corpo.verbale_consegna_attrezzature === undefined
+                ? attuale.verbale_consegna_attrezzature : !!corpo.verbale_consegna_attrezzature
         };
         await pool.query(
             `INSERT INTO branding_settings (setting_key, setting_value, updated_at)
@@ -718,6 +739,14 @@ export function registraRotteMagazzino(app, ctx) {
         return taglie;
     }
 
+    // Il gruppo di taglia: busto, pantaloni, scarpe, oppure nessuno.
+    const GRUPPI_TAGLIA = ['busto', 'pantaloni', 'scarpe'];
+    function gruppoTaglia(valore) {
+        if (valore === null || valore === undefined || valore === '') return null;
+        if (!GRUPPI_TAGLIA.includes(valore)) throw erroreRichiesta('Gruppo di taglia non valido: busto, pantaloni o scarpe.');
+        return valore;
+    }
+
     // { "L": 4, "XL": 5 } -> solo le quantità valide e positive
     function quantitaPerTaglia(valore) {
         const risultato = new Map();
@@ -734,7 +763,7 @@ export function registraRotteMagazzino(app, ctx) {
     async function leggiModelli(esecutore, { id = null, anche_nascosti = false } = {}) {
         const r = await esecutore.query(
             `SELECT m.id, m.nome, m.categoria_id, c.nome AS categoria, m.taglie, m.unita_misura,
-                    m.standard, m.nascosto,
+                    m.standard, m.nascosto, m.gruppo_taglia,
                     COALESCE(json_agg(json_build_object(
                         'bene_id', b.id, 'taglia', b.taglia, 'codice_etichetta', b.codice_etichetta,
                         'in_magazzino', s.in_magazzino, 'fuori', s.fuori,
@@ -804,12 +833,13 @@ export function registraRotteMagazzino(app, ctx) {
             if (!taglie.length) throw erroreRichiesta('Indica almeno una taglia (per un solo modello: "Unica").');
             const quantita = quantitaPerTaglia(corpo.quantita);
             const unita = String(corpo.unita_misura || 'pezzi').trim().slice(0, 20) || 'pezzi';
+            const gruppo = gruppoTaglia(corpo.gruppo_taglia);
 
             await client.query('BEGIN');
             const r = await client.query(
-                `INSERT INTO modelli_dpi (nome, categoria_id, taglie, unita_misura)
-                 VALUES ($1, $2, $3, $4) RETURNING id, nome, categoria_id, taglie, unita_misura`,
-                [nome, interoPositivo(corpo.categoria_id), taglie, unita]);
+                `INSERT INTO modelli_dpi (nome, categoria_id, taglie, unita_misura, gruppo_taglia)
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, categoria_id, taglie, unita_misura`,
+                [nome, interoPositivo(corpo.categoria_id), taglie, unita, gruppo]);
             const modello = r.rows[0];
             // Ogni taglia nasce come bene, anche a zero: ha subito la sua
             // etichetta da stampare per lo scaffale.
@@ -851,6 +881,7 @@ export function registraRotteMagazzino(app, ctx) {
             const unita = corpo.unita_misura === undefined ? prima.unita_misura
                 : (String(corpo.unita_misura).trim().slice(0, 20) || 'pezzi');
             const nascosto = corpo.nascosto === undefined ? prima.nascosto : !!corpo.nascosto;
+            const gruppo = corpo.gruppo_taglia === undefined ? prima.gruppo_taglia : gruppoTaglia(corpo.gruppo_taglia);
 
             // Le taglie tolte: vuote si dismettono, piene fermano tutto.
             const varianti = await client.query(
@@ -868,15 +899,16 @@ export function registraRotteMagazzino(app, ctx) {
             }
 
             const r = await client.query(
-                `UPDATE modelli_dpi SET nome = $1, categoria_id = $2, taglie = $3, unita_misura = $4, nascosto = $5
-                 WHERE id = $6 RETURNING id, nome, categoria_id, taglie, unita_misura`,
-                [nome, categoria, taglie, unita, nascosto, id]);
+                `UPDATE modelli_dpi SET nome = $1, categoria_id = $2, taglie = $3, unita_misura = $4, nascosto = $5,
+                        gruppo_taglia = $6
+                 WHERE id = $7 RETURNING id, nome, categoria_id, taglie, unita_misura`,
+                [nome, categoria, taglie, unita, nascosto, gruppo, id]);
             await client.query(
                 `UPDATE beni SET denominazione = $1, categoria_id = $2, unita_misura = $3
                  WHERE modello_id = $4 AND dismesso_il IS NULL`, [nome, categoria, unita, id]);
             for (const t of taglie) await variante(client, req, r.rows[0], t);
             await client.query('COMMIT');
-            registraAudit(req, 'magazzino.modello.modificato', { tipo: 'modello_dpi', id, dettagli: { nome, taglie, nascosto } });
+            registraAudit(req, 'magazzino.modello.modificato', { tipo: 'modello_dpi', id, dettagli: { nome, taglie, nascosto, gruppo_taglia: gruppo } });
             if (typeof avvisaClienti === 'function') avvisaClienti('reload_magazzino');
             res.json((await leggiModelli(pool, { id, anche_nascosti: true }))[0]);
         } catch (e) {
@@ -960,6 +992,64 @@ export function registraRotteMagazzino(app, ctx) {
             res.status(500).json({ message: 'Errore nell\'eliminare il DPI.' });
         } finally {
             client.release();
+        }
+    });
+
+    // Le taglie di una persona, per ogni DPI a taglie: alla consegna ORION
+    // propone quelle, invece del quaderno delle taglie.
+    //
+    // Per un DPI già ricevuto vale la taglia che ha ancora addosso; se ne ha
+    // restituite tutte, l'ultima consegnata. Così chi cambia taglia (una L
+    // diventata stretta, scambiata con una XL) ha la nuova, e chi ha reso una
+    // XL perché grande torna alla L che tiene ancora.
+    //
+    // Per un DPI mai ricevuto, la taglia di un altro DPI dello stesso gruppo
+    // (busto, pantaloni, scarpe), segnata "dedotta": la giacca XL fa proporre
+    // la polo XL, le scarpe 43 gli stivali 43. Solo se quella taglia esiste
+    // per il DPI da consegnare; senza gruppo non si deduce niente.
+    const normaTaglia = (t) => String(t).trim().toUpperCase();
+    app.get('/api/magazzino/taglie/persona/:id', operatoreInterno, async (req, res) => {
+        const id = interoPositivo(req.params.id);
+        if (!id) return res.status(400).json({ message: 'ID non valido.' });
+        try {
+            const [ricevute, modelli] = await Promise.all([
+                pool.query(
+                    `SELECT DISTINCT ON (b.modello_id) b.modello_id, b.taglia, md.nome AS modello, m.quando,
+                            CASE WHEN b.gestione = 'singolo'
+                                 THEN COALESCE(s.destinatario_tipo = 'persona' AND s.destinatario_user_id = $1, false)
+                                 ELSE COALESCE((SELECT SUM(d.variazione) FROM detenzioni_sfusi d
+                                                WHERE d.bene_id = b.id AND d.detentore_tipo = 'persona' AND d.user_id = $1), 0) > 0
+                            END AS in_carico
+                     FROM movimenti m JOIN beni b ON b.id = m.bene_id
+                     JOIN modelli_dpi md ON md.id = b.modello_id
+                     LEFT JOIN beni_situazione s ON s.bene_id = b.id
+                     WHERE m.tipo = 'consegna' AND m.destinatario_user_id = $1
+                       AND b.taglia IS NOT NULL AND LOWER(b.taglia) <> 'unica'
+                     ORDER BY b.modello_id, in_carico DESC, m.quando DESC`, [id]),
+                pool.query('SELECT id, nome, taglie, nascosto, gruppo_taglia FROM modelli_dpi')
+            ]);
+            const righe = ricevute.rows.map(r => ({
+                modello_id: r.modello_id, taglia: r.taglia, modello: r.modello, dedotta: false
+            }));
+            const note = new Map(ricevute.rows.map(r => [r.modello_id, r]));
+            const gruppoDi = new Map(modelli.rows.map(m => [m.id, m.gruppo_taglia]));
+            // Fra le fonti possibili, prima quella che ha ancora in carico, poi la più recente.
+            const fonti = [...ricevute.rows].sort((a, b) => (b.in_carico - a.in_carico) || (b.quando - a.quando));
+            for (const m of modelli.rows) {
+                const taglie = m.taglie || [];
+                if (m.nascosto || !m.gruppo_taglia || note.has(m.id)) continue;
+                const fonte = fonti.find(f => gruppoDi.get(f.modello_id) === m.gruppo_taglia
+                    && taglie.some(t => normaTaglia(t) === normaTaglia(f.taglia)));
+                if (!fonte) continue;
+                righe.push({
+                    modello_id: m.id, modello: m.nome, dedotta: true, da_modello: fonte.modello,
+                    taglia: taglie.find(t => normaTaglia(t) === normaTaglia(fonte.taglia))
+                });
+            }
+            res.json(righe);
+        } catch (e) {
+            logger.error('Errore GET taglie della persona:', e);
+            res.status(500).json({ message: 'Errore nel leggere le taglie.' });
         }
     });
 
@@ -1271,6 +1361,7 @@ export function registraRotteMagazzino(app, ctx) {
                 if (bene.rowCount === 0) throw erroreNonTrovato('Bene non trovato.');
 
                 const documento = req.file ? `/api/magazzino/documenti/${req.file.filename}` : null;
+                if (req.file) await proteggiCaricati(req.file);
                 const intervento = await client.query(
                     `INSERT INTO interventi_manutenzione
                        (bene_id, tipo, eseguito_il, descrizione, documento_url, costo, fornitore, registrato_da)
@@ -1336,7 +1427,7 @@ export function registraRotteMagazzino(app, ctx) {
             return res.status(403).json({ message: 'Accesso negato.' });
         }
         if (!fs.existsSync(percorso)) return res.status(404).json({ message: 'Documento non trovato.' });
-        res.sendFile(percorso);
+        inviaFile(res, percorso);
     });
 
     // Movimenti
@@ -1345,8 +1436,12 @@ export function registraRotteMagazzino(app, ctx) {
         if (!MOVIMENTI_OPERATIVI.includes(tipo) && !MOVIMENTI_DI_INVENTARIO.includes(tipo)) {
             return res.status(400).json({ message: 'Tipo di movimento non valido.' });
         }
-        // Carichi, dismissioni e rettifiche al magazziniere; consegne e rientri a tutti.
-        if (MOVIMENTI_DI_INVENTARIO.includes(tipo) && !haRuolo(req, 'magazziniere')) {
+        // Carichi, dismissioni e rettifiche a chi gestisce il magazzino; consegne,
+        // rientri e trasferimenti a chi ha il permesso delle consegne.
+        if (MOVIMENTI_OPERATIVI.includes(tipo) && !haPermesso(req, 'magazzino.consegne')) {
+            return res.status(403).json({ message: 'Ti serve il permesso "Consegnare e far rientrare materiale".' });
+        }
+        if (MOVIMENTI_DI_INVENTARIO.includes(tipo) && !haPermesso(req, 'magazzino.gestione')) {
             return res.status(403).json({ message: `Serve il ruolo magazziniere per registrare un movimento di tipo "${ETICHETTE_MOVIMENTO[tipo] || tipo}".` });
         }
         const beneId = interoPositivo(req.body?.bene_id);
@@ -1441,7 +1536,7 @@ export function registraRotteMagazzino(app, ctx) {
 
     // Consegna di più oggetti in un colpo solo: è così che succede davvero,
     // un volontario riceve elmetto, giacca e scarponi insieme.
-    app.post('/api/magazzino/consegna', operatoreInterno, async (req, res) => {
+    app.post('/api/magazzino/consegna', richiedePermesso('magazzino.consegne'), async (req, res) => {
         const righe = Array.isArray(req.body?.righe) ? req.body.righe : [];
         if (righe.length === 0) return res.status(400).json({ message: 'Indica almeno un oggetto da consegnare.' });
         if (!req.body?.destinatario?.tipo) return res.status(400).json({ message: 'Indica a chi va la consegna.' });
@@ -1461,11 +1556,19 @@ export function registraRotteMagazzino(app, ctx) {
             }
             const dest = await risolviDestinatario(client, req.body.destinatario);
 
-            // Il verbale solo a una persona: sempre con la conferma dei DPI,
-            // altrimenti se il magazzino lo prevede e chi consegna lo chiede.
+            // Il verbale solo a una persona. I DPI ci vanno sempre con la
+            // conferma dei DPI, altrimenti se il magazzino lo prevede e chi
+            // consegna lo chiede; attrezzature e mezzi solo se previsto e chiesto.
             const config = await leggiConfig();
-            const conVerbale = dest.destinatario_tipo === 'persona'
-                && (config.conferma_dpi || (config.verbale_consegna && !!req.body.verbale));
+            const idBeni = righe.map(r => interoPositivo(r?.bene_id)).filter(Boolean);
+            const tipoDi = new Map((await client.query('SELECT id, tipo FROM beni WHERE id = ANY($1::int[])', [idBeni]))
+                .rows.map(b => [b.id, b.tipo]));
+            const richiesto = !!req.body.verbale;
+            const inVerbale = (beneId) => dest.destinatario_tipo === 'persona'
+                && nelVerbale(config, tipoDi.get(beneId), 'consegna', richiesto);
+            const conVerbale = idBeni.some(inVerbale);
+            // La conferma dal telefono solo se nel verbale ci sono dei DPI.
+            const daConfermare = conVerbale && !!config.conferma_dpi && idBeni.some(id => tipoDi.get(id) === 'dpi');
             let verbaleId = null;
             if (conVerbale) {
                 const v = await client.query(
@@ -1486,7 +1589,7 @@ export function registraRotteMagazzino(app, ctx) {
                     quantita: riga.quantita ?? 1,
                     destinatario: req.body.destinatario,
                     note: riga.note || null,
-                    verbaleId
+                    verbaleId: inVerbale(beneId) ? verbaleId : null
                 });
                 fatti.push({ movimento_id: esito.id, bene_id: beneId, denominazione: esito.bene.denominazione });
                 if (esito.avviso) avvisi.push(esito.avviso);
@@ -1496,11 +1599,12 @@ export function registraRotteMagazzino(app, ctx) {
             await client.query('COMMIT');
             if (typeof avvisaClienti === 'function') avvisaClienti('reload_magazzino');
             // Con la conferma dei DPI, chi riceve lo sa dal telefono. Dopo il COMMIT.
-            if (verbaleId && dest.destinatario_user_id && typeof notifica === 'function' && config.conferma_dpi) {
+            const quantiNelVerbale = fatti.filter(f => inVerbale(f.bene_id)).length;
+            if (verbaleId && dest.destinatario_user_id && typeof notifica === 'function' && daConfermare) {
                 await notifica(dest.destinatario_user_id, {
                     tipo: 'dpi_da_confermare',
                     titolo: 'Hai ricevuto dei DPI da confermare',
-                    testo: `${fatti.length === 1 ? 'Un oggetto consegnato' : `${fatti.length} oggetti consegnati`} da ${chiOpera(req)}.`,
+                    testo: `${quantiNelVerbale === 1 ? 'Un oggetto consegnato' : `${quantiNelVerbale} oggetti consegnati`} da ${chiOpera(req)}.`,
                     riferimento: { tipo: 'verbale', id: verbaleId }
                 });
             }
@@ -1520,7 +1624,7 @@ export function registraRotteMagazzino(app, ctx) {
     // Rientro. Sugli sfusi, se torna meno di quanto è uscito, chi registra dice
     // cosa ne è del resto (in carico, usato sul posto, perso): senza, si rifiuta.
     const DESTINI_RESTO = ['in_carico', 'consumo', 'perso'];
-    app.post('/api/magazzino/rientro', operatoreInterno, async (req, res) => {
+    app.post('/api/magazzino/rientro', richiedePermesso('magazzino.consegne'), async (req, res) => {
         const righe = Array.isArray(req.body?.righe) ? req.body.righe : [];
         if (righe.length === 0) return res.status(400).json({ message: 'Indica almeno un oggetto che rientra.' });
 
@@ -1530,10 +1634,17 @@ export function registraRotteMagazzino(app, ctx) {
 
             const da = await risolviDetentore(client, req.body?.da);
 
-            // Il verbale di rientro solo da una persona e solo se acceso:
+            // Il verbale di rientro solo da una persona e solo se acceso per
+            // quel genere di materiale (DPI, oppure attrezzature e mezzi):
             // spento, la richiesta lo ignora senza fallire.
+            const config = await leggiConfig();
+            const idBeni = righe.map(r => interoPositivo(r?.bene_id)).filter(Boolean);
+            const tipoDi = new Map((await client.query('SELECT id, tipo FROM beni WHERE id = ANY($1::int[])', [idBeni]))
+                .rows.map(b => [b.id, b.tipo]));
+            const inVerbale = (beneId) => da?.tipo === 'persona' && nelVerbale(config, tipoDi.get(beneId), 'rientro', !!req.body?.verbale);
             let verbaleId = null;
-            if (req.body?.verbale && da?.tipo === 'persona' && (await leggiConfig()).verbale_rientro) {
+            let collegati = 0;
+            if (idBeni.some(inVerbale)) {
                 const chi = await client.query('SELECT id, nome, cognome, username FROM users WHERE id = $1', [da.user_id]);
                 const v = await client.query(
                     `INSERT INTO verbali_consegna (user_id, destinatario_nome, emesso_da, stato, tipo, note)
@@ -1585,8 +1696,9 @@ export function registraRotteMagazzino(app, ctx) {
                     const esito = await registraMovimento(client, req, {
                         beneId, tipo: 'rientro', quantita: rientrata,
                         destinatario: { tipo: 'magazzino', ubicazione_id: riga.ubicazione_id },
-                        note: riga.note || null, km: riga.km, da: daChi, verbaleId
+                        note: riga.note || null, km: riga.km, da: daChi, verbaleId: inVerbale(beneId) ? verbaleId : null
                     });
+                    if (verbaleId && inVerbale(beneId)) collegati++;
                     fatti.push({ movimento_id: esito.id, bene_id: beneId, tipo: 'rientro', quantita: rientrata });
                 }
 
@@ -1605,7 +1717,7 @@ export function registraRotteMagazzino(app, ctx) {
                                 'non possono restare in carico a nessuno. Indica se sono stati usati o sono persi.');
                         }
                         // Nessun movimento: restano dove sono, e chi ha cosa lo mostra.
-                        restanoInCarico.push(`${bene.denominazione}${bene.taglia ? ` (taglia ${bene.taglia})` : ''}: ${quanto}`);
+                        if (inVerbale(beneId)) restanoInCarico.push(`${bene.denominazione}${bene.taglia ? ` (taglia ${bene.taglia})` : ''}: ${quanto}`);
                     } else {
                         const tipo = resto === 'consumo' ? 'consumo' : 'smarrimento';
                         const esito = await registraMovimento(client, req, {
@@ -1614,8 +1726,9 @@ export function registraRotteMagazzino(app, ctx) {
                             note: String(riga.note_resto || riga.note_consumo || '').trim() || (tipo === 'consumo'
                                 ? 'Usato sul posto: non rientrato, indicato al rientro'
                                 : 'Dichiarato perso al rientro'),
-                            da: daChi, verbaleId
+                            da: daChi, verbaleId: inVerbale(beneId) ? verbaleId : null
                         });
+                        if (verbaleId && inVerbale(beneId)) collegati++;
                         fatti.push({ movimento_id: esito.id, bene_id: beneId, tipo, quantita: mancante });
                     }
                 }
@@ -1627,7 +1740,7 @@ export function registraRotteMagazzino(app, ctx) {
                     [verbaleId, [r.rows[0].note, riga].filter(Boolean).join('\n')]);
             }
             // Un verbale senza righe (tutto a zero) non ha niente da far firmare.
-            if (verbaleId && fatti.length === 0) {
+            if (verbaleId && collegati === 0) {
                 await client.query('DELETE FROM verbali_consegna WHERE id = $1', [verbaleId]);
                 verbaleId = null;
             }
@@ -1672,6 +1785,7 @@ export function registraRotteMagazzino(app, ctx) {
             // Singoli: la destinazione dell'ultimo movimento. Sfusi: il saldo per detentore.
             const singoli = await pool.query(
                 `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.matricola, b.gestione,
+                        b.categoria_id, b.modello_id, b.taglia,
                         1::numeric AS quantita, b.unita_misura,
                         s.destinatario_tipo, s.destinatario_nome, s.destinatario_user_id,
                         s.destinatario_squadra_id, s.ultimo_movimento_il AS da_quando
@@ -1684,6 +1798,7 @@ export function registraRotteMagazzino(app, ctx) {
             // Il nome e' quello scritto nell'ultima consegna a quel detentore.
             const sfusi = await pool.query(
                 `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.matricola, b.gestione,
+                        b.categoria_id, b.modello_id, b.taglia,
                         SUM(d.variazione) AS quantita, b.unita_misura,
                         d.detentore_tipo AS destinatario_tipo,
                         (SELECT n.detentore_nome FROM detenzioni_sfusi n
@@ -1699,6 +1814,7 @@ export function registraRotteMagazzino(app, ctx) {
                  JOIN beni b ON b.id = d.bene_id
                  WHERE b.dismesso_il IS NULL
                  GROUP BY b.id, b.denominazione, b.tipo, b.matricola, b.gestione, b.unita_misura,
+                          b.categoria_id, b.modello_id, b.taglia,
                           d.detentore_tipo, d.user_id, d.squadra_id, d.veicolo_id
                  HAVING SUM(d.variazione) > 0`);
 
@@ -1974,6 +2090,7 @@ export function registraRotteMagazzino(app, ctx) {
     async function inviaAvvisiScadenze() {
         if (!(await moduloAcceso())) return { destinatari: 0, inviati: 0 };
 
+        const chi = sqlHaPermesso('magazzino.gestione', 1);
         const destinatari = await pool.query(`
             SELECT a.user_id, a.frequenza, a.giorni_preavviso, a.includi_da_recuperare,
                    u.nome, u.cognome, u.email
@@ -1981,15 +2098,14 @@ export function registraRotteMagazzino(app, ctx) {
             JOIN users u ON u.id = a.user_id
             WHERE a.attivo = true AND u.is_active = true AND u.email IS NOT NULL
               -- Chi non tiene più il magazzino smette di ricevere gli avvisi
-              -- senza doverlo dire: basta togliergli il ruolo.
-              AND EXISTS (SELECT 1 FROM utenti_ruoli ur
-                          WHERE ur.user_id = u.id AND ur.ruolo IN ('magazziniere', 'admin'))
+              -- senza doverlo dire: basta togliergli il ruolo o il permesso.
+              AND ${chi.condizione}
               AND (
                 a.ultimo_invio IS NULL
                 OR (a.frequenza = 'giornaliera' AND a.ultimo_invio < CURRENT_DATE)
                 OR (a.frequenza = 'settimanale' AND date_trunc('week', a.ultimo_invio) < date_trunc('week', CURRENT_DATE))
                 OR (a.frequenza = 'mensile' AND date_trunc('month', a.ultimo_invio) < date_trunc('month', CURRENT_DATE))
-              )`);
+              )`, chi.parametri);
 
         let inviati = 0;
         let falliti = 0;
@@ -2046,7 +2162,7 @@ export function registraRotteMagazzino(app, ctx) {
         try {
             const r = await pool.query(
                 `SELECT v.id, v.user_id, v.destinatario_nome, v.emesso_il, v.emesso_da, v.stato,
-                        v.confermato_il, v.note, v.tipo,
+                        v.confermato_il, v.confermato_da, v.conferma_canale, v.conferma_impronta, v.note, v.tipo,
                         CASE WHEN v.scansione_file IS NULL THEN NULL
                              ELSE '/api/magazzino/verbali/' || v.id || '/scansione' END AS scansione_url,
                         COALESCE(json_agg(json_build_object(
@@ -2076,7 +2192,7 @@ export function registraRotteMagazzino(app, ctx) {
             if (v.rowCount === 0) return res.status(404).json({ message: 'Verbale non trovato.' });
             // Il proprio verbale lo legge il volontario; quelli altrui solo
             // chi tiene il magazzino.
-            if (v.rows[0].user_id !== req.user.id && !haRuolo(req, 'magazziniere')) {
+            if (v.rows[0].user_id !== req.user.id && !haPermesso(req, 'magazzino.gestione', 'magazzino.consegne')) {
                 return res.status(403).json({ message: 'Non sei autorizzato a leggere questo verbale.' });
             }
             const righe = await pool.query(
@@ -2090,24 +2206,57 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
+    // L'impronta di una conferma: il verbale, chi, quando e gli oggetti, in
+    // un testo fisso. Chi rifà il calcolo sugli stessi dati trova la stessa
+    // impronta; cambiando un oggetto, una quantità o l'ora, cambia.
+    function improntaConferma({ id, user_id: utente, confermato_da: chi, confermato_il: quando }, righe) {
+        const testo = JSON.stringify({
+            verbale: Number(id), utente: Number(utente), chi, quando: new Date(quando).toISOString(),
+            oggetti: righe.map(r => [Number(r.bene_id), r.bene_denominazione, Number(r.quantita), r.taglia || null, r.matricola || null])
+        });
+        return crypto.createHash('sha256').update(testo).digest('hex');
+    }
+
     // La conferma dal telefono o dal profilo, se l'associazione l'ha accesa.
+    // Compila il verbale: nome di chi conferma, data e ora, da dove, e
+    // l'impronta di quello che ha confermato, che va anche nel registro.
     app.post('/api/magazzino/verbali/:id/conferma', async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
+        const client = await pool.connect();
         try {
-            const r = await pool.query(
-                `UPDATE verbali_consegna SET stato = 'confermato', confermato_il = NOW()
-                 WHERE id = $1 AND user_id = $2 AND stato = 'da_confermare' AND tipo = 'consegna'
-                 RETURNING id, destinatario_nome`, [id, req.user.id]);
-            if (r.rowCount === 0) {
+            await client.query('BEGIN');
+            const v = await client.query(
+                `SELECT id, user_id FROM verbali_consegna
+                 WHERE id = $1 AND user_id = $2 AND stato = 'da_confermare' AND tipo = 'consegna' FOR UPDATE`, [id, req.user.id]);
+            if (v.rowCount === 0) {
+                await client.query('ROLLBACK');
                 return res.status(404).json({ message: 'Verbale non trovato, non tuo, o già confermato.' });
             }
-            registraAudit(req, 'magazzino.verbale.confermato', { tipo: 'verbale', id });
+            const chi = nomePersona((await client.query('SELECT nome, cognome, username FROM users WHERE id = $1', [req.user.id])).rows[0]);
+            const canale = req.get('x-orion-client') === 'app' ? 'app' : 'web';
+            const confermato = (await client.query(
+                `UPDATE verbali_consegna SET stato = 'confermato', confermato_il = date_trunc('second', NOW()),
+                        confermato_da = $2, conferma_canale = $3
+                 WHERE id = $1 RETURNING id, user_id, confermato_da, confermato_il`, [id, chi, canale])).rows[0];
+            const righe = (await client.query(
+                `SELECT m.bene_id, m.bene_denominazione, m.quantita, b.taglia, b.matricola
+                 FROM movimenti m JOIN beni b ON b.id = m.bene_id WHERE m.verbale_id = $1 ORDER BY m.id`, [id])).rows;
+            const impronta = improntaConferma(confermato, righe);
+            await client.query('UPDATE verbali_consegna SET conferma_impronta = $2 WHERE id = $1', [id, impronta]);
+            await client.query('COMMIT');
+            registraAudit(req, 'magazzino.verbale.confermato', {
+                tipo: 'verbale', id, dettagli: { confermato_da: chi, canale, confermato_il: confermato.confermato_il, impronta }
+            });
             if (typeof scadiNotifiche === 'function') scadiNotifiche({ tipo: 'dpi_da_confermare', riferimento: { tipo: 'verbale', id } });
-            res.json({ message: 'Consegna confermata.' });
+            if (typeof avvisaClienti === 'function') avvisaClienti('reload_magazzino');
+            res.json({ message: 'Consegna confermata.', confermato_da: chi, confermato_il: confermato.confermato_il, impronta });
         } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
             logger.error('Errore conferma verbale:', e);
             res.status(500).json({ message: 'Errore nel confermare il verbale.' });
+        } finally {
+            client.release();
         }
     });
 
@@ -2133,7 +2282,7 @@ export function registraRotteMagazzino(app, ctx) {
 
     // Il foglio firmato, fotografato o scansionato, diventa il verbale. Una
     // seconda foto sostituisce la prima.
-    app.post('/api/magazzino/verbali/:id/scansione', soloMagazziniere, (req, res, next) => {
+    app.post('/api/magazzino/verbali/:id/scansione', richiedePermesso('magazzino.gestione', 'magazzino.consegne'), (req, res, next) => {
         if (!caricaScansione) return res.status(501).json({ message: 'Caricamento dei verbali non disponibile.' });
         caricaScansione.single('scansione')(req, res, (err) => {
             if (!err) return next();
@@ -2151,6 +2300,7 @@ export function registraRotteMagazzino(app, ctx) {
             scarta();
             return res.status(400).json({ message: 'Il file non è una foto (JPG, PNG, WEBP) né un PDF.' });
         }
+        await proteggiCaricati(req.file);
         try {
             const prima = await pool.query('SELECT scansione_file, stato FROM verbali_consegna WHERE id = $1', [id]);
             if (prima.rowCount === 0) { scarta(); return res.status(404).json({ message: 'Verbale non trovato.' }); }
@@ -2193,21 +2343,21 @@ export function registraRotteMagazzino(app, ctx) {
             if (v.rowCount === 0 || !v.rows[0].scansione_file || !cartellaVerbali) {
                 return res.status(404).json({ message: 'Nessun foglio firmato per questo verbale.' });
             }
-            if (v.rows[0].user_id !== req.user.id && !haRuolo(req, 'magazziniere')) {
+            if (v.rows[0].user_id !== req.user.id && !haPermesso(req, 'magazzino.gestione', 'magazzino.consegne')) {
                 return res.status(403).json({ message: 'Non sei autorizzato a leggere questo verbale.' });
             }
             const percorso = path.join(cartellaVerbali, path.basename(v.rows[0].scansione_file));
             if (!fs.existsSync(percorso)) return res.status(404).json({ message: 'Il file del foglio firmato non si trova più.' });
             res.set('X-Content-Type-Options', 'nosniff');
             res.set('Cache-Control', 'private, no-store');
-            res.sendFile(percorso);
+            await inviaFile(res, percorso);
         } catch (e) {
             logger.error('Errore lettura verbale firmato:', e);
             res.status(500).json({ message: 'Errore nel leggere il foglio firmato.' });
         }
     });
 
-    app.get('/api/magazzino/verbali', soloMagazziniere, async (req, res) => {
+    app.get('/api/magazzino/verbali', richiedePermesso('magazzino.gestione', 'magazzino.consegne'), async (req, res) => {
         try {
             const r = await pool.query(
                 `SELECT v.*, COUNT(m.id)::int AS oggetti

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import { registraRotteApp } from './appMobile.js';
 import { registraAudit } from './audit.js';
+import { creaIdempotenza } from './middleware/idempotenza.js';
 import { authenticateToken, checkAdminRole, chiudiSessioni, haRuolo, nomeUtente, nonEsterni, ruoliDi, ruoloPrincipale, scriviRuoli } from './autenticazione.js';
 import { verifyJwtToken } from './authHelper.js';
 import { CARTELLA_BACKUP_APP, CARTELLA_BACKUP_CRON, CARTELLA_BACKUP_FILE, backupDiRecupero, eseguiBackupDatabase, impostaManutenzione, manutenzioneInCorso } from './backup.js';
@@ -34,10 +35,28 @@ import { applicaMigrazioniMancanti } from './migrazioni.js';
 import { CARTELLA_APK, registraRottePubbliche } from './pubbliche.js';
 import { cleanupRevokedTokens, runDailyExpiryCheck } from './scadenze.js';
 import { registraRotteSegnalazioni } from './segnalazioni.js';
+import { registraRotteLetture } from './letture.js';
 import { registraRotteSegreteria } from './segreteria.js';
 import { registraRotteSessioni } from './sessioni.js';
+import { registraRotteAvvisi, registraRotteAvvisiTelefono } from './avvisi.js';
+import { registraRotteGestionePermessi } from './gestionePermessi.js';
+import { richiedePermesso } from './permessi.js';
+import { registraRotteFunzioni } from './funzioni.js';
+import { registraRotteMappaElementi } from './mappaElementi.js';
+import { registraRotteCartografia } from './cartografia.js';
+import { registraRotteMfa } from './mfa.js';
+import { preparaPrimoAccesso, registraRottePrimoAccesso } from './primoAccesso.js';
+import { avviaIntegrita, registraIntegrita } from './integrita.js';
+import { cifraFileInChiaro, preparaCifratura, registraRotteCifratura } from './cifratura.js';
 import { registraRotteRubrica } from './rubrica.js';
+import { registraRotteInformativa, registraRotteInformativaPubblica } from './informativa.js';
+import { caricaVersioneInformativa } from './statoInformativa.js';
 import { registraRotteSituazione } from './situazione.js';
+import { registraRotteDocumenti } from './documenti.js';
+import { registraRotteAttivita } from './attivita.js';
+import { registraRottePresenze } from './presenze.js';
+import { registraRotteChiamate } from './chiamate.js';
+import { registraRotteCopione } from './copione.js';
 import { annotaRegistroSquadre, nomiRadioBloccati, registraRotteSquadre } from './squadre.js';
 import { activeEmergency, loadActiveEmergency } from './statoEmergenza.js';
 import { avviaTempoReale, avvisaClienti, notifiche } from './tempoReale.js';
@@ -97,7 +116,22 @@ app.use(helmet({
 }));
 
 app.use(cookieParser(cookieSecret));
-app.use(express.json());
+// Le forme della mappa (un livello del piano importato da QGIS) possono
+// pesare qualche mega; tutto il resto resta al limite di serie. Il limite alto
+// vale solo con un token valido: un anonimo non fa leggere 8 mega al server
+// per sentirsi rispondere 401.
+const jsonDiSerie = express.json();
+const jsonMappa = express.json({ limit: '8mb' });
+app.use(async (req, res, next) => {
+    if (!req.path.startsWith('/api/mappa/')) return jsonDiSerie(req, res, next);
+    const token = req.signedCookies['__Secure-token'] || req.headers['authorization']?.split(' ')[1];
+    try {
+        await verifyJwtToken(token);
+    } catch {
+        return jsonDiSerie(req, res, next);
+    }
+    jsonMappa(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Le pagine di lavoro stanno in public/ con quelle pubbliche: senza sessione
@@ -105,7 +139,8 @@ app.use(express.urlencoded({ extended: true }));
 const PAGINE_RISERVATE = new Set([
     '/centro-operativo.html', '/profile.html', '/admin-segreteria.html',
     '/magazzino.html', '/magazzino-etichette.html', '/magazzino-verbale.html',
-    '/print-report.html', '/situazione.html', '/rubrica.html'
+    '/print-report.html', '/situazione.html', '/rubrica.html', '/documenti.html', '/calendario.html',
+    '/chiamata.html', '/copione.html'
 ]);
 app.use(async (req, res, next) => {
     if (!PAGINE_RISERVATE.has(req.path)) return next();
@@ -159,13 +194,22 @@ app.use((req, res, next) => {
 });
 
 registraRottePubbliche(app);
+registraRottePrimoAccesso(app);
+registraRotteInformativaPubblica(app);
 
 // Da qui in poi serve una sessione. Prima un limite per indirizzo contro chi
 // martella il server, poi chi è, poi il limite per persona: una sala operativa
 // dietro lo stesso indirizzo non deve dividersi un limite solo.
 app.use('/api/', limitePerRete);
+// Gli avvisi del telefono si leggono col loro token, non con la sessione.
+registraRotteAvvisiTelefono(app);
 app.use(authenticateToken);
 app.use('/api/', apiLimiter);
+// Scritture rimandate dopo un buco di rete: la stessa chiave non scrive due volte.
+app.use('/api/', creaIdempotenza({ pool, logger, escluse: ['/magazzino/'] }));
+
+registraRotteAvvisi(app, { notifiche });
+registraRotteGestionePermessi(app);
 
 registraRotteEsterniTemporanei(app, {
     pool, logger, registraAudit, nomeUtente, emergenzaAttiva: () => activeEmergency, erroreRichiesta, nonEsterni,
@@ -181,7 +225,25 @@ registraRotteSituazione(app, {
     pool, logger, nonEsterni, haRuolo, registraAudit, emergenzaAttiva: () => activeEmergency
 });
 
+registraRotteDocumenti(app, { emergenzaAttiva: () => activeEmergency });
+registraRotteAttivita(app);
+registraRottePresenze(app);
+registraRotteChiamate(app);
+registraRotteCopione(app);
+
 registraRotteRubrica(app, { pool, logger, nonEsterni, registraAudit, nomeUtente, avvisaClienti });
+
+registraRotteMappaElementi(app, {
+    pool, logger, haRuolo, ruoliDi, registraAudit, nomeUtente, avvisaClienti, checkAdminRole,
+    emergenzaAttiva: () => activeEmergency
+});
+
+registraRotteCartografia(app, { logger, registraAudit });
+
+registraRotteFunzioni(app, {
+    pool, logger, haRuolo, ruoliDi, registraAudit, nomeUtente, avvisaClienti, checkAdminRole,
+    notificaA: notifiche.notificaA, emergenzaAttiva: () => activeEmergency
+});
 
 const magazzino = registraRotteMagazzino(app, {
     pool, logger, haRuolo, ruoliDi, registraAudit,
@@ -208,6 +270,9 @@ registraRotteApp(app, {
     leggiConfigMagazzino: magazzino.leggiConfig
 });
 
+registraIntegrita(app, { soloAdmin: checkAdminRole, registraAudit, dominio: domainName });
+registraRotteCifratura(app, { soloAdmin: checkAdminRole, registraAudit });
+
 const manutenzione = registraRotteManutenzione(app, {
     pool, logger, registraAudit, avvisaClienti,
     emergenzaAttiva: () => activeEmergency,
@@ -233,19 +298,24 @@ const PUBBLICA = path.join(__dirname, '..', 'public');
 const ADMIN = path.join(__dirname, 'admin');
 app.get('/centro-operativo.html', authenticateToken, pagina(PUBBLICA, 'centro-operativo.html'));
 app.get('/profile.html', authenticateToken, pagina(PUBBLICA, 'profile.html'));
-app.get('/admin/admin.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'admin.html'));
+app.get('/admin/admin.html', authenticateToken, richiedePermesso('volontari.anagrafica'), pagina(ADMIN, 'admin.html'));
 app.get('/admin/dashboard-admin.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'dashboard-admin.html'));
 // Le squadre le compongono tutti: in sala è un lavoro condiviso.
 app.get('/admin/squadre.html', authenticateToken, pagina(ADMIN, 'squadre.html'));
-app.get('/admin/archive.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'archive.html'));
+app.get('/admin/archive.html', authenticateToken, richiedePermesso('emergenze.archivio'), pagina(ADMIN, 'archive.html'));
 app.get('/admin/sistema.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'sistema.html'));
+app.get('/admin/funzioni.html', authenticateToken, richiedePermesso('emergenze.funzioni'), pagina(ADMIN, 'funzioni.html'));
+app.get('/admin/tesserino.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'tesserino.html'));
 
 registraRotteSessioni(app);
+registraRotteInformativa(app);
+registraRotteMfa(app);
 registraRotteImpostazioni(app);
 registraRotteEmergenze(app);
 registraRotteUtenti(app);
 registraRotteSquadre(app);
 registraRotteSegnalazioni(app);
+registraRotteLetture(app);
 registraRotteSegreteria(app);
 
 // L'ultimo: gli errori che nessuna rotta ha gestito. In produzione il
@@ -267,7 +337,15 @@ app.use((err, req, res, next) => {
 (async () => {
     try {
         await applicaMigrazioniMancanti();
+        // La chiave dei dati (creata al primo avvio), poi i file rimasti in chiaro.
+        await preparaCifratura();
+        cifraFileInChiaro().catch(e => logger.error('[Cifratura] Giro dei file non riuscito:', e));
+        setInterval(() => cifraFileInChiaro().catch(() => {}), 3600000);
         await loadActiveEmergency();
+        await caricaVersioneInformativa();
+        // Senza amministratori: il codice per crearlo dalla pagina di accesso.
+        await preparaPrimoAccesso();
+        avviaIntegrita();
         runDailyExpiryCheck();
         setInterval(runDailyExpiryCheck, 3600000);
         cleanupRevokedTokens();

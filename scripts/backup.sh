@@ -20,9 +20,11 @@
 # RIPRISTINO A MANO (se l'applicazione non parte più):
 #   1. Database:
 #        gunzip -c /var/backups/orion/db/db_<data>.sql.gz | sudo -u postgres psql <nome_db>
+#        (un dump cifrato si decifra prima: node scripts/decifra-backup.mjs <dump> <uscita.sql.gz>)
 #      Se il database va ricreato da zero:
 #        sudo -u postgres dropdb <nome_db> && sudo -u postgres createdb -O <utente_db> <nome_db>
 #        gunzip -c /var/backups/orion/db/db_<data>.sql.gz | sudo -u postgres psql <nome_db>
+#        (un dump cifrato si decifra prima: node scripts/decifra-backup.mjs <dump> <uscita.sql.gz>)
 #   2. File caricati:
 #        rsync -a /var/backups/orion/files/ /var/www/<dominio>/
 #        chown -R orion_app:orion_app /var/www/<dominio>
@@ -97,6 +99,15 @@ if ! gzip -t "$DUMP_FILE" 2>/dev/null; then
     errore "Il file di dump è corrotto (gzip -t fallito): lo elimino."
     rm -f "$DUMP_FILE"
     exit 1
+fi
+# Cifrato con la chiave dei dati di ORION (se c'è): un dump copiato altrove
+# non si legge senza la chiave. Si ripristina dalla pagina Sistema, o a mano
+# con scripts/decifra-backup.mjs.
+if command -v node >/dev/null 2>&1 && [ -f "$APP_DIR/scripts/cifra-backup.mjs" ]; then
+    CHIAVE_DATI=$(grep -E '^ORION_CHIAVE_FILE=' "$APP_DIR/.env" | cut -d= -f2-)
+    if ! node "$APP_DIR/scripts/cifra-backup.mjs" "$DUMP_FILE" ${CHIAVE_DATI:+"$CHIAVE_DATI"} >>"$LOG_FILE" 2>&1; then
+        log "ATTENZIONE: dump non cifrato (chiave dei dati mancante?): resta in chiaro."
+    fi
 fi
 chown root:"$GRUPPO_APP" "$DUMP_FILE" 2>/dev/null || true
 chmod 640 "$DUMP_FILE"

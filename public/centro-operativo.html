@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/css/theme.css">
     <link rel="stylesheet" href="/css/componenti.css">
     <link rel="stylesheet" href="/leaflet/leaflet.css" >
+    <link rel="stylesheet" href="/vendor/geoman/leaflet-geoman.css">
     <link rel="stylesheet" href="/vendor/leaflet-markercluster/MarkerCluster.css">
     <link rel="stylesheet" href="/vendor/leaflet-markercluster/MarkerCluster.Default.css">
     <link rel="stylesheet" href="/vendor/line-awesome/css/all.min.css">
@@ -26,12 +27,15 @@
                 <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 28px; width: auto; object-fit: contain;"> ORION
             </h1>
             
-            <div id="emergency-status-display" style="padding: 6px 12px; border-radius: 50px; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; background: var(--secondary-bg-color);">
+            <div id="emergency-status-display" style="white-space: nowrap; flex-shrink: 0; padding: 6px 12px; border-radius: 50px; font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; background: var(--secondary-bg-color);">
                 <i class="fas fa-spinner fa-spin"></i> Caricamento...
             </div>
 
             <button type="button" id="open-emergency-btn" class="button-style" style="display: none">
                 Apri emergenza
+            </button>
+            <button type="button" id="simulazione-btn" class="button-style button-secondary" hidden title="Apre subito una simulazione in sala, senza pianificarla nel calendario">
+                <i class="fas fa-clapperboard"></i> Simulazione
             </button>
             <button type="button" id="close-emergency-btn" class="button-style btn-pericolo" style="display: none" title="Chiudi Emergenza Attiva">
                 Chiudi emergenza
@@ -40,18 +44,28 @@
 
         <div style="position: relative; display: flex; align-items: center; gap: 10px;">
             <!-- Il punto di situazione da stampare e la rubrica: a portata di mano, non nel menu. -->
-            <button type="button" id="situazione-btn" class="button-style button-secondary" style="display: none" title="Il punto di situazione da stampare o salvare in PDF"><i class="fas fa-clipboard-list"></i> Situazione</button>
-            <button type="button" id="rubrica-btn" class="button-style button-secondary" style="display: none" title="I numeri utili in sala"><i class="fas fa-address-book"></i> Rubrica</button>
+            <button type="button" id="situazione-btn" class="button-style button-secondary" style="display: none" title="Il punto di situazione da stampare o salvare in PDF"><i class="fas fa-clipboard-list"></i><span class="etichetta-testata"> Situazione</span></button>
+            <button type="button" id="regia-btn" class="button-style" hidden title="La regia della simulazione: orologio, eventi del copione, osservazioni"><i class="fas fa-clapperboard"></i><span class="etichetta-testata"> Regia</span></button>
+            <button type="button" id="chiamata-btn" class="button-style button-secondary" hidden title="La chiamata dei volontari"><i class="fas fa-phone-volume"></i><span class="etichetta-testata"> Volontari</span><span class="ch-badge" hidden></span></button>
+            <button type="button" id="funzioni-btn" class="button-style button-secondary" style="display: none" title="Le funzioni di supporto e i loro incarichi"><i class="fas fa-sitemap"></i><span class="etichetta-testata"> Funzioni</span></button>
+            <button type="button" id="avvisi-computer-btn" class="button-style button-secondary" hidden title="Gli avvisi compaiono anche quando la finestra non è in primo piano"><i class="fas fa-bell"></i><span class="etichetta-testata"> Avvisi sul computer</span></button>
+            <button type="button" id="rubrica-btn" class="button-style button-secondary" style="display: none" title="I numeri utili in sala"><i class="fas fa-address-book"></i><span class="etichetta-testata"> Rubrica</span></button>
             <div class="top-menu-dropdown">
                 <button id="top-menu-btn" class="button-style button-secondary">
                     Menu </button>
                 <div id="top-menu-content" class="dropdown-content" style="display: none; position: absolute; right: 0; top: 110%; background: var(--surface-color); min-width: 200px; box-shadow: 0 8px 16px rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; z-index: 2000;">
                     <a href="/admin/dashboard-admin.html" id="admin-dashboard-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-cogs" style="width: 20px;"></i> Amministrazione</a>
                     
+                    <a href="/admin/archive.html" id="archivio-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-archive" style="width: 20px;"></i> Archivio emergenze</a>
+                    <a href="/admin/admin.html" id="volontari-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-users" style="width: 20px;"></i> Volontari</a>
+
                     <a href="/admin-segreteria.html" id="segreteria-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-folder-open" style="width: 20px;"></i> Segreteria</a>
                     
                     <a href="/magazzino.html" id="magazzino-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a>
                     
+                    <a href="/calendario.html" id="calendario-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-calendar-days" style="width: 20px;"></i> Calendario</a>
+                    <!-- L'archivio del gruppo (piano, procedure, libretti): a tutti, agli esterni quello per l'emergenza. -->
+                    <a href="/documenti.html" id="documenti-gruppo-btn" style="display: block; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-book" style="width: 20px;"></i> Documenti del gruppo</a>
                     <a href="/admin/squadre.html" id="manage-teams-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a>
                     <!-- Chi arriva al COC da fuori (Croce Rossa, 118...): un nome e un QR. Solo a emergenza aperta. -->
                     <a href="#" id="esterni-temporanei-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-id-badge" style="width: 20px;"></i> Accesso esterno</a>
@@ -84,6 +98,8 @@
                 <button id="toggle-closed-reports-btn" class="button-style button-secondary" style="width: 100%">
                     Mostra chiuse
                 </button>
+                <!-- Il riepilogo: quante sono in ogni situazione; un clic filtra l'elenco. -->
+                <div id="riepilogo-segnalazioni" class="riepilogo-segnalazioni" role="group" aria-label="Filtra le segnalazioni" hidden></div>
             </div>
 
             <div id="report-list-container" style="flex-grow: 1; overflow-y: auto; background: var(--secondary-bg-color);">
@@ -133,17 +149,17 @@
                 </div>
             </aside>
 
-            <div id="report-detail-side-panel" style="position: absolute; top: 0; left: -100%; width: 100%; max-width: 550px; height: 100%; background: var(--surface-color); box-shadow: 5px 0 20px rgba(0,0,0,0.15); border-right: 1px solid var(--border-color); z-index: 1050; transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
+            <div id="report-detail-side-panel" data-copre-mappa style="position: absolute; top: 0; left: -100%; width: 100%; max-width: 550px; height: 100%; background: var(--surface-color); box-shadow: 5px 0 20px rgba(0,0,0,0.15); border-right: 1px solid var(--border-color); z-index: 1050; transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
                 <div class="panel-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-color);">
                     <h3 style="margin: 0; font-size: 1.1rem; color: var(--info-text);">Segnalazione #<span id="bottom-detail-report-id"></span></h3>
                     <button id="close-side-panel-btn" class="button-style button-secondary" style="width: 32px"><i class="fas fa-times"></i></button>
                 </div>
                 
-                <div id="bottom-detail-main" style="padding: 12px 15px 0 15px; display: flex; flex-direction: column; flex-shrink: 0; border-bottom: 1px solid var(--border-color);">
+                <div id="bottom-detail-main" style="padding: 12px 15px 0 15px; display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; overflow-y: auto; border-bottom: 1px solid var(--border-color);">
                     <div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i></div>
                 </div>
 
-                <div id="bottom-detail-updates" style="flex: 1; display: flex; flex-direction: column; background: var(--secondary-bg-color); min-height: 0; overflow: hidden;">
+                <div id="bottom-detail-updates" style="flex: 1 0 auto; display: flex; flex-direction: column; background: var(--secondary-bg-color); height: clamp(190px, 36vh, 300px); min-height: 0; overflow: hidden;">
                     <div style="padding: 6px 15px; background: var(--surface-color); border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
                         <span>Diario Operativo</span>
                     </div>
@@ -187,12 +203,12 @@
 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 250px;">
-                        <label for="create-reporter-name">Nome e Cognome Segnalante <span class="obbligatorio">*</span></label>
-                        <input type="text" id="create-reporter-name" placeholder="Es. Mario Rossi" required>
+                        <label for="create-reporter-name">Nome e Cognome Segnalante</label>
+                        <input type="text" id="create-reporter-name" placeholder="Es. Mario Rossi (se lo dice)">
                     </div>
                     <div style="flex: 1; min-width: 250px;">
-                        <label for="create-reporter-contact">Recapito Telefonico / Email <span class="obbligatorio">*</span></label>
-                        <input type="text" id="create-reporter-contact" placeholder="Es. 333 1234567" required>
+                        <label for="create-reporter-contact">Recapito Telefonico / Email</label>
+                        <input type="text" id="create-reporter-contact" placeholder="Es. 333 1234567 (per richiamare)">
                     </div>
                 </div>
 
@@ -258,12 +274,12 @@
 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 250px;">
-                        <label for="edit-reporter-name">Nome e Cognome Segnalante <span class="obbligatorio">*</span></label>
-                        <input type="text" id="edit-reporter-name" required>
+                        <label for="edit-reporter-name">Nome e Cognome Segnalante</label>
+                        <input type="text" id="edit-reporter-name">
                     </div>
                     <div style="flex: 1; min-width: 250px;">
-                        <label for="edit-reporter-contact">Recapito Telefonico / Email <span class="obbligatorio">*</span></label>
-                        <input type="text" id="edit-reporter-contact" required>
+                        <label for="edit-reporter-contact">Recapito Telefonico / Email</label>
+                        <input type="text" id="edit-reporter-contact">
                     </div>
                 </div>
 
@@ -333,6 +349,9 @@
             <h2>Apri Nuova Emergenza</h2>
             <hr>
             <form id="open-emergency-form">
+                <div id="avviso-simulazione-in-corso" class="rg-avviso-reale" hidden>
+                    <strong>C'è una simulazione in corso.</strong> Aprendo l'emergenza vera la simulazione si ferma e resta nell'archivio come interrotta. Squadre e sala restano come sono: la gente è già qui.
+                </div>
                 <p>Inserisci il codice dell'emergenza</p>
                 <div>
                     <label for="emergency-external-code">Codice Emergenza:</label>
@@ -430,13 +449,20 @@
 
     <input type="file" id="report-image-upload-input" multiple accept="image/*" style="display: none;">
 
+    <!-- Gli avvisi a comparsa, in alto sopra la mappa: le novità e le conferme (notifica). -->
+    <div id="contenitore-avvisi" data-avvisi aria-live="polite"></div>
     <script src="/leaflet/leaflet.js"></script>
+    <script src="/vendor/geoman/leaflet-geoman.min.js"></script>
     <script src="/vendor/leaflet-markercluster/leaflet.markercluster.js"></script>
     <script src="/vendor/js-cookie/js.cookie.min.js"></script>
     <script src="/js/apiHelper.js"></script>
+    <script src="/js/rete-scarsa.js"></script>
     <script src="/vendor/qrcode/qrcode.min.js"></script>
     <script src="/js/esterni-temporanei.js"></script>
     <script src="/js/rubrica.js"></script>
+    <script src="/js/funzioni-co.js"></script>
+    <script src="/js/chiamata-co.js"></script>
+    <script src="/js/regia-co.js"></script>
     <script src="/websocket.js"></script>
     <script type="module" src="/js/centro-operativo.js"></script>
 </body>

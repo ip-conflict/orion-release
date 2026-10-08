@@ -20,6 +20,10 @@ async function loadAndApplyBranding() {
         if (settings) {
             brandingSettings.card_district_label = settings.card_district_label || '';
             brandingSettings.card_regional_entity_name = settings.card_regional_entity_name || '';
+            // Il codice fiscale sul tesserino: acceso se non lo si è spento.
+            brandingSettings.badge_cf_barcode = settings.badge_cf_barcode !== 'false';
+            // L'aspetto scelto dall'amministratore (vuoto: quello predefinito).
+            brandingSettings.badge_modello = settings.badge_modello || '';
         }
 
         const logoInfo = await fetchApi('/api/branding');
@@ -35,13 +39,20 @@ async function loadAndApplyBranding() {
     }
 }
 
-if (ruoliUtente().length > 0 && !haRuolo('segreteria')) {
+if (ruoliUtente().length > 0 && !haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
     // Al centro operativo, non all'accesso: la sessione è buona, manca il ruolo.
     notifica('Questa pagina è riservata alla segreteria.', 'errore');
     window.location.href = '/centro-operativo.html';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // I cataloghi di corsi e visite a chi gestisce i dati sanitari.
+    if (!haPermesso('volontari.sanitario')) {
+        ['btn-manage-catalog', 'btn-manage-medical-catalog'].forEach(id => {
+            const voce = document.getElementById(id)?.closest('li');
+            if (voce) voce.hidden = true;
+        });
+    }
     // L'area Amministrazione è riservata all'admin: mostriamo il link solo a lui,
     // così un utente di segreteria non finisce su una pagina che gli viene negata.
     if (haRuolo('admin')) {
@@ -61,6 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const text = row.innerText.toLowerCase();
             row.style.display = text.includes(term) ? '' : 'none';
         });
+        aggiornaAzioniMultiple();
     };
     searchInput.addEventListener('keyup', filterTable);
     document.getElementById('btn-search').addEventListener('click', filterTable);
@@ -143,6 +155,8 @@ document.addEventListener('DOMContentLoaded', setupExpiryListeners);
 
 // CARICAMENTO DASHBOARD ALLARMI
 async function loadDashboardAlerts() {
+    // Le scadenze di visite e corsi a chi gestisce i dati sanitari.
+    if (!haPermesso('volontari.sanitario')) return;
     try {
         const response = await fetch('/api/admin/segreteria/dashboard');
 
@@ -190,6 +204,7 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
     container.appendChild(grid);
 
     if (medicalAlerts.length > 0) {
+        const maiRegistrate = medicalAlerts.filter(a => !a.scadenza).length;
         const namesList = medicalAlerts.map(a => {
             const name = (a.nome && a.cognome)
                 ? `${escapeHTML(a.nome)} ${escapeHTML(a.cognome)}`
@@ -212,7 +227,7 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
                 <div class="alert-icon"><i class="fas fa-heartbeat"></i></div>
                 <div class="alert-info">
                     <h3>Visite Mediche da Rinnovare</h3>
-                    <p><strong>${medicalAlerts.length}</strong> volontari segnalati</p>
+                    <p><strong>${medicalAlerts.length}</strong> volontari segnalati${maiRegistrate ? ` (${maiRegistrate === medicalAlerts.length ? 'tutti' : maiRegistrate} senza nessuna visita registrata)` : ''}</p>
                 </div>
             </div>
             <div class="alert-card-actions">
@@ -299,6 +314,24 @@ async function loadUsers() {
             tr.addEventListener('mouseenter', () => tr.style.backgroundColor = 'var(--list-item-hover-bg, rgba(0,0,0,0.02))');
             tr.addEventListener('mouseleave', () => tr.style.backgroundColor = '');
 
+            // La casella per le registrazioni multiple: non apre il fascicolo.
+            const sceltaTd = document.createElement('td');
+            sceltaTd.className = 'col-scelta';
+            const scelta = document.createElement('input');
+            scelta.type = 'checkbox';
+            scelta.className = 'scelta-volontario';
+            scelta.checked = sceltiMultipla.has(user.id);
+            scelta.setAttribute('aria-label', `Seleziona ${user.nome} ${user.cognome}`);
+            scelta.addEventListener('click', (ev) => ev.stopPropagation());
+            scelta.addEventListener('change', () => {
+                if (scelta.checked) sceltiMultipla.set(user.id, `${user.nome} ${user.cognome}`);
+                else sceltiMultipla.delete(user.id);
+                aggiornaAzioniMultiple();
+            });
+            sceltaTd.addEventListener('click', (ev) => ev.stopPropagation());
+            sceltaTd.appendChild(scelta);
+            tr.appendChild(sceltaTd);
+
             const infoTd = document.createElement('td');
             infoTd.innerHTML = `<strong>${escapeHTML(user.nome)} ${escapeHTML(user.cognome)}</strong><br><small>${escapeHTML(user.username)}</small>`;
             tr.appendChild(infoTd);
@@ -307,7 +340,9 @@ async function loadUsers() {
             statusTd.innerHTML = '<span class="status-badge" style="background: rgba(100,116,139,0.1); color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Verifica...</span>';
             tr.appendChild(statusTd);
 
-            fetch(`/api/users/${user.id}/libretto`).then(res => res.json()).then(data => {
+            if (!haPermesso('volontari.sanitario')) {
+                statusTd.innerHTML = '<span class="status-badge" style="background: rgba(100,116,139,0.12); color: var(--text-muted);">—</span>';
+            } else fetch(`/api/users/${user.id}/libretto`).then(res => res.json()).then(data => {
                 const medRecords = Array.isArray(data.medical_records) ? data.medical_records : (data.medical_record ? [data.medical_record] : []);
                 const hasValidMed = medRecords.some(m => 
                     m.visit_name && m.visit_name.toLowerCase() === 'visita di idoneità fisica' && 
@@ -324,6 +359,10 @@ async function loadUsers() {
 
                 if (hasValidMed && hasValidCourse) {
                     statusTd.innerHTML = '<span class="status-badge active"><i class="fas fa-check-circle"></i> Operativo</span>';
+                } else if (!medRecords.length && !courses.length) {
+                    // Niente di registrato non è "fuori regola": è un fascicolo
+                    // ancora da riempire (il primo giorno, tutti).
+                    statusTd.innerHTML = '<span class="status-badge" style="background: rgba(100,116,139,0.12); color: var(--text-muted);"><i class="fas fa-folder-open"></i> Dati da inserire</span>';
                 } else if (!hasValidMed && !hasValidCourse) {
                     statusTd.innerHTML = '<span class="status-badge suspended"><i class="fas fa-times-circle"></i> Non Operativo</span>';
                 } else if (!hasValidMed) {
@@ -363,6 +402,8 @@ async function openMedicalModal(userId, userName) {
             window.catalogsData.medicalVisits.forEach(v => {
                 selectType.innerHTML += `<option value="${escapeHTML(v.id)}">${escapeHTML(v.name)}</option>`;
             });
+            // Un solo tipo di visita (il caso di tutti, all'inizio): già scelto.
+            if (window.catalogsData.medicalVisits.length === 1) selectType.value = String(window.catalogsData.medicalVisits[0].id);
         }
     } catch(e) { console.error("Errore catalogo visite", e); }
 
@@ -514,6 +555,7 @@ async function openCoursesModal(userId, userName) {
         catalogsData.courses.forEach(course => {
             select.innerHTML += `<option value="${escapeHTML(course.id)}">${escapeHTML(course.name)}</option>`;
         });
+        if (catalogsData.courses.length === 1) select.value = String(catalogsData.courses[0].id);
 
         const librettoRes = await fetch(`/api/users/${userId}/libretto`);
         const libretto = await librettoRes.json();
@@ -1090,6 +1132,21 @@ async function refreshUserDetailLists() {
         const data = await fetchApi(`/api/users/${currentUserViewId}/libretto`);
         currentLibrettoViewData = data;
         medList.innerHTML = '';
+        // Senza il permesso dei dati sanitari visite e corsi non arrivano.
+        const senzaSanitari = data.dati_sanitari === false;
+        document.querySelectorAll('#btn-add-course, #btn-add-medical').forEach(e => { e.hidden = senzaSanitari; });
+        if (senzaSanitari) {
+            const nota = '<li style="color: var(--text-muted);">Visite e corsi li vede chi ha il permesso «Gestire visite mediche e corsi».</li>';
+            medList.innerHTML = nota;
+            courseList.innerHTML = nota;
+            const cardDpi = document.getElementById('card-dpi-volontario');
+            if (cardDpi) {
+                cardDpi.hidden = !data.magazzino_attivo;
+                if (data.magazzino_attivo) disegnaDpiInDotazione(document.getElementById('detail-dpi-list'), data.equipment);
+                disegnaPresenzeVolontario(currentUserViewId);
+            }
+            return;
+        }
         const rawMedical = Array.isArray(data.medical_records) ? data.medical_records : (data.medical_record ? [data.medical_record] : []);
         
         // Raggruppamento: la prima visita che incontriamo per ogni tipo è quella "Attiva", le altre sono "Storico"
@@ -1258,6 +1315,7 @@ async function refreshUserDetailLists() {
                 if (vai) vai.href = `/magazzino.html?persona=${currentUserViewId}`;
             }
         }
+        disegnaPresenzeVolontario(currentUserViewId);
 
     } catch (error) {
         console.error("Errore ricaricamento liste dettaglio:", error);
@@ -1280,6 +1338,8 @@ document.getElementById('btn-add-medical').addEventListener('click', async () =>
             window.catalogsData.medicalVisits.forEach(v => {
                 selectType.innerHTML += `<option value="${escapeHTML(v.id)}">${escapeHTML(v.name)}</option>`;
             });
+            // Un solo tipo di visita (il caso di tutti, all'inizio): già scelto.
+            if (window.catalogsData.medicalVisits.length === 1) selectType.value = String(window.catalogsData.medicalVisits[0].id);
         }
     } catch(e) { console.error("Errore caricamento tipi visita", e); }
 
@@ -1301,6 +1361,7 @@ document.getElementById('btn-add-course').addEventListener('click', async () => 
         window.catalogsData.courses.forEach(c => {
             select.innerHTML += `<option value="${escapeHTML(c.id)}">${escapeHTML(c.name)}</option>`;
         });
+        if (window.catalogsData.courses.length === 1) select.value = String(window.catalogsData.courses[0].id);
     } catch(e) { console.error("Errore caricamento corsi", e); }
 
     document.getElementById('courses-modal').style.display = 'block';
@@ -1805,160 +1866,35 @@ async function generateIDCard() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generazione...';
 
     try {
-        const logoBase64 = await getBase64ImageFromUrl('/logo.png');
-        const regioneBase64 = brandingLogos.logo2Url ? await getBase64ImageFromUrl(brandingLogos.logo2Url) : null;
         // QR e foto non stanno nell'elenco degli utenti: se il fascicolo non
         // li aveva ancora letti, li si chiede adesso.
         if (currentUserViewData.qr_attivo === undefined) {
             const t = await fetchApi(`/api/admin/users/${currentUserViewData.id}/tesserino`);
             Object.assign(currentUserViewData, { public_token: t.public_token, photo_url: t.photo_url, qr_attivo: t.qr_attivo !== false });
         }
+        const [logo, logo2] = await Promise.all([
+            getBase64ImageFromUrl('/logo.png'),
+            brandingLogos.logo2Url ? getBase64ImageFromUrl(brandingLogos.logo2Url) : null,
+            Tesserino.caratteri()
+        ]);
         // Senza token (QR spenti dall'amministrazione) il tesserino si stampa
-        // senza QR, e lo spazio si ridistribuisce.
-        const conQr = !!currentUserViewData.public_token;
-        const qrUrl = conQr ? `${window.location.origin}/badge.html?token=${currentUserViewData.public_token}` : null;
-
-        // Colori del modello fisico di riferimento (tesserino Protezione Civile)
-        const navyBlue = '#0b1f3a';
-        const gold = '#f4c430';
-        const tealBand = '#0f505e';
-        const pcYellow = '#FFCC00';
-
-        // Formato CR80 orizzontale: 86x54 mm, cioè 243x153 punti PDF.
-        const CARD_W = 243, CARD_H = 153;
-        const NAVY_H = 32;
-        const TEAL_Y = 104, TEAL_H = 18;
-        const YELLOW_Y = 122;
-        // La fascia bianca fra la banda blu e quella dell'ente: foto, QR e
-        // loghi stanno tutti centrati qui dentro, in verticale.
-        const BIANCO_Y = NAVY_H, BIANCO_H = TEAL_Y - NAVY_H;
-
-        // La foto, ritagliata come una fototessera (riempie il riquadro senza
-        // deformarsi) e centrata nella fascia bianca.
-        const FOTO_W = 55, FOTO_H = 66;
-        const FOTO_X = CARD_W - 8 - FOTO_W, FOTO_Y = BIANCO_Y + (BIANCO_H - FOTO_H) / 2;
-        const photoBase64 = currentUserViewData.photo_url
-            ? await ritagliaFototessera(currentUserViewData.photo_url, FOTO_W, FOTO_H)
-            : null;
-
-        // Le bandiere, disegnate secondo le proporzioni ufficiali (3:2).
-        // Italiana: tre bande verticali uguali, verde, bianco e rosso.
-        // Europea: dodici stelle d'oro a cinque punte su un cerchio di raggio
-        // pari a un terzo dell'altezza; ogni stella è larga un nono
-        // dell'altezza, con una punta verso l'alto.
-        const BANDIERA_H = 18, BANDIERA_W = 27, BANDIERA_Y = YELLOW_Y + (CARD_H - YELLOW_Y - BANDIERA_H) / 2;
-        const ITA_X = 10, UE_X = CARD_W - 10 - BANDIERA_W;
-        const bandieraItaliana = [
-            { type: 'rect', x: ITA_X, y: BANDIERA_Y, w: BANDIERA_W / 3, h: BANDIERA_H, color: '#009246' },
-            { type: 'rect', x: ITA_X + BANDIERA_W / 3, y: BANDIERA_Y, w: BANDIERA_W / 3, h: BANDIERA_H, color: '#ffffff' },
-            { type: 'rect', x: ITA_X + 2 * BANDIERA_W / 3, y: BANDIERA_Y, w: BANDIERA_W / 3, h: BANDIERA_H, color: '#ce2b37' }
-        ];
-        const stella = (cx, cy, r) => ({
-            type: 'polyline', closePath: true, color: '#ffcc00', lineWidth: 0,
-            points: Array.from({ length: 10 }, (_, k) => {
-                const raggio = k % 2 === 0 ? r : r * 0.382;
-                const angolo = -Math.PI / 2 + (k * Math.PI) / 5;
-                return { x: cx + raggio * Math.cos(angolo), y: cy + raggio * Math.sin(angolo) };
-            })
-        });
-        const bandieraEuropea = [
-            { type: 'rect', x: UE_X, y: BANDIERA_Y, w: BANDIERA_W, h: BANDIERA_H, color: '#003399' },
-            ...Array.from({ length: 12 }, (_, k) => {
-                const angolo = (Math.PI * 2 * k) / 12 - Math.PI / 2;
-                const cx = UE_X + BANDIERA_W / 2, cy = BANDIERA_Y + BANDIERA_H / 2, giro = BANDIERA_H / 3;
-                return stella(cx + giro * Math.cos(angolo), cy + giro * Math.sin(angolo), BANDIERA_H / 18);
-            })
-        ];
-
-        // Segnaposto della foto: una sagoma, così si vede che lo spazio è per
-        // la foto e la si può incollare a mano.
-        const segnapostoFoto = {
-            canvas: [
-                { type: 'rect', x: 0, y: 0, w: FOTO_W, h: FOTO_H, color: '#e2e8f0' },
-                { type: 'ellipse', x: FOTO_W / 2, y: 24, r1: 11, r2: 12, color: '#94a3b8' },
-                { type: 'ellipse', x: FOTO_W / 2, y: FOTO_H + 2, r1: 22, r2: 22, color: '#94a3b8' },
-                // Copre la parte delle spalle che esce dal riquadro: sotto la
-                // foto il tesserino è bianco, e la banda dell'ente è più in basso.
-                { type: 'rect', x: 0, y: FOTO_H, w: FOTO_W, h: TEAL_Y - FOTO_Y - FOTO_H, color: '#ffffff' }
-            ],
-            absolutePosition: { x: FOTO_X, y: FOTO_Y }
+        // senza QR. Il codice fiscale c'è se è nel fascicolo e l'amministrazione
+        // non l'ha spento.
+        const cf = String(currentUserViewData.codice_fiscale || '').trim().toUpperCase();
+        const dati = {
+            nome: `${currentUserViewData.cognome || ''} ${currentUserViewData.nome || ''}`,
+            distretto: brandingSettings.card_district_label || '',
+            ente: brandingSettings.card_regional_entity_name || '',
+            qr: currentUserViewData.public_token ? `${window.location.origin}/badge.html?token=${currentUserViewData.public_token}` : null,
+            cf: brandingSettings.badge_cf_barcode !== false && /^[A-Z0-9]{16}$/.test(cf) ? cf : null,
+            // Prima il logo dell'ente sovraordinato, poi quello dell'organizzazione.
+            loghi: [logo2, logo]
         };
+        // La foto, ritagliata come una fototessera sulla misura del suo riquadro.
+        const riquadro = Tesserino.posizioni(brandingSettings.badge_modello, Tesserino.varianti(dati)).foto;
+        if (currentUserViewData.photo_url) dati.foto = await ritagliaFototessera(currentUserViewData.photo_url, riquadro.w, riquadro.h);
 
-        // La colonna centrale: "PROTEZIONE CIVILE" e sotto i loghi, prima
-        // quello dell'ente sovraordinato e poi quello dell'organizzazione.
-        // Con il QR sta fra QR e foto; senza, si allarga a tutto lo spazio a
-        // sinistra della foto e scritta e loghi crescono.
-        const QR_LATO = 58, QR_X = 8, QR_Y = BIANCO_Y + (BIANCO_H - QR_LATO) / 2;
-        const colonnaX = conQr ? QR_X + QR_LATO + 4 : 8;
-        const colonnaW = FOTO_X - 6 - colonnaX;
-        // Più grande possibile senza toccare QR e foto: in grassetto la
-        // scritta è larga circa 9,3 volte la dimensione del carattere.
-        const titoloSize = Math.min(conQr ? 12 : 15, colonnaW / 9.3);
-        const LATO = conQr ? 36 : 42, SPAZIO = conQr ? 10 : 16;
-        const simboli = [regioneBase64, logoBase64].filter(Boolean);
-        const altezzaTitolo = titoloSize * 1.2;
-        const altezzaColonna = altezzaTitolo + (simboli.length ? 5 + LATO : 0);
-        const colonnaY = BIANCO_Y + (BIANCO_H - altezzaColonna) / 2;
-        const inizioSimboli = colonnaX + (colonnaW - (simboli.length * LATO + (simboli.length - 1) * SPAZIO)) / 2;
-        const rigaSimboli = simboli.map((immagine, i) => ({
-            image: immagine, fit: [LATO, LATO],
-            absolutePosition: { x: inizioSimboli + i * (LATO + SPAZIO), y: colonnaY + altezzaTitolo + 5 }
-        }));
-
-        // Un testo in una colonna larga "larghezza" a partire da x: pdfMake,
-        // con la sola posizione assoluta, centrava sul resto della pagina.
-        const testoIn = (x, y, larghezza, testo, opzioni = {}) => ({
-            columns: [{ width: larghezza, text: testo, ...opzioni }],
-            absolutePosition: { x, y }
-        });
-        const nomeCompleto = `${currentUserViewData.cognome || ''} ${currentUserViewData.nome || ''}`.trim().toUpperCase();
-        const ente = (brandingSettings.card_regional_entity_name || '').trim();
-
-        const docDefinition = {
-            pageSize: { width: CARD_W, height: CARD_H },
-            pageMargins: [0, 0, 0, 0],
-            // Tutto lo sfondo in un disegno solo: pdfMake impila i disegni
-            // separati uno sotto l'altro, e finirebbero fuori dal tesserino.
-            background: function() {
-                return {
-                    canvas: [
-                        { type: 'rect', x: 0, y: 0, w: CARD_W, h: NAVY_H, color: navyBlue },
-                        ...(ente ? [{ type: 'rect', x: 0, y: TEAL_Y, w: CARD_W, h: TEAL_H, color: tealBand }] : []),
-                        { type: 'rect', x: 0, y: YELLOW_Y, w: CARD_W, h: CARD_H - YELLOW_Y, color: pcYellow },
-                        ...bandieraItaliana,
-                        ...bandieraEuropea
-                    ]
-                };
-            },
-            content: [
-                // Nome e distretto sulla banda blu: la foto ora è più in basso,
-                // e la riga può usare tutta la larghezza.
-                testoIn(8, nomeCompleto.length > 30 ? 7 : 5, CARD_W - 16, nomeCompleto, { fontSize: nomeCompleto.length > 30 ? 10 : 13, bold: true, color: gold, noWrap: true }),
-                testoIn(8, 19.5, CARD_W - 16, brandingSettings.card_district_label || '', { fontSize: 7.5, color: '#ffffff' }),
-
-                // Foto, o la sagoma se manca
-                photoBase64
-                    ? { image: photoBase64, width: FOTO_W, height: FOTO_H, absolutePosition: { x: FOTO_X, y: FOTO_Y } }
-                    : segnapostoFoto,
-
-                // QR di verifica, dal lato opposto alla foto, se i QR sono in uso
-                ...(conQr ? [{ qr: qrUrl, fit: QR_LATO, absolutePosition: { x: QR_X, y: QR_Y } }] : []),
-
-                testoIn(colonnaX, colonnaY, colonnaW, 'PROTEZIONE CIVILE', { fontSize: titoloSize, bold: true, color: navyBlue, alignment: 'center', noWrap: true }),
-                ...rigaSimboli,
-
-                // Banda dell'ente sovraordinato: il nome, il logo è già in alto
-                ...(ente ? [testoIn(8, TEAL_Y + 4.5, CARD_W - 16, ente.toUpperCase(), { fontSize: 9, bold: true, color: '#ffffff', alignment: 'center' })] : []),
-
-                // Banda gialla, fra le due bandiere: la qualifica. Il ruolo nel
-                // programma (admin, segreteria...) non dice niente a chi guarda
-                // il tesserino, e non ci va.
-                testoIn(ITA_X + BANDIERA_W + 4, BANDIERA_Y + 1, UE_X - ITA_X - BANDIERA_W - 8, 'VOLONTARIO', {
-                    fontSize: 15, bold: true, color: navyBlue, alignment: 'center', characterSpacing: 2
-                })
-            ]
-        };
-
+        const docDefinition = Tesserino.inPdf(Tesserino.componi(brandingSettings.badge_modello, dati));
         pdfMake.createPdf(docDefinition).download(`Tesserino_PC_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
 
     } catch (error) {
@@ -1967,5 +1903,153 @@ async function generateIDCard() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
+    }
+}
+
+
+// --- Registrazioni multiple ---------------------------------------------------
+// La stessa visita o lo stesso corso a più volontari con la stessa data: la
+// visita collettiva dal medico, il corso base fatto insieme. Per ognuno si usa
+// la stessa rotta del fascicolo; il certificato, se c'è, si allega dopo
+// persona per persona.
+const sceltiMultipla = new Map();
+
+function aggiornaAzioniMultiple() {
+    const n = sceltiMultipla.size;
+    document.getElementById('azioni-multiple').hidden = n === 0;
+    document.getElementById('quanti-scelti').textContent = `${n} ${n === 1 ? 'volontario selezionato' : 'volontari selezionati'}`;
+    const visibili = [...document.querySelectorAll('#segreteria-users-table tr')].filter(r => r.style.display !== 'none')
+        .map(r => r.querySelector('.scelta-volontario')).filter(Boolean);
+    const tutti = document.getElementById('scegli-tutti');
+    tutti.checked = visibili.length > 0 && visibili.every(c => c.checked);
+    tutti.indeterminate = !tutti.checked && visibili.some(c => c.checked);
+}
+
+document.getElementById('scegli-tutti').addEventListener('change', (ev) => {
+    // Solo quelli in elenco: con la ricerca si scelgono i partecipanti.
+    document.querySelectorAll('#segreteria-users-table tr').forEach(r => {
+        if (r.style.display === 'none') return;
+        const c = r.querySelector('.scelta-volontario');
+        if (c && c.checked !== ev.target.checked) { c.checked = ev.target.checked; c.dispatchEvent(new Event('change')); }
+    });
+});
+document.getElementById('btn-annulla-scelta').addEventListener('click', () => {
+    sceltiMultipla.clear();
+    document.querySelectorAll('.scelta-volontario').forEach(c => { c.checked = false; });
+    aggiornaAzioniMultiple();
+});
+
+let tipoMultipla = 'visita';
+let vociMultipla = [];
+
+function scadenzaMultipla() {
+    const voce = vociMultipla.find(v => String(v.id) === document.getElementById('multipla-voce').value);
+    const data = document.getElementById('multipla-data').value;
+    const campo = document.getElementById('multipla-scadenza');
+    if (!voce || !data || !voce.validity_months) { if (voce && !voce.validity_months) campo.value = ''; return; }
+    const d = new Date(`${data}T00:00:00`);
+    d.setMonth(d.getMonth() + Number(voce.validity_months));
+    campo.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+document.getElementById('multipla-voce').addEventListener('change', scadenzaMultipla);
+document.getElementById('multipla-data').addEventListener('change', scadenzaMultipla);
+
+async function apriMultipla(tipo) {
+    tipoMultipla = tipo;
+    const visita = tipo === 'visita';
+    document.getElementById('titolo-multipla').textContent = visita ? 'Registra una visita' : 'Registra un corso';
+    document.getElementById('chi-multipla').textContent = `Per: ${[...sceltiMultipla.values()].join(', ')}.`;
+    document.getElementById('etichetta-data-multipla').textContent = visita ? 'Data della visita' : 'Data del corso (o dell\'attestato)';
+    document.getElementById('riga-esito-multipla').hidden = !visita;
+    document.getElementById('esito-multipla').textContent = '';
+    document.getElementById('form-multipla').reset();
+    try {
+        vociMultipla = await fetchApi(visita ? '/api/admin/medical-visit-types' : '/api/admin/courses-catalog');
+    } catch (e) { notifica(e.message, 'errore'); return; }
+    const select = document.getElementById('multipla-voce');
+    select.innerHTML = '<option value="">-- Scegli --</option>';
+    vociMultipla.forEach(v => select.add(new Option(v.name, v.id)));
+    if (vociMultipla.length === 1) select.value = String(vociMultipla[0].id);
+    document.getElementById('salva-multipla').disabled = false;
+    document.getElementById('registra-multipla').showModal();
+}
+document.getElementById('btn-visita-multipla').addEventListener('click', () => apriMultipla('visita'));
+document.getElementById('btn-corso-multiplo').addEventListener('click', () => apriMultipla('corso'));
+document.getElementById('annulla-multipla').addEventListener('click', () => document.getElementById('registra-multipla').close());
+
+document.getElementById('form-multipla').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const visita = tipoMultipla === 'visita';
+    const voce = document.getElementById('multipla-voce').value;
+    const data = document.getElementById('multipla-data').value;
+    const scadenza = document.getElementById('multipla-scadenza').value;
+    const esito = document.getElementById('esito-multipla');
+    if (!voce || !data) { esito.textContent = 'Scegli cosa registrare e la data.'; return; }
+    if (visita && !scadenza) { esito.textContent = 'Una visita ha sempre una scadenza.'; return; }
+    if (scadenza && scadenza <= data) { esito.textContent = 'La scadenza deve venire dopo la data.'; return; }
+    const pulsante = document.getElementById('salva-multipla');
+    pulsante.disabled = true;
+    const falliti = [];
+    let fatti = 0;
+    for (const [id, nome] of sceltiMultipla) {
+        esito.textContent = `Registro ${fatti + falliti.length + 1} di ${sceltiMultipla.size}…`;
+        const corpo = new FormData();
+        if (visita) {
+            corpo.append('visit_type_id', voce);
+            corpo.append('last_visit_date', data);
+            corpo.append('expiry_date', scadenza);
+            corpo.append('status', document.getElementById('multipla-esito').value);
+        } else {
+            corpo.append('course_id', voce);
+            corpo.append('acquisition_date', data);
+            if (scadenza) corpo.append('expiry_date', scadenza);
+        }
+        try {
+            const r = await fetch(`/api/admin/users/${id}/${visita ? 'medical-records' : 'courses'}`, { method: 'POST', body: corpo });
+            if (r.ok) fatti++;
+            else falliti.push(`${nome} (${(await r.json().catch(() => ({}))).message || r.status})`);
+        } catch { falliti.push(`${nome} (connessione)`); }
+    }
+    document.getElementById('registra-multipla').close();
+    notifica(falliti.length
+        ? `Registrat${fatti === 1 ? 'o' : 'i'} ${fatti} su ${sceltiMultipla.size}. Non riuscito per: ${falliti.join(', ')}.`
+        : `${visita ? 'Visita registrata' : 'Corso registrato'} per ${fatti} ${fatti === 1 ? 'volontario' : 'volontari'}.`,
+        falliti.length ? 'attenzione' : 'successo', falliti.length ? 12000 : undefined);
+    sceltiMultipla.clear();
+    aggiornaAzioniMultiple();
+    loadDashboardAlerts();
+    loadUsers();
+});
+
+// Le presenze dell'anno di un volontario (src/presenze.js), con l'attestato
+// di ognuna: per chi gestisce l'anagrafica o organizza le attività.
+async function disegnaPresenzeVolontario(userId) {
+    const card = document.getElementById('card-presenze-volontario');
+    const lista = document.getElementById('detail-presenze-list');
+    if (!card || !lista || !userId) return;
+    let dati;
+    try { dati = await fetchApi(`/api/users/${userId}/presenze`); } catch { card.hidden = true; return; }
+    card.hidden = false;
+    document.getElementById('titolo-presenze-volontario').textContent = `Presenze nel ${dati.anno}: ${dati.ore_totali}`;
+    lista.replaceChildren();
+    if (!dati.voci.length) {
+        const li = document.createElement('li');
+        li.textContent = "Nessuna presenza quest'anno.";
+        lista.appendChild(li);
+        return;
+    }
+    for (const v of dati.voci) {
+        const li = document.createElement('li');
+        const quando = new Date(String(v.inizio).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00')).toLocaleDateString('it-IT');
+        const testo = document.createElement('span');
+        testo.textContent = `${quando} · ${v.tipo}: ${v.titolo} · ${v.ore}`;
+        const link = document.createElement('a');
+        link.href = `/api/presenze/${v.id}/attestato`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Attestato';
+        link.style.marginLeft = 'auto';
+        li.append(testo, link);
+        lista.appendChild(li);
     }
 }

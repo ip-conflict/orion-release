@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // il volontario al suo profilo.
     const daProfilo = new URLSearchParams(window.location.search).get('da') === 'profilo';
     const indietro = $('link-indietro');
-    if (daProfilo || !haRuolo('magazziniere')) {
+    if (daProfilo || !haPermesso('magazzino.gestione', 'magazzino.consegne')) {
         indietro.href = '/profile.html';
         indietro.textContent = 'Torna al profilo';
     } else {
@@ -115,16 +115,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('note').hidden = false;
     }
 
+    // Confermato dall'app o dal profilo: il verbale si compila da sé con il
+    // nome, la data e la firma di chi ha ricevuto (la conferma elettronica,
+    // con l'impronta di quello che ha confermato).
     if (verbale.stato === 'confermato' && verbale.confermato_il) {
-        $('conferma').textContent =
-            `Ricevuta confermata da ${verbale.destinatario_nome || 'chi ha ricevuto'} con il proprio account il ${dataOra(verbale.confermato_il)}.`;
+        const chi = verbale.confermato_da || verbale.destinatario_nome || 'chi ha ricevuto';
+        const quando = dataOra(verbale.confermato_il);
+        const da = { app: "dall'app Orion Mobile", web: 'dal proprio profilo' }[verbale.conferma_canale] || 'con il proprio account';
+        $('conferma').textContent = `Ricevuta confermata da ${chi} ${da} il ${quando}.` +
+            (verbale.conferma_impronta ? ` Impronta della conferma: ${verbale.conferma_impronta}.` : '');
         $('conferma').hidden = false;
+        $('luogo-data').textContent = `Data: ${quando} (conferma elettronica ${da})`;
+        $('segno-riceve').textContent = chi;
+        $('segno-riceve').hidden = false;
+        $('firma-riceve').textContent = chi;
+        $('firma-elettronica').textContent = verbale.conferma_impronta
+            ? `Firmato con conferma elettronica · impronta ${verbale.conferma_impronta.slice(0, 16)}…`
+            : 'Firmato con conferma elettronica';
+        $('firma-elettronica').hidden = false;
     }
 
     $('foglio').hidden = false;
 
     // Il foglio firmato
-    const puoAllegare = haRuolo('magazziniere');
+    const puoAllegare = haPermesso('magazzino.gestione', 'magazzino.consegne');
 
     // Il file sta dietro l'autenticazione: si scarica con il token e si
     // mostra da un indirizzo locale del browser.

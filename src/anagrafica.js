@@ -281,9 +281,10 @@ export async function importUsersFromExcel(filePath, nomeOriginale) {
             // un omonimo, e si importa.
             const esistente = await client.query(
                 `SELECT username, codice_fiscale, email, nome, cognome FROM users
-                 WHERE ($1::text IS NOT NULL AND UPPER(codice_fiscale) = $1)
+                 WHERE eliminato_il IS NULL
+                   AND (($1::text IS NOT NULL AND UPPER(codice_fiscale) = $1)
                     OR ($2::text IS NOT NULL AND LOWER(email) = $2)
-                    OR (LOWER(nome) = LOWER($3) AND LOWER(cognome) = LOWER($4))`,
+                    OR (LOWER(nome) = LOWER($3) AND LOWER(cognome) = LOWER($4)))`,
                 [valori.codice_fiscale, valori.email, valori.nome, valori.cognome]);
             const giaPresente = esistente.rows.find(u =>
                 (valori.codice_fiscale && u.codice_fiscale?.toUpperCase() === valori.codice_fiscale)
@@ -306,7 +307,7 @@ export async function importUsersFromExcel(filePath, nomeOriginale) {
             }
 
             try {
-                // Il link vale 7 giorni invece di 24 ore: in un'importazione si distribuiscono a mano.
+                // Il link vale 7 giorni, come per chi si crea a mano: si distribuiscono anche stampati.
                 const attivazione = crypto.randomBytes(32).toString('hex');
                 const impronta = await bcrypt.hash(attivazione, 10);
                 const scade = new Date(Date.now() + 7 * 24 * 3600000);

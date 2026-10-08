@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
 
     const ETICHETTE_FAMIGLIA = { dpi: 'DPI', attrezzatura: 'Attrezzatura', veicolo: 'Veicolo' };
+    const GRUPPI_TAGLIA = { busto: 'taglie del busto', pantaloni: 'taglie dei pantaloni', scarpe: 'taglie delle scarpe' };
     const ETICHETTE_SCADENZA = {
         revisione: 'Revisione', assicurazione: 'Assicurazione', bollo: 'Bollo',
         tagliando: 'Tagliando', verifica_periodica: 'Verifica periodica',
@@ -66,7 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return stato.config;
     }
 
-    const sonoMagazziniere = haRuolo('magazziniere');
+    // Dai permessi (src/permessi.js): l'inventario a chi gestisce il magazzino,
+    // consegne e rientri a chi ha il permesso delle consegne.
+    const sonoMagazziniere = haPermesso('magazzino.gestione');
+    const consegnaERientra = haPermesso('magazzino.consegne');
 
     // Il bene aperto nella scheda: lo leggono i movimenti e le manutenzioni,
     // che lavorano su quello e non su una riga dell'elenco.
@@ -207,26 +211,95 @@ document.addEventListener('DOMContentLoaded', () => {
             select.appendChild(o);
         });
         aggiornaRigaVerbale();
+        caricaTagliePersona();
     }
 
-    // Con la conferma dei DPI il verbale c'è sempre e non si sceglie;
-    // altrimenti si propone solo se il magazzino prevede il verbale di consegna.
+    // Il verbale dipende da cosa si consegna. DPI: con la conferma dei DPI
+    // c'è sempre e non si sceglie, altrimenti si propone se il magazzino lo
+    // prevede. Attrezzature e mezzi: si propone solo se previsto, mai imposto.
     async function aggiornaRigaVerbale() {
         const config = await configMagazzino();
-        $('riga-verbale').hidden = !!config.conferma_dpi || !config.verbale_consegna;
-        $('nota-conferma-dpi').hidden = !config.conferma_dpi;
-        $('genera-verbale').checked = true;
+        const tipi = [...stato.scelti.keys()].map(id => stato.beni.find(b => b.id === id)?.tipo).filter(Boolean);
+        const dpi = tipi.includes('dpi');
+        const altro = tipi.some(t => t !== 'dpi');
+        const scegliDpi = dpi && !config.conferma_dpi && !!config.verbale_consegna;
+        const scegliAltro = altro && !!config.verbale_consegna_attrezzature;
+        const riga = $('riga-verbale');
+        const appena = riga.hidden;
+        riga.hidden = !(scegliDpi || scegliAltro);
+        // Proposto spuntato quando compare; poi resta la scelta di chi consegna.
+        if (appena && !riga.hidden) $('genera-verbale').checked = true;
+        $('testo-verbale').textContent = dpi && config.conferma_dpi && scegliAltro
+            ? 'Mettere nel verbale anche attrezzature e mezzi (i DPI ci sono comunque, con la conferma)'
+            : 'Preparare il verbale di consegna: da stampare e far firmare, oppure fotografare il foglio firmato';
+        $('nota-conferma-dpi').hidden = !(dpi && config.conferma_dpi);
     }
 
+    // Lo stesso per il rientro: solo da una persona, e secondo cosa torna.
+    async function aggiornaRigaVerbaleRientro() {
+        const config = await configMagazzino();
+        const persona = $('detentore-rientro').value.startsWith('persona:');
+        const tipi = [...document.querySelectorAll('#elenco-rientro .riga-bene')]
+            .filter(r => r._campi?.spunta.checked).map(r => r._campi.bene.tipo_bene);
+        const previsto = persona && tipi.some(t => t === 'dpi' ? config.verbale_rientro : config.verbale_rientro_attrezzature);
+        const riga = $('riga-verbale-rientro');
+        const appena = riga.hidden;
+        riga.hidden = !previsto;
+        if (appena && previsto) $('genera-verbale-rientro').checked = true;
+    }
+
+    // Le taglie della persona scelta, dal server: quelle dei DPI che ha già
+    // ricevuto (si dicono sotto il nome) e quelle dedotte da un DPI con la
+    // stessa scala (la polo XL da chi ha la giacca XL). Nel riquadro del DPI
+    // la taglia giusta è segnata.
+    stato.taglie = new Map();
+    async function caricaTagliePersona() {
+        const id = $('destinatario').value;
+        stato.taglie = new Map();
+        $('taglie-persona').hidden = true;
+        if (id) {
+            try {
+                const righe = await fetchApi(`/api/magazzino/taglie/persona/${id}`);
+                righe.forEach(r => stato.taglie.set(r.modello_id, r));
+                const sue = righe.filter(r => !r.dedotta);
+                if (sue.length) {
+                    $('taglie-persona').textContent = `Le sue taglie, dalle consegne di prima: ${sue.map(r => `${r.modello} ${r.taglia}`).join(' · ')}`;
+                    $('taglie-persona').hidden = false;
+                }
+            } catch { /* senza le taglie si consegna come sempre */ }
+        }
+        disegnaConsegnabili();
+    }
+    $('destinatario').addEventListener('change', caricaTagliePersona);
+    // 'sua' se l'ha già ricevuta per questo DPI, 'probabile' se viene da un altro.
+    const taglieUguali = (a, b) => String(a).trim().toUpperCase() === String(b).trim().toUpperCase();
+    function suaTaglia(b) {
+        const t = b.modello_id && stato.taglie.get(b.modello_id);
+        if (!t || !b.taglia || !taglieUguali(t.taglia, b.taglia)) return null;
+        return t.dedotta ? 'probabile' : 'sua';
+    }
+    const LETTERE = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '4XL', '5XL'];
+    function ordineTaglie(a, b) {
+        const chiave = (t) => {
+            const x = String(t || '').trim().toUpperCase();
+            if (LETTERE.includes(x)) return [0, LETTERE.indexOf(x), ''];
+            if (/^\d+([.,]\d+)?$/.test(x)) return [1, Number(x.replace(',', '.')), ''];
+            return [2, 0, x];
+        };
+        const [ka, kb] = [chiave(a.taglia), chiave(b.taglia)];
+        return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
+    }
+    const nomeConTaglia = (b) => b.taglia && !taglieUguali(b.taglia, 'unica') ? `${b.denominazione} ${b.taglia}` : b.denominazione;
+
     function disegnaConsegnabili() {
-        const cerca = $('cerca-consegna').value.trim().toLowerCase();
+        // Ogni parola cercata deve comparire: "giacca xl" trova la giacca in XL.
+        const parole = $('cerca-consegna').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
         const contenitore = $('elenco-consegnabili');
         contenitore.innerHTML = '';
 
         const disponibili = stato.beni.filter(b => b.disponibile && !b.dismesso_il).filter(b => {
-            if (!cerca) return true;
-            return `${b.denominazione} ${b.matricola || ''} ${b.categoria || ''} ${b.codice_etichetta || ''}`
-                .toLowerCase().includes(cerca);
+            const dove = `${b.denominazione} ${b.taglia || ''} ${b.matricola || ''} ${b.categoria || ''} ${b.codice_etichetta || ''}`.toLowerCase();
+            return parole.every(p => dove.includes(p));
         });
 
         if (disponibili.length === 0) {
@@ -234,62 +307,147 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        disponibili.forEach(bene => {
-            const riga = document.createElement('label');
-            riga.className = 'riga-bene' + (stato.scelti.has(bene.id) ? ' scelta' : '');
+        // Le taglie di uno stesso DPI stanno in un solo riquadro.
+        const gruppi = new Map();
+        disponibili.forEach(b => {
+            const chiave = b.modello_id && b.gestione === 'quantita' ? `m${b.modello_id}` : `b${b.id}`;
+            if (!gruppi.has(chiave)) gruppi.set(chiave, []);
+            gruppi.get(chiave).push(b);
+        });
+        gruppi.forEach(beni => contenitore.appendChild(beni.length > 1
+            ? rigaGruppoTaglie(beni.sort(ordineTaglie))
+            : rigaConsegnabile(beni[0])));
+    }
 
-            const spunta = document.createElement('input');
-            spunta.type = 'checkbox';
-            spunta.checked = stato.scelti.has(bene.id);
+    function campoQuantita(bene) {
+        const quantita = document.createElement('input');
+        quantita.type = 'number';
+        quantita.step = passo(bene.unita_misura);
+        quantita.min = quantita.step;
+        quantita.max = String(quantitaDisponibile(bene));
+        quantita.value = stato.scelti.get(bene.id) ?? 1;
+        quantita.addEventListener('click', e => e.preventDefault());
+        quantita.addEventListener('input', () => {
+            if (stato.scelti.has(bene.id)) stato.scelti.set(bene.id, Number(quantita.value));
+            aggiornaRiepilogoConsegna();
+        });
+        return quantita;
+    }
 
-            const dettagli = document.createElement('div');
-            dettagli.className = 'dettagli';
-            const disponibile = quantitaDisponibile(bene);
-            const quanti = bene.gestione === 'quantita' ? ` — ${disponibile} ${bene.unita_misura} disponibili` : '';
-            dettagli.innerHTML = `<span class="nome-bene"></span><span class="sottotesto"></span>`;
-            dettagli.querySelector('.nome-bene').textContent = bene.denominazione;
-            dettagli.querySelector('.sottotesto').textContent = `${descriviBene(bene)}${quanti}`;
+    // Un DPI a taglie: il nome una volta, le taglie disponibili come pulsanti.
+    // Toccata una taglia, compare il campo per quante.
+    function rigaGruppoTaglie(beni) {
+        const primo = beni[0];
+        const riga = document.createElement('div');
+        riga.className = 'riga-bene gruppo-taglie' + (beni.some(b => stato.scelti.has(b.id)) ? ' scelta' : '');
 
-            const famiglia = document.createElement('span');
-            famiglia.className = 'etichetta-famiglia';
-            famiglia.textContent = ETICHETTE_FAMIGLIA[bene.tipo] || bene.tipo;
+        const totale = beni.reduce((n, b) => n + quantitaDisponibile(b), 0);
+        const dettagli = document.createElement('div');
+        dettagli.className = 'dettagli';
+        dettagli.innerHTML = '<span class="nome-bene"></span><span class="sottotesto"></span>';
+        dettagli.querySelector('.nome-bene').textContent = primo.denominazione;
+        dettagli.querySelector('.sottotesto').textContent =
+            [primo.categoria, `${totale} ${primo.unita_misura} disponibili`].filter(Boolean).join(' · ');
+        const famiglia = document.createElement('span');
+        famiglia.className = 'etichetta-famiglia';
+        famiglia.textContent = ETICHETTE_FAMIGLIA[primo.tipo] || primo.tipo;
+        riga.append(dettagli, famiglia);
 
-            riga.append(spunta, dettagli, famiglia);
-
-            // Sugli sfusi si sceglie quanti; sui pezzi unici la domanda non
-            // esiste e il campo non compare.
-            let quantita = null;
-            if (bene.gestione === 'quantita') {
-                quantita = document.createElement('input');
-                quantita.type = 'number';
-                quantita.step = passo(bene.unita_misura);
-                quantita.min = quantita.step;
-                quantita.max = String(disponibile);
-                quantita.value = stato.scelti.get(bene.id) ?? 1;
-                quantita.addEventListener('click', e => e.preventDefault());
-                quantita.addEventListener('input', () => {
-                    if (spunta.checked) stato.scelti.set(bene.id, Number(quantita.value));
-                    aggiornaRiepilogoConsegna();
-                });
-                riga.appendChild(quantita);
-            }
-
-            spunta.addEventListener('change', () => {
-                if (spunta.checked) {
-                    stato.scelti.set(bene.id, quantita ? Number(quantita.value) : 1);
-                } else {
-                    stato.scelti.delete(bene.id);
-                }
-                riga.classList.toggle('scelta', spunta.checked);
+        const taglie = document.createElement('div');
+        taglie.className = 'taglie-consegna';
+        let proposta = null;
+        beni.forEach(bene => {
+            const segno = suaTaglia(bene);
+            if (segno) proposta = { bene, segno };
+            const pulsante = document.createElement('button');
+            pulsante.type = 'button';
+            pulsante.className = 'taglia-consegna' + (segno ? ` ${segno}` : '') + (stato.scelti.has(bene.id) ? ' scelta' : '');
+            pulsante.setAttribute('aria-pressed', String(stato.scelti.has(bene.id)));
+            pulsante.title = `${quantitaDisponibile(bene)} ${bene.unita_misura} disponibili`;
+            pulsante.innerHTML = '<span></span><small></small>';
+            pulsante.querySelector('span').textContent = bene.taglia;
+            pulsante.querySelector('small').textContent = quantitaDisponibile(bene);
+            pulsante.addEventListener('click', () => {
+                if (stato.scelti.has(bene.id)) stato.scelti.delete(bene.id);
+                else stato.scelti.set(bene.id, 1);
+                disegnaConsegnabili();
                 aggiornaRiepilogoConsegna();
             });
-
-            contenitore.appendChild(riga);
+            taglie.appendChild(pulsante);
         });
+        riga.appendChild(taglie);
+
+        if (proposta) {
+            const nota = document.createElement('p');
+            nota.className = `nota-taglia ${proposta.segno}`;
+            const t = stato.taglie.get(primo.modello_id);
+            nota.textContent = proposta.segno === 'sua'
+                ? `Sua taglia: ${proposta.bene.taglia}`
+                : `Taglia probabile: ${proposta.bene.taglia}, come per ${t.da_modello}`;
+            riga.appendChild(nota);
+        }
+
+        const scelti = beni.filter(b => stato.scelti.has(b.id));
+        if (scelti.length) {
+            const quanti = document.createElement('div');
+            quanti.className = 'quantita-taglie';
+            scelti.forEach(bene => {
+                const campo = document.createElement('label');
+                campo.append(`${bene.taglia}`, campoQuantita(bene));
+                quanti.appendChild(campo);
+            });
+            riga.appendChild(quanti);
+        }
+        return riga;
+    }
+
+    function rigaConsegnabile(bene) {
+        const riga = document.createElement('label');
+        riga.className = 'riga-bene' + (stato.scelti.has(bene.id) ? ' scelta' : '');
+
+        const spunta = document.createElement('input');
+        spunta.type = 'checkbox';
+        spunta.checked = stato.scelti.has(bene.id);
+
+        const dettagli = document.createElement('div');
+        dettagli.className = 'dettagli';
+        const disponibile = quantitaDisponibile(bene);
+        const quanti = bene.gestione === 'quantita' ? ` — ${disponibile} ${bene.unita_misura} disponibili` : '';
+        dettagli.innerHTML = `<span class="nome-bene"></span><span class="sottotesto"></span>`;
+        dettagli.querySelector('.nome-bene').textContent = bene.denominazione;
+        dettagli.querySelector('.sottotesto').textContent = `${descriviBene(bene)}${quanti}`;
+
+        const famiglia = document.createElement('span');
+        famiglia.className = 'etichetta-famiglia';
+        famiglia.textContent = ETICHETTE_FAMIGLIA[bene.tipo] || bene.tipo;
+        const segno = suaTaglia(bene);
+        if (segno) {
+            famiglia.textContent = segno === 'sua' ? 'Sua taglia' : 'Taglia probabile';
+            famiglia.classList.add('sua-taglia');
+        }
+
+        riga.append(spunta, dettagli, famiglia);
+
+        // Sugli sfusi si sceglie quanti; sui pezzi unici la domanda non
+        // esiste e il campo non compare.
+        const quantita = bene.gestione === 'quantita' ? campoQuantita(bene) : null;
+        if (quantita) riga.appendChild(quantita);
+
+        spunta.addEventListener('change', () => {
+            if (spunta.checked) {
+                stato.scelti.set(bene.id, quantita ? Number(quantita.value) : 1);
+            } else {
+                stato.scelti.delete(bene.id);
+            }
+            riga.classList.toggle('scelta', spunta.checked);
+            aggiornaRiepilogoConsegna();
+        });
+        return riga;
     }
 
     function aggiornaRiepilogoConsegna() {
         const riepilogo = $('riepilogo-consegna');
+        aggiornaRigaVerbale();
         if (stato.scelti.size === 0) {
             riepilogo.textContent = 'Nessun oggetto scelto.';
             $('btn-consegna').disabled = true;
@@ -298,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const righe = [...stato.scelti.entries()].map(([id, q]) => {
             const bene = stato.beni.find(b => b.id === id);
             if (!bene) return '';
-            return bene.gestione === 'quantita' ? `${bene.denominazione} x${q} ${bene.unita_misura}` : bene.denominazione;
+            return bene.gestione === 'quantita' ? `${nomeConTaglia(bene)} x${q} ${bene.unita_misura}` : nomeConTaglia(bene);
         });
         riepilogo.textContent = righe.join(', ');
         $('btn-consegna').disabled = false;
@@ -375,11 +533,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const scelta = $('detentore-rientro').value;
         const contenitore = $('elenco-rientro');
         // Come per la consegna, il verbale lo firma una persona: una squadra
-        // o un mezzo non firmano. E solo se il magazzino lo ha acceso: di base
-        // il rientro è spunta e registra, niente altro. Acceso, parte spuntato.
-        const conVerbale = scelta.startsWith('persona:') && !!(await configMagazzino()).verbale_rientro;
-        $('riga-verbale-rientro').hidden = !conVerbale;
-        $('genera-verbale-rientro').checked = conVerbale;
+        // o un mezzo non firmano. E solo se il magazzino lo ha acceso per
+        // quello che torna (aggiornaRigaVerbaleRientro): di base il rientro è
+        // spunta e registra, niente altro. Acceso, parte spuntato.
+        $('riga-verbale-rientro').hidden = true;
         if (!scelta) { contenitore.innerHTML = ''; return; }
 
         const [tipo, id] = scelta.split(':');
@@ -511,6 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         $('btn-rientro').disabled = stato.rientranti.size === 0 || mancaScelta;
         $('btn-rientro').title = mancaScelta ? 'Scegli cosa ne è del materiale che non torna' : '';
+        aggiornaRigaVerbaleRientro();
     }
 
     $('btn-rientro').addEventListener('click', async () => {
@@ -557,7 +715,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const contenitore = $('elenco-detentori');
         contenitore.innerHTML = '<p class="vuoto">Carico...</p>';
         try {
-            detentoriCaricati = await fetchApi('/api/magazzino/chi-ha-cosa');
+            const [righe, categorie, modelliDpi] = await Promise.all([
+                fetchApi('/api/magazzino/chi-ha-cosa'),
+                fetchApi('/api/magazzino/categorie').catch(() => []),
+                fetchApi('/api/magazzino/modelli?nascosti=1').catch(() => [])
+            ]);
+            detentoriCaricati = righe;
+            // Solo le categorie e i modelli di cui qualcosa è fuori: le altre voci darebbero un elenco vuoto.
+            const presenti = new Set(righe.flatMap(r => [`c:${r.categoria_id || 0}`, r.modello_id ? `m:${r.modello_id}` : null]));
+            riempiFiltroCategoria($('filtro-categoria-detentori'), categorie, modelliDpi, '', presenti);
             disegnaChiHaCosa();
         } catch (e) {
             contenitore.innerHTML = '';
@@ -570,8 +736,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const contenitore = $('elenco-detentori');
         contenitore.innerHTML = '';
 
-        const righe = detentoriCaricati.filter(r => !cerca ||
-            `${r.destinatario_nome || ''} ${r.denominazione}`.toLowerCase().includes(cerca));
+        const categoria = $('filtro-categoria-detentori').value;
+        const righe = detentoriCaricati
+            .filter(r => corrispondeCategoria(r, categoria))
+            .filter(r => !cerca || `${r.destinatario_nome || ''} ${r.denominazione}`.toLowerCase().includes(cerca));
 
         if (righe.length === 0) {
             contenitore.innerHTML = '<p class="vuoto">Non risulta niente fuori dal magazzino.</p>';
@@ -602,7 +770,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 const quantita = c.gestione === 'quantita' ? ` x${Number(c.quantita)} ${c.unita_misura}` : '';
                 const matricola = c.matricola ? ` (${c.matricola})` : '';
-                li.textContent = `${c.denominazione}${matricola}${quantita} — dal ${dataBreve(c.da_quando)}`;
+                // La taglia: è quella che serve per sostituirlo o riconsegnarne uno uguale.
+                const taglia = c.taglia && c.taglia !== 'Unica' ? ` · taglia ${c.taglia}` : '';
+                li.textContent = `${c.denominazione}${taglia}${matricola}${quantita} — dal ${dataBreve(c.da_quando)}`;
                 elenco.appendChild(li);
             });
 
@@ -612,6 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('cerca-detentori').addEventListener('input', disegnaChiHaCosa);
+    $('filtro-categoria-detentori').addEventListener('change', disegnaChiHaCosa);
 
     async function caricaScadenze() {
         const boxScadenze = $('elenco-scadenze');
@@ -679,6 +850,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sonoMagazziniere) {
         document.querySelectorAll('.solo-magazziniere').forEach(e => { e.hidden = false; });
     }
+    // Senza il permesso delle consegne niente Consegna e Rientro: si parte da "Chi ha cosa".
+    if (!consegnaERientra) {
+        document.querySelectorAll('.schede-magazzino .scheda[data-scheda="consegna"], .schede-magazzino .scheda[data-scheda="rientro"]')
+            .forEach(b => { b.hidden = true; });
+        apriScheda('chi-ha-cosa');
+    }
+
+    // Il filtro per categoria: le categorie del tipo scelto e, sotto quelle
+    // dei DPI, i singoli modelli a taglie ("Calzature" e, dentro, "Scarpe
+    // antinfortunistiche"). Valori: "c:<id>" categoria (0 = senza), "m:<id>" modello.
+    // [presenti], se c'è, limita le voci a quelle che hanno qualcosa da mostrare.
+    function riempiFiltroCategoria(select, categorie, modelliDpi, tipo, presenti = null) {
+        const prima = select.value;
+        const c = (v) => !presenti || presenti.has(v);
+        select.innerHTML = '';
+        select.append(new Option('Tutte le categorie', ''));
+        const nomeTipo = { dpi: 'DPI', attrezzatura: 'Attrezzature', veicolo: 'Veicoli' };
+        categorie.filter(k => !tipo || k.tipo === tipo).forEach(k => {
+            const suoi = modelliDpi.filter(m => m.categoria_id === k.id && c(`m:${m.id}`));
+            if (!c(`c:${k.id}`) && !suoi.length) return;
+            const etichetta = tipo ? k.nome : `${k.nome} (${nomeTipo[k.tipo] || k.tipo})`;
+            if (!suoi.length) { select.append(new Option(etichetta, `c:${k.id}`)); return; }
+            const gruppo = document.createElement('optgroup');
+            gruppo.label = etichetta;
+            gruppo.append(new Option(`Tutta la categoria: ${k.nome}`, `c:${k.id}`));
+            suoi.forEach(m => gruppo.append(new Option(m.nome, `m:${m.id}`)));
+            select.append(gruppo);
+        });
+        if (c('c:0')) select.append(new Option('Senza categoria', 'c:0'));
+        select.value = [...select.options].some(o => o.value === prima) ? prima : '';
+    }
+
+    // Un bene (o un modello, o una riga di "chi ha cosa") rientra nel filtro?
+    function corrispondeCategoria(voce, valore) {
+        if (!valore) return true;
+        const id = Number(valore.slice(2));
+        if (valore.startsWith('m:')) return voce.modello_id === id;
+        return id === 0 ? !voce.categoria_id : voce.categoria_id === id;
+    }
 
     async function caricaCataloghi() {
         const [categorie, ubicazioni] = await Promise.all([
@@ -693,6 +903,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!sonoMagazziniere) return;
         try {
             await Promise.all([caricaCataloghi(), caricaModelli()]);
+            riempiFiltroCategoria($('filtro-categoria'), stato.categorie || [], modelli, $('filtro-tipo').value);
             disegnaInventario();
         } catch (e) {
             avvisa(e.message, 'errore');
@@ -706,9 +917,12 @@ document.addEventListener('DOMContentLoaded', () => {
         contenitore.innerHTML = '';
 
         // Le taglie dei DPI a taglie stanno nei loro riquadri qui sopra.
+        const categoria = $('filtro-categoria').value;
         const righe = stato.beni
             .filter(b => !b.modello_id)
             .filter(b => !tipo || b.tipo === tipo)
+            // Scegliendo un modello di DPI a taglie qui sotto non resta niente: è nel suo riquadro.
+            .filter(b => !categoria.startsWith('m:') && corrispondeCategoria(b, categoria))
             .filter(b => !cerca || `${b.denominazione} ${b.matricola || ''} ${b.categoria || ''}`.toLowerCase().includes(cerca));
 
         if (righe.length === 0) {
@@ -744,19 +958,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const p = new URLSearchParams();
         if ($('filtro-tipo').value) p.set('tipo', $('filtro-tipo').value);
         if ($('cerca-inventario').value.trim()) p.set('q', $('cerca-inventario').value.trim());
+        const categoria = $('filtro-categoria').value;
+        if (categoria.startsWith('m:')) p.set('modello', categoria.slice(2));
+        else if (categoria.startsWith('c:')) p.set('categoria', categoria.slice(2));
         const coda = p.toString();
         $('btn-etichette').href = `/magazzino-etichette.html${coda ? '?' + coda : ''}`;
     }
 
     $('cerca-inventario').addEventListener('input', () => { disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette(); });
-    $('filtro-tipo').addEventListener('change', () => { disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette(); });
+    $('filtro-tipo').addEventListener('change', () => {
+        // Le categorie cambiano col tipo: una scelta che non c'è più si azzera.
+        riempiFiltroCategoria($('filtro-categoria'), stato.categorie || [], modelli, $('filtro-tipo').value);
+        disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette();
+    });
+    $('filtro-categoria').addEventListener('change', () => { disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette(); });
 
     // DPI a taglie
     let modelli = [];
     const numero = (v) => { const n = Number(v); return Number.isInteger(n) ? n : Math.round(n * 100) / 100; };
 
     async function caricaModelli() {
-        modelli = await fetchApi(`/api/magazzino/modelli${$('mostra-modelli-nascosti').checked ? '?nascosti=1' : ''}`);
+        const tutti = await fetchApi('/api/magazzino/modelli?nascosti=1');
+        const nonUsati = tutti.filter(m => m.nascosto).length;
+        $('etichetta-non-usati').textContent = `Mostra anche quelli non usati${nonUsati ? ` (${nonUsati})` : ''}`;
+        modelli = $('mostra-modelli-nascosti').checked ? tutti : tutti.filter(m => !m.nascosto);
+        riempiFiltroCategoria($('filtro-categoria'), stato.categorie || [], modelli, $('filtro-tipo').value);
         disegnaModelli();
     }
 
@@ -766,8 +992,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const tipo = $('filtro-tipo').value;
         box.innerHTML = '';
         // Sono DPI: con il filtro su attrezzature o veicoli non c'entrano.
-        const visibili = tipo && tipo !== 'dpi' ? [] : modelli.filter(m => !cerca ||
-            `${m.nome} ${m.categoria || ''} ${m.taglie.join(' ')}`.toLowerCase().includes(cerca));
+        const categoria = $('filtro-categoria').value;
+        const visibili = tipo && tipo !== 'dpi' ? [] : modelli
+            .filter(m => categoria.startsWith('m:') ? String(m.id) === categoria.slice(2) : corrispondeCategoria(m, categoria))
+            .filter(m => !cerca || `${m.nome} ${m.categoria || ''} ${m.taglie.join(' ')}`.toLowerCase().includes(cerca));
         if (!visibili.length) {
             box.innerHTML = '<p class="vuoto">Nessun DPI a taglie con questi criteri.</p>';
             return;
@@ -787,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
         nome.textContent = m.nome;
         const sotto = document.createElement('div');
         sotto.className = 'sotto';
-        sotto.textContent = [m.categoria, m.nascosto ? 'nascosto' : null].filter(Boolean).join(' · ') || 'senza categoria';
+        sotto.textContent = [m.categoria, GRUPPI_TAGLIA[m.gruppo_taglia], m.nascosto ? 'non usato' : null].filter(Boolean).join(' · ') || 'senza categoria';
         titolo.append(nome, sotto);
         const inCasa = m.varianti.reduce((t, v) => t + Number(v.in_magazzino || 0), 0);
         const fuori = m.varianti.reduce((t, v) => t + Number(v.fuori || 0), 0);
@@ -906,12 +1134,13 @@ document.addEventListener('DOMContentLoaded', () => {
         $('salva-modello').textContent = carico ? 'Registra il carico' : nuovo ? 'Crea' : 'Salva';
         $('elimina-modello').hidden = modo !== 'modifica' || !!m?.standard;
         $('nascondi-modello').hidden = modo !== 'modifica';
-        if (m) $('nascondi-modello').textContent = m.nascosto ? 'Mostra di nuovo' : 'Nascondi';
+        if (m) $('nascondi-modello').textContent = m.nascosto ? 'Lo usiamo di nuovo' : 'Non lo usiamo';
 
         riempiSelect($('modello-categoria'), stato.categorie.filter(c => c.tipo === 'dpi'), '(senza categoria)');
         $('modello-nome').value = m?.nome || '';
         $('modello-categoria').value = m?.categoria_id || '';
         $('modello-unita').value = m?.unita_misura || 'pezzi';
+        $('modello-gruppo').value = m?.gruppo_taglia || '';
         $('modello-taglie').value = (m?.taglie || []).join(', ');
         $('modello-nota').value = '';
         $('modello-nome').required = !carico;
@@ -962,6 +1191,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nome: $('modello-nome').value.trim(),
                 categoria_id: $('modello-categoria').value || null,
                 unita_misura: $('modello-unita').value,
+                gruppo_taglia: $('modello-gruppo').value || null,
                 taglie: taglieDalCampo()
             };
             if (modo === 'nuovo') {
@@ -979,7 +1209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const m = modaleModello.modello;
         try {
             await fetchApi(`/api/magazzino/modelli/${m.id}`, { method: 'PUT', body: JSON.stringify({ nascosto: !m.nascosto }) });
-            dopoModello(m.nascosto ? `${m.nome} è di nuovo in elenco.` : `${m.nome} nascosto: lo ritrovi con «Mostra anche i nascosti».`);
+            dopoModello(m.nascosto ? `${m.nome} è di nuovo in elenco.` : `${m.nome} messo da parte: lo ritrovi con «Mostra anche quelli non usati».`);
         } catch (err) { avvisa(err.message, 'errore'); }
     });
 
@@ -1000,6 +1230,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     conferma_dpi: $('conferma-dpi').checked,
                     verbale_rientro: $('verbale-rientro').checked,
                     verbale_consegna: $('verbale-consegna').checked,
+                    verbale_rientro_attrezzature: $('verbale-rientro-attrezzature').checked,
+                    verbale_consegna_attrezzature: $('verbale-consegna-attrezzature').checked,
                     giorni_avviso_recupero: Number($('giorni-recupero').value)
                 })
             });
@@ -1209,6 +1441,8 @@ document.addEventListener('DOMContentLoaded', () => {
             $('conferma-dpi').checked = !!config.conferma_dpi;
             $('verbale-rientro').checked = !!config.verbale_rientro;
             $('verbale-consegna').checked = !!config.verbale_consegna;
+            $('verbale-rientro-attrezzature').checked = !!config.verbale_rientro_attrezzature;
+            $('verbale-consegna-attrezzature').checked = !!config.verbale_consegna_attrezzature;
             $('giorni-recupero').value = config.giorni_avviso_recupero;
             mostraAvvisi(avvisi);
             disegnaCategorie();
@@ -1506,12 +1740,110 @@ document.addEventListener('DOMContentLoaded', () => {
         $('titolo-modale-bene').textContent = 'Nuovo bene';
         $('bene-tipo').disabled = false;
         $('storia-bene').hidden = true;
+        $('documenti-bene').hidden = true;
         // Un bene che non esiste ancora non si può movimentare né manutenere.
         beneCorrente = null;
         $('azioni-bene').hidden = true;
         $('manutenzioni-bene').hidden = true;
         adattaCampiAlTipo();
         apriModaleBene();
+    });
+
+    // I documenti dell'archivio del gruppo collegati a un bene: il libretto
+    // d'uso e manutenzione, prima di tutto. Si aprono in un'altra scheda.
+    // [modifica]: chi tiene l'archivio o il magazzino li toglie con la x.
+    async function disegnaDocumentiBene(id, box, modifica = false) {
+        box.replaceChildren();
+        let documenti = [];
+        try { documenti = (await fetchApi(`/api/documenti?bene=${id}`)).documenti || []; } catch { /* senza archivio, niente */ }
+        for (const d of documenti) {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.href = `/api/documenti/${d.id}/file`;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.textContent = d.titolo;
+            li.appendChild(a);
+            if (modifica) {
+                const x = document.createElement('button');
+                x.type = 'button';
+                x.className = 'btn-icona togli-documento';
+                x.title = `Scollega "${d.titolo}" da questo bene (il documento resta nell'archivio)`;
+                x.setAttribute('aria-label', x.title);
+                x.innerHTML = '<i class="fas fa-link-slash"></i>';
+                x.addEventListener('click', async () => {
+                    try {
+                        await fetchApi(`/api/documenti/${d.id}/beni/${id}`, { method: 'DELETE' });
+                        avvisa('Documento scollegato.', 'successo');
+                        await mostraDocumentiBene(beneCorrente);
+                    } catch (e) { avvisa(e.message, 'errore'); }
+                });
+                li.appendChild(x);
+            }
+            box.appendChild(li);
+        }
+        return documenti.length;
+    }
+
+    // I documenti nella scheda del bene: chi tiene l'archivio o il magazzino li
+    // collega dall'archivio o carica il libretto da qui, anche per i beni uguali.
+    const puoCollegare = () => haPermesso('gruppo.documenti', 'magazzino.gestione');
+    async function mostraDocumentiBene(bene) {
+        if (!bene) return;
+        const modifica = puoCollegare() && !bene.dismesso_il;
+        const quanti = await disegnaDocumentiBene(bene.id, $('elenco-documenti-bene'), modifica);
+        $('documenti-bene').hidden = !quanti && !modifica;
+        $('documenti-bene-vuoto').hidden = !!quanti || !modifica;
+        $('documenti-bene-azioni').hidden = !modifica;
+        if (!modifica) return;
+        const simili = (stato.beni || []).filter(b => b.id !== bene.id && b.tipo === bene.tipo && !b.dismesso_il
+            && String(b.denominazione).toLowerCase() === String(bene.denominazione).toLowerCase()).length;
+        $('riga-doc-simili').hidden = !simili;
+        $('doc-simili').checked = false;
+        $('testo-doc-simili').textContent = simili === 1 ? "Anche all'altro bene uguale (stessa denominazione)" : `Anche agli altri ${simili} beni uguali (stessa denominazione)`;
+        const scelta = $('doc-da-collegare');
+        scelta.replaceChildren(new Option("Collega un documento dell'archivio…", ''));
+        try {
+            const archivio = await fetchApi('/api/documenti');
+            const collegati = new Set([...$('elenco-documenti-bene').querySelectorAll('a')].map(a => a.getAttribute('href')));
+            for (const c of [...(archivio.cartelle || []), { id: null, nome: 'Senza cartella' }]) {
+                const docs = (archivio.documenti || []).filter(d => (d.cartella_id ?? null) === c.id && !collegati.has(`/api/documenti/${d.id}/file`));
+                if (!docs.length) continue;
+                const g = document.createElement('optgroup');
+                g.label = c.nome;
+                for (const d of docs) g.appendChild(new Option(d.titolo, d.id));
+                scelta.appendChild(g);
+            }
+        } catch { /* senza archivio resta il caricamento */ }
+    }
+
+    $('doc-da-collegare')?.addEventListener('change', async (e) => {
+        const documento = e.target.value;
+        if (!documento || !beneCorrente) return;
+        try {
+            const r = await fetchApi(`/api/documenti/${documento}/beni`, { method: 'POST', body: JSON.stringify({ bene_id: beneCorrente.id, simili: $('doc-simili').checked }) });
+            avvisa(r.collegati > 1 ? `Documento collegato a ${r.collegati} beni.` : 'Documento collegato.', 'successo');
+            await mostraDocumentiBene(beneCorrente);
+        } catch (err) { avvisa(err.message, 'errore'); e.target.value = ''; }
+    });
+    $('carica-libretto')?.addEventListener('click', () => $('file-libretto').click());
+    $('file-libretto')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !beneCorrente) return;
+        const modulo = new FormData();
+        modulo.append('file', file);
+        modulo.append('simili', $('doc-simili').checked ? 'true' : 'false');
+        $('carica-libretto').disabled = true;
+        try {
+            const r = await fetchApi(`/api/magazzino/beni/${beneCorrente.id}/libretto`, { method: 'POST', body: modulo });
+            avvisa(`"${r.titolo}" caricato${r.collegati > 1 ? ` e collegato a ${r.collegati} beni` : ''}: è anche in Documenti del gruppo.`, 'successo');
+            await mostraDocumentiBene(beneCorrente);
+        } catch (err) {
+            avvisa(err.message, 'errore');
+        } finally {
+            $('carica-libretto').disabled = false;
+            e.target.value = '';
+        }
     });
 
     async function apriSchedaBene(id) {
@@ -1560,6 +1892,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 storia.appendChild(d);
             });
             $('storia-bene').hidden = false;
+            await mostraDocumentiBene(bene);
 
             // Movimenti e manutenzioni sono cose da magazziniere: chi non lo è
             // la scheda non la apre nemmeno, ma il controllo sta anche qui.
@@ -1847,7 +2180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (impostazioni.segreteria_config) {
                 const conf = typeof impostazioni.segreteria_config === 'string'
                     ? JSON.parse(impostazioni.segreteria_config) : impostazioni.segreteria_config;
-                if (conf.enabled && haRuolo('segreteria')) $('sidebar-segreteria').style.display = 'block';
+                if (conf.enabled && haPermesso('volontari.sanitario', 'volontari.anagrafica')) $('sidebar-segreteria').style.display = 'block';
             }
         } catch { /* la barra laterale incompleta non impedisce di lavorare */ }
         await caricaTutto();
@@ -1869,7 +2202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const persona = parseInt(parametri.get('persona'), 10);
         if (persona) {
             const select = $('destinatario');
-            if (select && [...select.options].some(o => Number(o.value) === persona)) {
+            if (consegnaERientra && select && [...select.options].some(o => Number(o.value) === persona)) {
                 select.value = String(persona);
                 apriScheda('consegna');
             }
@@ -1893,6 +2226,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? 'in magazzino'
                         : `presso ${bene.destinatario_nome || 'un detentore non indicato'}`;
                     avvisa(`${bene.denominazione}${bene.matricola ? ` (${bene.matricola})` : ''} — ${dove}.`);
+                    // E il suo libretto, che è l'altra cosa che si cerca col bene in mano.
+                    $('documenti-qr').hidden = !(await disegnaDocumentiBene(bene.id, $('documenti-qr')));
                 }
             } catch (e) {
                 avvisa(e.message, 'errore');

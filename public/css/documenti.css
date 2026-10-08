@@ -1,0 +1,283 @@
+/* public/css/documenti.css
+ *
+ * L'archivio dei documenti del gruppo. Si consulta anche dal telefono, in
+ * sala o sul campo: righe larghe, il titolo è il collegamento che apre il
+ * file, il resto è contorno. I colori vengono da theme.css. */
+
+.sottotitolo {
+    margin: 4px 0 0;
+    opacity: 0.75;
+    font-size: 0.9rem;
+}
+
+.barra-documenti {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 18px 0 8px;
+}
+
+.barra-documenti input[type="search"] {
+    flex: 1 1 280px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-color);
+    font: inherit;
+}
+
+.nota {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    margin: 4px 0;
+}
+
+.cartella {
+    margin: 22px 0;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.testa-cartella {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--secondary-bg-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.testa-cartella h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.lista-documenti {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.lista-documenti .vuota {
+    padding: 12px 16px;
+}
+
+.riga-documento {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-light-color);
+}
+
+.riga-documento:last-child { border-bottom: none; }
+
+.corpo-documento { min-width: 0; }
+
+.titolo-documento {
+    font-weight: 600;
+    color: var(--link-color);
+    text-decoration: none;
+    word-break: break-word;
+}
+
+.titolo-documento:hover { text-decoration: underline; }
+.titolo-documento i { width: 18px; opacity: 0.8; }
+
+.riga-documento .descrizione {
+    margin: 4px 0 0;
+    font-size: 0.9rem;
+}
+
+.riga-documento .meta {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.segni {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* --- Modali (come quelle del magazzino) --- */
+.modale {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.contenuto-modale {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    padding: 26px;
+    border-radius: 14px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.contenuto-modale h2 { margin-top: 0; padding-right: 30px; }
+.contenuto-modale h3 { margin: 22px 0 6px; font-size: 1rem; }
+
+.chiudi-modale {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    border: none;
+    background: none;
+    font-size: 1.7rem;
+    line-height: 1;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.griglia-campi {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.griglia-campi label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.griglia-campi .campo-largo { grid-column: 1 / -1; }
+
+.griglia-campi input,
+.griglia-campi select,
+.griglia-campi textarea {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-color);
+    font: inherit;
+    font-weight: 400;
+}
+
+.riquadro-scelte {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 14px;
+}
+
+.riquadro-scelte legend {
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0 6px;
+}
+
+.scelta {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 6px 0;
+    font-size: 0.92rem;
+}
+
+.scelta input { margin-top: 3px; }
+
+.scelta-ruoli {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    padding: 4px 0 0 24px;
+}
+
+.azioni-modale {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color);
+}
+
+.descrizione-dettaglio { margin: 0 0 8px; }
+
+.azioni-dettaglio {
+    margin: 16px 0 6px;
+    flex-wrap: wrap;
+}
+
+.azioni-dettaglio a.button-style { text-decoration: none; }
+
+.riquadro-versione {
+    margin: 12px 0;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-color);
+}
+
+.elenco-semplice {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.9rem;
+}
+
+.elenco-semplice li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light-color);
+}
+
+.elenco-semplice li:last-child { border-bottom: none; }
+
+.riga-bene {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.collega-bene { margin-top: 8px; }
+
+.collega-bene input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-color);
+    font: inherit;
+}
+
+.risultati li { border-bottom: none; padding: 4px 0; }
+
+#segni-dettaglio:empty { display: none; }
+
+.elenco-semplice a { color: var(--link-color); }
+
+@media (max-width: 640px) {
+    .riga-documento { align-items: flex-start; padding: 12px; }
+    .riga-documento > .button-style { flex-shrink: 0; min-height: 36px; padding: 6px 12px; }
+    .contenuto-modale { padding: 20px 16px; }
+}

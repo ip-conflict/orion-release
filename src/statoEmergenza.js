@@ -16,7 +16,7 @@ export async function loadActiveEmergency() {
     logger.debug("Controllo emergenza attiva all'avvio...");
     try {
         const result = await pool.query(
-            "SELECT id, code, name, start_time FROM emergencies WHERE status = 'ACTIVE' ORDER BY start_time DESC LIMIT 1;"
+            "SELECT id, code, name, start_time, simulazione, attivita_id FROM emergencies WHERE status = 'ACTIVE' ORDER BY start_time DESC LIMIT 1;"
         );
         if (result.rowCount > 0) {
             activeEmergency = result.rows[0];

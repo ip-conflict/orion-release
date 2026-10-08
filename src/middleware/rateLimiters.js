@@ -24,6 +24,10 @@ const userKeyGenerator = chiaveRichiesta;
 // Le posizioni delle squadre (ogni 15 secondi da ogni telefono) non si contano.
 // Il limitatore è montato su '/api/': il percorso intero sta in baseUrl + path.
 const ePosizione = (req) => req.method === 'POST' && `${req.baseUrl || ''}${req.path}` === '/api/location';
+// Nemmeno i tasselli della cartografia del territorio: una mappa a tutto
+// schermo ne chiede decine a ogni spostamento.
+const eTassello = (req) => req.method === 'GET' && /^\/api\/mappa\/cartografia\/\d+\/\d+\/\d+$/.test(`${req.baseUrl || ''}${req.path}`);
+const nonContare = (req) => ePosizione(req) || eTassello(req);
 
 // Un tetto contro un client impazzito, non contro chi lavora: in emergenza il
 // centro operativo ricarica le segnalazioni a ogni evento, e le rotte
@@ -36,7 +40,7 @@ export const apiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: userKeyGenerator, // per persona se collegata, altrimenti per rete
-    skip: ePosizione
+    skip: nonContare
 });
 
 // Prima di sapere chi è: un tetto alto per indirizzo, contro chi martella il
@@ -48,7 +52,7 @@ export const limitePerRete = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => `rete:${chiaveIndirizzo(req.ip)}`,
-    skip: ePosizione
+    skip: nonContare
 });
 
 export const passwordLimiter = rateLimit({

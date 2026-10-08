@@ -8,7 +8,8 @@ import fs from 'fs';
 import logger from './logger.js';
 import { generateUsername, importUsersFromExcel, leggiCampiAnagrafici } from './anagrafica.js';
 import { registraAudit } from './audit.js';
-import { COSTO_BCRYPT, authenticateToken, checkAdminOrSegreteriaRole, checkAdminRole, chiudiSessioni, emettiSessione, ruoliDaRichiesta, ruoloPrincipale, scriviRuoli, validaRuoliAssegnabili } from './autenticazione.js';
+import { COSTO_BCRYPT, authenticateToken, checkAdminOrSegreteriaRole, checkAdminRole, chiudiSessioni, emettiSessione, haRuolo, ruoliDaRichiesta, ruoloPrincipale, scriviRuoli, validaRuoliAssegnabili } from './autenticazione.js';
+import { richiedePermesso } from './permessi.js';
 import { sistemaBeniInCarico } from './beniInUscita.js';
 import { uploadExcelMulter, uploadPhoto, verifyExcelUpload, verifySingleUploadedImage } from './caricamenti.js';
 import { domainName } from './config.js';
@@ -16,6 +17,8 @@ import { pool } from './db.js';
 import { sendEmailUtility } from './email.js';
 import { adminLimiter, passwordLimiter } from './middleware/rateLimiters.js';
 import { qrVolontariAttivi } from './pubbliche.js';
+import { proteggiCaricati } from './cifratura.js';
+import { cancellaFile, fileDaIndirizzi, fileDellaPersona, pseudonimizza } from './eliminazionePersona.js';
 
 export function registraRotteUtenti(app) {
 
@@ -25,7 +28,7 @@ export function registraRotteUtenti(app) {
            const result = await pool.query(`
            SELECT u.id, u.username, u.nome, u.cognome, u.email, u.role,
                   ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
-           FROM users u ORDER BY u.cognome, u.nome`);
+           FROM users u WHERE u.eliminato_il IS NULL ORDER BY u.cognome, u.nome`);
            res.json(result.rows);
          } catch (error) { logger.error('Errore GET /api/users:', error); res.status(500).json({ message: 'Errore recupero utenti' }); }
     });
@@ -94,11 +97,16 @@ export function registraRotteUtenti(app) {
     app.post('/api/users/me/photo', authenticateToken, uploadPhoto.single('photo'), async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'Nessuna immagine caricata.' });
         if (!(await verifySingleUploadedImage(req, res, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']))) return;
+        await proteggiCaricati(req.file);
 
         const photoUrl = `/api/photos/${req.file.filename}`;
 
         try {
-            await pool.query('UPDATE users SET photo_url = $1 WHERE id = $2', [photoUrl, req.user.id]);
+            // La foto di prima non serve più: si toglie dal disco.
+            const r = await pool.query(
+                `UPDATE users u SET photo_url = $1 FROM (SELECT photo_url AS vecchia FROM users WHERE id = $2) v
+                  WHERE u.id = $2 RETURNING v.vecchia`, [photoUrl, req.user.id]);
+            await cancellaFile(fileDaIndirizzi([r.rows[0]?.vecchia]));
             res.json({ message: 'Foto aggiornata con successo.', photo_url: photoUrl });
         } catch (error) {
             logger.error('Errore salvataggio URL foto:', error);
@@ -160,7 +168,7 @@ export function registraRotteUtenti(app) {
             // questa continua con un token nuovo.
             await pool.query('UPDATE users SET password = $1 WHERE id = $2', [newPasswordHash, userId]);
             await chiudiSessioni(userId);
-            const { token } = emettiSessione(res, req.user, req.user.ruoli);
+            const { token } = emettiSessione(res, req.user, req.user.ruoli, { mfa: req.user.mfa });
 
             logger.info(`Password aggiornata con successo per utente ID: ${userId}; altre sessioni chiuse.`);
             res.status(200).json({ message: "Password aggiornata con successo! Le altre sessioni sono state chiuse.", token });
@@ -177,9 +185,11 @@ export function registraRotteUtenti(app) {
             const result = await pool.query(`
             SELECT u.id, u.username, u.nome, u.cognome, u.email, u.role, u.is_active, u.codice_fiscale, u.telefono,
                    u.temporaneo, u.ente, e.code AS emergenza, e.status = 'ACTIVE' AS emergenza_aperta,
-                   u.creato_il, u.ultimo_accesso,
-                   ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
+                   u.creato_il, u.ultimo_accesso, u.mfa_attiva,
+                   ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli,
+                   ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = u.id ORDER BY permesso) AS permessi_in_piu
             FROM users u LEFT JOIN emergencies e ON e.id = u.temporaneo_emergenza_id
+            WHERE u.eliminato_il IS NULL
             ORDER BY u.cognome, u.nome`);
             res.json(result.rows);
         } catch (error) { logger.error('Errore GET /api/admin/users:', error); res.status(500).json({ message: 'Errore recupero utenti admin' }); }
@@ -189,7 +199,13 @@ export function registraRotteUtenti(app) {
     // password, sospensione e dati si gestiscono dal centro operativo
     // ("Accesso esterno"), non da qui. Si possono solo eliminare.
     async function rifiutaSeTemporaneo(userId, res) {
-        const r = await pool.query('SELECT temporaneo FROM users WHERE id = $1', [userId]);
+        const r = await pool.query('SELECT temporaneo, eliminato_il FROM users WHERE id = $1', [userId]);
+        // Chi è stato eliminato non si riattiva e non si modifica: di lui restano
+        // solo nome e cognome nello storico.
+        if (r.rows[0]?.eliminato_il) {
+            res.status(404).json({ message: 'Utente non trovato.' });
+            return true;
+        }
         if (r.rows[0]?.temporaneo !== true) return false;
         res.status(409).json({ message: "È un accesso esterno temporaneo: si gestisce dal centro operativo, in «Accesso esterno», e finisce da solo con l'emergenza." });
         return true;
@@ -229,9 +245,14 @@ export function registraRotteUtenti(app) {
         }
     });
 
-    app.post('/api/users', adminLimiter, checkAdminRole, async (req, res) => {
+    // Iscrive una persona. Chi gestisce l'anagrafica iscrive i volontari;
+    // ruoli diversi (e permessi) li assegna solo l'amministratore.
+    app.post('/api/users', adminLimiter, richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const { nome, cognome, email } = req.body;
         const ruoliRichiesti = ruoliDaRichiesta(req.body);
+        if (!haRuolo(req, 'admin') && !(ruoliRichiesti.length === 1 && ruoliRichiesti[0] === 'volontario')) {
+            return res.status(403).json({ message: "Puoi iscrivere solo volontari: gli altri ruoli li assegna l'amministratore." });
+        }
 
 
         if (!nome || !cognome || ruoliRichiesti.length === 0) {
@@ -253,11 +274,11 @@ export function registraRotteUtenti(app) {
             
             const finalUsername = await generateUsername(cleanNomeTrimmed, cleanCognomeTrimmed, client);
             
-            // L'utente nasce senza password, con un link di attivazione di 24 ore,
+            // L'utente nasce senza password, con un link di attivazione di 7 giorni (si consegna anche a mano, stampato),
             // mandato per email se si può e comunque restituito all'amministratore.
             const resetToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = await bcrypt.hash(resetToken, 10);
-            const expireDate = new Date(Date.now() + 24 * 3600000);
+            const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
 
 
             const result = await client.query(
@@ -281,7 +302,7 @@ export function registraRotteUtenti(app) {
                 const emailResult = await sendEmailUtility(
                     sanitizedEmail,
                     "Benvenuto in ORION - Attiva il tuo account",
-                    `Ciao ${newUser.nome},\n\nIl tuo account ORION è stato creato.\nUsername: ${newUser.username}\n\nClicca sul link sottostante per impostare la tua password e attivare l'account (valido per 24 ore):\n\n${magicLink}`
+                    `Ciao ${newUser.nome},\n\nIl tuo account ORION è stato creato.\nUsername: ${newUser.username}\n\nClicca sul link sottostante per impostare la tua password e attivare l'account (valido per 7 giorni):\n\n${magicLink}`
                 );
                 emailSent = emailResult.success;
                 emailError = emailResult.error;
@@ -408,21 +429,36 @@ export function registraRotteUtenti(app) {
             // Prima il materiale che ha in carico (vedi beniInUscita.js).
             const beniSistemati = await sistemaBeniInCarico(client, req, 'persona', userIdToDelete, req.body?.beni);
 
-            // Chi compare in segnalazioni o registri non si cancella (23503): si
-            // sospende. Visite e corsi se ne vanno con lui.
-            const deleteResult = await client.query('DELETE FROM users WHERE id = $1 RETURNING username', [userIdToDelete]);
+            const persona = (await client.query('SELECT username FROM users WHERE id = $1 AND eliminato_il IS NULL', [userIdToDelete])).rows[0];
+            if (!persona) throw new Error('Utente non trovato.');
+            const file = await fileDellaPersona(client, userIdToDelete);
 
-            if (deleteResult.rowCount === 0) {
-                throw new Error('Utente non trovato.');
+            // Si cancella del tutto, con visite e corsi. Chi compare nello
+            // storico (segnalazioni, aggiornamenti, documenti: 23503) resta
+            // solo con nome e cognome, e il resto dei suoi dati si cancella.
+            let modo = 'cancellato';
+            await client.query('SAVEPOINT eliminazione');
+            try {
+                await client.query('DELETE FROM users WHERE id = $1', [userIdToDelete]);
+            } catch (e) {
+                if (e.code !== '23503') throw e;
+                await client.query('ROLLBACK TO SAVEPOINT eliminazione');
+                await pseudonimizza(client, userIdToDelete);
+                modo = 'solo_nome';
             }
 
             await client.query('COMMIT');
-            logger.info(`Utente ${deleteResult.rows[0].username} (ID: ${userIdToDelete}) eliminato con successo dall'admin ${req.user.username}.`);
+            await chiudiSessioni(userIdToDelete).catch(() => {});
+            await cancellaFile(file);
+            logger.info(`Utente ${persona.username} (ID: ${userIdToDelete}) eliminato (${modo}) dall'admin ${req.user.username}.`);
             const avvisoBeni = beniSistemati.sistemati.length
                 ? ` Materiale sistemato: ${beniSistemati.sistemati.map(b => `${b.denominazione} (${b.decisione.replace('_', ' ')})`).join(', ')}.`
                 : '';
-            res.status(200).json({ message: `L'utente ${deleteResult.rows[0].username} è stato eliminato con successo.${avvisoBeni}`, beni: beniSistemati.sistemati });
-            registraAudit(req, 'utente.eliminato', { tipo: 'utente', id: userIdToDelete, dettagli: { username: deleteResult.rows[0].username, beni: beniSistemati.sistemati } });
+            const esito = modo === 'cancellato'
+                ? `L'utente ${persona.username} è stato eliminato con tutti i suoi dati.`
+                : `L'utente ${persona.username} è stato eliminato e i suoi dati personali cancellati. Compare in segnalazioni o documenti delle emergenze: lì resta solo il suo nome, per non alterare lo storico.`;
+            res.status(200).json({ message: `${esito}${avvisoBeni}`, modo, beni: beniSistemati.sistemati });
+            registraAudit(req, 'utente.eliminato', { tipo: 'utente', id: userIdToDelete, dettagli: { username: persona.username, modo, file: file.length, beni: beniSistemati.sistemati } });
 
         } catch (error) {
             await client.query('ROLLBACK');
@@ -435,12 +471,6 @@ export function registraRotteUtenti(app) {
 
             logger.error(`Errore DELETE /api/users/${userIdToDelete}:`, error);
 
-
-            if (error.code === '23503') {
-                return res.status(409).json({ 
-                    message: "Impossibile eliminare questo utente perché è già collegato a segnalazioni o log operativi nel sistema. Usa la funzione 'Sospendi' (icona utente sbarrato) per disattivargli l'accesso senza perdere lo storico." 
-                });
-            }
 
             if (error.message === 'Utente non trovato.') {
                 return res.status(404).json({ message: 'Utente non trovato.' });
@@ -468,7 +498,7 @@ export function registraRotteUtenti(app) {
             if (await rifiutaSeTemporaneo(userIdToReset, res)) return;
             const resetToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = await bcrypt.hash(resetToken, 10);
-            const expireDate = new Date(Date.now() + 24 * 3600000);
+            const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
 
 
             const result = await pool.query(
@@ -492,7 +522,7 @@ export function registraRotteUtenti(app) {
                 const emailResult = await sendEmailUtility(
                     resetUser.email,
                     "ORION - Ripristino Password",
-                    `Ciao ${resetUser.username},\n\nUn amministratore ha resettato la tua password.\nClicca sul link sottostante per impostarne una nuova (valido per 24 ore):\n\n${magicLink}`
+                    `Ciao ${resetUser.username},\n\nUn amministratore ha resettato la tua password.\nClicca sul link sottostante per impostarne una nuova (valido per 7 giorni):\n\n${magicLink}`
                 );
                 emailSent = emailResult.success;
                 emailError = emailResult.error;

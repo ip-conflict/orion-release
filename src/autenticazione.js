@@ -9,6 +9,8 @@ import logger from './logger.js';
 import { verifyJwtToken } from './authHelper.js';
 import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
+import { esenteDaPresaVisione, versioneInformativa } from './statoInformativa.js';
+import { ORDINE_RUOLI, haPermesso, mfaRichiesta, permessiDi } from './permessi.js';
 
 // Chi fa la richiesta: il token, poi revoca, account attivo e ruoli letti dal
 // database a ogni richiesta, perché sospensioni e ruoli tolti valgano subito.
@@ -42,7 +44,10 @@ export async function authenticateToken(req, res, next) {
                         -- non sa come leggere un vettore.
                         ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = $2) AS ruoli,
                         (SELECT (EXTRACT(EPOCH FROM sessioni_valide_dal) * 1000)::bigint FROM users WHERE id = $2) AS valide_dal,
-                        (SELECT temporaneo FROM users WHERE id = $2) AS temporaneo`,
+                        (SELECT temporaneo FROM users WHERE id = $2) AS temporaneo,
+                        (SELECT presa_visione_versione FROM users WHERE id = $2) AS presa_visione,
+                        -- I permessi dati in più, oltre a quelli dei ruoli (permessi.js).
+                        ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = $2) AS permessi_in_piu`,
                 [token, user.id]
             );
         } catch (dbError) {
@@ -50,7 +55,7 @@ export async function authenticateToken(req, res, next) {
             return res.status(503).json({ message: 'Servizio temporaneamente non disponibile. Riprova tra poco.' });
         }
 
-        const { revocato, attivo, ruoli, nome, cognome, valide_dal, temporaneo } = stato.rows[0];
+        const { revocato, attivo, ruoli, nome, cognome, valide_dal, temporaneo, presa_visione, permessi_in_piu } = stato.rows[0];
         // L'esterno temporaneo non è sospeso: il suo accesso è finito con
         // l'emergenza o è stato revocato, e glielo si dice così.
         if (temporaneo === true && attivo === false && req.originalUrl.startsWith('/api/')) {
@@ -79,8 +84,28 @@ export async function authenticateToken(req, res, next) {
 
         // Senza righe in utenti_ruoli vale il ruolo scritto nel token.
         const ruoliEffettivi = (ruoli && ruoli.length > 0) ? ruoli : ruoliDi(user);
-        req.user = { ...user, nome, cognome, ruoli: ruoliEffettivi, role: ruoloPrincipale(ruoliEffettivi), temporaneo: temporaneo === true };
+        const permessi = permessiDi(ruoliEffettivi, permessi_in_piu);
+        // L'amministratore, e chi vede i dati sanitari, lavora solo con una
+        // sessione nata dalla verifica in due passaggi: anche chi lo è diventato
+        // mentre era collegato, o chi aveva una sessione di prima che fosse obbligatoria.
+        if (mfaRichiesta(ruoliEffettivi, permessi) && user.mfa !== true) {
+            res.clearCookie('__Secure-token', { path: '/' });
+            const messaggio = 'Per il tuo ruolo serve la verifica in due passaggi: rifai l\'accesso.';
+            if (req.originalUrl.startsWith('/api/')) return res.status(401).json({ message: messaggio, sessione_terminata: true, motivo: 'mfa_richiesta' });
+            if (req.accepts('html')) return res.redirect('/login.html?error=mfa_richiesta&redirect=' + encodeURIComponent(req.originalUrl));
+            return res.sendStatus(401);
+        }
+        req.user = { ...user, nome, cognome, ruoli: ruoliEffettivi, role: ruoloPrincipale(ruoliEffettivi), temporaneo: temporaneo === true, permessi };
         segnaAccesso(user.id);
+        // Prima di lavorare si accettano le condizioni d'uso in vigore: al
+        // primo accesso e ogni volta che cambiano. Fino ad allora si legge solo
+        // il testo; l'app e il browser riconoscono il 428 e mostrano la pagina.
+        if (presa_visione !== versioneInformativa && !esenteDaPresaVisione(req.path)) {
+            const messaggio = "Prima di continuare leggi e accetta le condizioni d'uso.";
+            if (req.originalUrl.startsWith('/api/')) return res.status(428).json({ message: messaggio, informativa_da_vedere: true, motivo: 'informativa', versione: versioneInformativa });
+            if (req.method === 'GET' && req.accepts('html')) return res.redirect('/informativa.html?redirect=' + encodeURIComponent(req.originalUrl));
+            return res.status(428).json({ message: messaggio, informativa_da_vedere: true, motivo: 'informativa' });
+        }
         logger.debug(`[Auth OK] Utente: ${user.username}, Ruoli: ${ruoliEffettivi.join(', ')}, Path: ${req.originalUrl}`);
         next();
     } catch (err) {
@@ -121,9 +146,9 @@ export function segnaAccesso(userId, subito = false) {
         .catch(e => logger.warn(`[Auth] Ultimo accesso di ${userId} non registrato: ${e.message}`));
 }
 
-// I ruoli si sommano e stanno in utenti_ruoli. users.role è il più alto di
-// questo ordine, per gli elenchi e l'app: si legge, e lo scrive solo scriviRuoli().
-const ORDINE_RUOLI = ['admin', 'segreteria', 'magazziniere', 'volontario', 'esterno'];
+// I ruoli si sommano e stanno in utenti_ruoli. users.role è il più alto
+// dell'ordine (permessi.js), per gli elenchi e l'app: si legge, e lo scrive
+// solo scriviRuoli().
 
 export function ruoloPrincipale(ruoli) {
     return ORDINE_RUOLI.find(r => ruoli.includes(r)) || 'volontario';
@@ -140,11 +165,12 @@ export const COSTO_BCRYPT = 12;
 
 // Una sessione nuova: il token firmato e il cookie per il browser. jwtid rende
 // unici due accessi nello stesso secondo, che altrimenti si chiuderebbero a vicenda.
-export function emettiSessione(res, utente, ruoli) {
+// mfa: la sessione è nata con la verifica in due passaggi (mfa.js).
+export function emettiSessione(res, utente, ruoli, { mfa = false } = {}) {
     const ruoliUtente = (ruoli && ruoli.length > 0) ? ruoli : [utente.role];
     const principale = ruoloPrincipale(ruoliUtente);
     // ems: l'emissione al millisecondo (iat conta i secondi), per tokenSuperato.
-    const token = jwt.sign({ id: utente.id, role: principale, ruoli: ruoliUtente, username: utente.username, ems: Date.now() },
+    const token = jwt.sign({ id: utente.id, role: principale, ruoli: ruoliUtente, username: utente.username, ems: Date.now(), mfa: mfa === true },
         process.env.JWT_SECRET, { expiresIn: '1d', algorithm: 'HS256', jwtid: crypto.randomUUID() });
     res.cookie('__Secure-token', token, {
         httpOnly: true,
@@ -166,6 +192,7 @@ export async function chiudiSessioni(userId, esecutore = pool) {
     await esecutore.query('UPDATE users SET sessioni_valide_dal = to_timestamp($2::double precision / 1000) WHERE id = $1',
         [userId, Date.now()]);
     await esecutore.query('DELETE FROM token_rinnovo WHERE user_id = $1', [userId]);
+    await esecutore.query('DELETE FROM token_avvisi WHERE user_id = $1', [userId]);
 }
 
 // Il token è stato emesso prima di una chiusura delle sessioni? Senza ems si
@@ -185,11 +212,17 @@ export function haRuolo(req, ...richiesti) {
 }
 
 // L'emergenza in corso la vede chiunque abbia una sessione, esterni compresi.
-// Una chiusa è archivio, solo per l'amministratore; una segnalazione senza
-// emergenza conta come chiusa.
+// Una chiusa è archivio, per chi consulta le emergenze passate; una
+// segnalazione senza emergenza conta come chiusa.
 export function puoVedereEmergenza(req, emergencyId) {
     if (activeEmergency && emergencyId != null && Number(emergencyId) === activeEmergency.id) return true;
-    return haRuolo(req, 'admin');
+    return haPermesso(req, 'emergenze.archivio');
+}
+
+// I permessi dati in più a una persona, per le risposte d'accesso.
+export async function permessiDellaPersona(userId, ruoli, esecutore = pool) {
+    const { rows } = await esecutore.query('SELECT permesso FROM utenti_permessi WHERE user_id = $1', [userId]);
+    return permessiDi(ruoli, rows.map(r => r.permesso));
 }
 
 async function leggiRuoli(esecutore, userId) {
@@ -219,7 +252,7 @@ export async function scriviRuoli(client, userId, ruoli) {
 }
 
 // I ruoli che si possono assegnare dal pannello utenti.
-const RUOLI_ASSEGNABILI = ['admin', 'segreteria', 'magazziniere', 'volontario', 'esterno'];
+const RUOLI_ASSEGNABILI = ORDINE_RUOLI;
 
 export function validaRuoliAssegnabili(ruoli) {
     const sconosciuti = ruoli.filter(r => !RUOLI_ASSEGNABILI.includes(r));
@@ -285,7 +318,7 @@ export async function checkSegreteriaAccess(req, res, next) {
             return res.status(403).json({ message: 'Modulo Segreteria attualmente disabilitato dalle impostazioni.' });
         }
 
-        if (haRuolo(req, 'segreteria')) {
+        if (haPermesso(req, 'volontari.sanitario')) {
             next();
         } else {
             logger.warn(`[SECURITY] Accesso negato area segreteria per ${req.user.username}`);
@@ -305,7 +338,7 @@ export function checkOwnershipOrSegreteria(req, res, next) {
         return res.status(400).json({ message: 'ID utente non valido.' });
     }
 
-    if (haRuolo(req, 'segreteria') || req.user.id === targetUserId) {
+    if (haPermesso(req, 'volontari.sanitario') || req.user.id === targetUserId) {
         next();
     } else {
         logger.warn(`[SECURITY IDOR] L'utente ${req.user.username} ha tentato di leggere/modificare i dati medici dell'utente ID ${targetUserId}. Accesso bloccato.`);
@@ -313,8 +346,9 @@ export function checkOwnershipOrSegreteria(req, res, next) {
     }
 }
 
+// Anagrafica o dati sanitari: per le rotte che servono a entrambi (l'elenco dei volontari).
 export function checkAdminOrSegreteriaRole(req, res, next) {
-    if (haRuolo(req, 'segreteria')) {
+    if (haPermesso(req, 'volontari.anagrafica', 'volontari.sanitario')) {
         next(); 
     } else {
         logger.warn(`[Auth Failed] L'utente ${req.user?.username || 'sconosciuto'} (ruoli: ${ruoliDi(req.user).join(', ') || 'nessuno'}) ha tentato l'accesso a una risorsa admin/segreteria: ${req.originalUrl}`);

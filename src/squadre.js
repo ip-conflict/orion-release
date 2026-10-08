@@ -24,6 +24,91 @@ export async function avvisaSquadra(squadraId, dati) {
     }
 }
 
+// Chi entra in una squadra durante un'emergenza lo sa dal telefono: è il solo
+// avviso d'emergenza che l'app dà a chi non è già impegnato. Chi esce perde
+// l'avviso. Senza emergenza aperta le squadre si preparano e basta.
+export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza = activeEmergency) {
+    if (!emergenza) return;
+    try {
+        const ids = async (usernames) => usernames.length === 0 ? [] : (await pool.query(
+            'SELECT id FROM users WHERE username = ANY($1::text[]) AND COALESCE(is_active, true) = true', [usernames])).rows.map(r => r.id);
+        for (const id of await ids(usciti)) {
+            await notifiche.scadi({ tipo: 'in_squadra', userId: id });
+        }
+        const radio = squadra.nome_radio + (squadra.nome ? ` (${squadra.nome})` : '');
+        for (const id of await ids(entrati)) {
+            // Cambiando squadra vale solo l'avviso nuovo.
+            await notifiche.scadi({ tipo: 'in_squadra', userId: id });
+            await notifiche.notifica(id, {
+                tipo: 'in_squadra',
+                titolo: `Sei in squadra ${squadra.nome_radio}`,
+                testo: `Emergenza ${emergenza.code}: sei nella squadra ${radio}. Apri ORION per gli interventi.`,
+                riferimento: { tipo: 'squadra', id: squadra.id },
+                chiave: `in_squadra:${emergenza.id}:${squadra.id}:${Date.now()}`,
+                oreValidita: 72
+            });
+        }
+    } catch (e) {
+        logger.error(`[Notifiche] Avviso di ingresso in squadra ${squadra.nome_radio} non riuscito:`, e);
+    }
+}
+
+// I telefoni del caposquadra e dei membri si mostrano al centro operativo
+// solo con la segreteria accesa (l'anagrafica la tiene lei) e mai agli esterni.
+async function segreteriaAccesa(esecutore = pool) {
+    try {
+        const r = await esecutore.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
+        const v = r.rows[0]?.setting_value;
+        const config = typeof v === 'string' ? JSON.parse(v) : v;
+        return config?.enabled === true;
+    } catch {
+        return false;
+    }
+}
+
+export async function mostraTelefonoCaposquadra(req) {
+    return !ruoliDi(req.user).includes('esterno') && await segreteriaAccesa();
+}
+
+// Nomina (o toglie, con null) il caposquadra dentro una transazione aperta e
+// lo annota nel registro dell'emergenza. Restituisce chi lo è adesso.
+async function scriviCaposquadra(client, squadra, username, req) {
+    const prima = (await client.query(
+        'SELECT username, nome, cognome FROM squadra_membri WHERE squadra_id = $1 AND caposquadra', [squadra.id])).rows[0] || null;
+    if ((prima?.username || null) === (username || null)) return prima;
+    let dopo = null;
+    if (username) {
+        dopo = (await client.query(
+            'SELECT username, nome, cognome FROM squadra_membri WHERE squadra_id = $1 AND username = $2', [squadra.id, username])).rows[0];
+        if (!dopo) throw erroreRichiesta('Il caposquadra deve far parte della squadra.');
+    }
+    await client.query('UPDATE squadra_membri SET caposquadra = false WHERE squadra_id = $1 AND caposquadra', [squadra.id]);
+    if (dopo) await client.query('UPDATE squadra_membri SET caposquadra = true WHERE squadra_id = $1 AND username = $2', [squadra.id, username]);
+    const rif = { squadra_id: squadra.id, nome_radio: squadra.nome_radio, squadra_nome: squadra.nome ?? null };
+    await annotaRegistroSquadre(client, [
+        ...(prima && prima.username !== dopo?.username && await eAncoraMembro(client, squadra.id, prima.username)
+            ? [{ ...rif, ...prima, azione: 'caposquadra_tolto', motivo: 'operazione' }] : []),
+        ...(dopo ? [{ ...rif, ...dopo, azione: 'caposquadra_nominato', motivo: 'operazione' }] : [])
+    ], req);
+    return dopo;
+}
+
+async function eAncoraMembro(client, squadraId, username) {
+    return (await client.query('SELECT 1 FROM squadra_membri WHERE squadra_id = $1 AND username = $2', [squadraId, username])).rowCount > 0;
+}
+
+// Il caposquadra richiesto nel corpo: "caposquadra" assente vuol dire
+// lasciare quello di prima (se è ancora nella squadra), null toglierlo.
+function caposquadraRichiesto(corpo, membriRisolti, prima) {
+    const usernames = new Set(membriRisolti.map(m => m.username));
+    if (!Object.prototype.hasOwnProperty.call(corpo || {}, 'caposquadra')) {
+        return prima && usernames.has(prima) ? prima : null;
+    }
+    const scelto = corpo.caposquadra ? String(corpo.caposquadra).trim().toLowerCase() : null;
+    if (scelto && !usernames.has(scelto)) throw erroreRichiesta('Il caposquadra deve essere uno dei membri della squadra.');
+    return scelto;
+}
+
 // Gli utenti con lo stato di visita e corso base, per comporre le squadre.
 async function getAvailableUsersQuery(client) {
     const query = `
@@ -41,13 +126,15 @@ async function getAvailableUsersQuery(client) {
             FROM user_courses uc 
             WHERE uc.user_id = u.id AND uc.course_id = 1 AND (uc.expiry_date IS NULL OR uc.expiry_date >= CURRENT_DATE) 
             LIMIT 1
-        ), FALSE) AS course_ok
+        ), FALSE) AS course_ok,
+        -- Arrivato in sede dopo la chiamata e non congedato: pronto da mettere in squadra.
+        EXISTS (SELECT 1 FROM disponibilita d WHERE d.user_id = u.id AND d.emergency_id = $1 AND d.stato = 'arrivato') AS in_sede
         FROM users u
         WHERE (u.is_active = true OR u.is_active IS NULL)
         AND NOT EXISTS (SELECT 1 FROM squadra_membri sm WHERE sm.username = u.username)
-        ORDER BY u.cognome, u.nome;
+        ORDER BY in_sede DESC, u.cognome, u.nome;
     `;
-    const result = await client.query(query);
+    const result = await client.query(query, [activeEmergency?.id ?? null]);
     return result.rows;
 }
 
@@ -207,6 +294,7 @@ export function registraRotteSquadre(app) {
                 s.id,
                 s.nome_radio,
                 s.nome,
+                s.coc,
                 (SELECT json_build_object(
                             'report_id', r.id,
                             'emergency_code', e.code,
@@ -222,19 +310,30 @@ export function registraRotteSquadre(app) {
                 ) AS active_target_info,
                 COALESCE(
                     json_agg(
-                        json_build_object('username', sm.username, 'nome', sm.nome, 'cognome', sm.cognome)
+                        json_build_object('username', sm.username, 'nome', sm.nome, 'cognome', sm.cognome, 'caposquadra', sm.caposquadra,
+                            -- Per chiamare la squadra se il caposquadra non risponde.
+                            'telefono', CASE WHEN $2 THEN (SELECT NULLIF(TRIM(u.telefono), '') FROM users u WHERE u.username = sm.username) END)
+                        ORDER BY sm.caposquadra DESC, sm.cognome, sm.nome
                     ) FILTER (WHERE sm.username IS NOT NULL),
                     '[]'::json
                 ) AS membri,
-                ps.last_update
+                -- Il caposquadra, con il telefono per chiamarlo se la radio
+                -- non va (solo con la segreteria accesa, mai agli esterni).
+                (SELECT json_build_object('username', c.username, 'nome', c.nome, 'cognome', c.cognome,
+                                          'telefono', CASE WHEN $2 THEN NULLIF(TRIM(u.telefono), '') END)
+                   FROM squadra_membri c LEFT JOIN users u ON u.username = c.username
+                  WHERE c.squadra_id = s.id AND c.caposquadra LIMIT 1) AS caposquadra,
+                ps.last_update,
+                (SELECT json_build_object('username', u.username, 'nome', u.nome, 'cognome', u.cognome)
+                   FROM users u WHERE u.username = ps.inviata_da) AS posizione_da
             FROM squadre s
             LEFT JOIN squadra_membri sm ON s.id = sm.squadra_id
             LEFT JOIN posizioni_squadre ps ON s.id = ps.squadra_id
-            GROUP BY s.id, ps.last_update
-            ORDER BY s.nome_radio;
+            GROUP BY s.id, ps.last_update, ps.inviata_da
+            ORDER BY s.coc DESC, s.nome_radio;
         `;
 
-            const result = await pool.query(query, [ACTIVE_REPORT_STATUSES_BACKEND]);
+            const result = await pool.query(query, [ACTIVE_REPORT_STATUSES_BACKEND, await mostraTelefonoCaposquadra(req)]);
             logger.debug(`Recuperate ${result.rowCount} squadre con dettagli posizione.`);
             res.status(200).json(result.rows);
         } catch (err) {
@@ -250,7 +349,7 @@ export function registraRotteSquadre(app) {
             const query = `
             SELECT s.id, s.nome, s.nome_radio
             FROM squadre s
-            WHERE NOT EXISTS (
+            WHERE NOT s.coc AND NOT EXISTS (
                 SELECT 1
                 FROM report_team_assignments rta
                 JOIN reports r ON rta.report_id = r.id
@@ -273,12 +372,12 @@ export function registraRotteSquadre(app) {
         if (isNaN(squadraId)) return res.status(400).json({ message: 'ID Squadra non valido'});
 
         try {
-            const squadraQuery = `SELECT id, nome_radio, nome, created_at, target FROM squadre WHERE id = $1`;
+            const squadraQuery = `SELECT id, nome_radio, nome, created_at, target, coc FROM squadre WHERE id = $1`;
             const squadraResult = await pool.query(squadraQuery, [squadraId]);
             if (squadraResult.rowCount === 0) return res.status(404).json({ error: 'Squadra non trovata' });
             const squadra = squadraResult.rows[0];
             const membriQuery = `
-            SELECT u.id, u.username, u.nome, u.cognome, u.role,
+            SELECT u.id, u.username, u.nome, u.cognome, u.role, sm.caposquadra,
             -- Conta l'ULTIMA visita di idoneita' fisica, come il tesserino e le
             -- assegnazioni: prima bastava una visita qualsiasi ancora valida, e
             -- chi era stato giudicato non idoneo dopo risultava idoneo qui.
@@ -294,7 +393,7 @@ export function registraRotteSquadre(app) {
             FROM squadra_membri sm
             JOIN users u ON sm.username = u.username 
             WHERE sm.squadra_id = $1
-            ORDER BY u.cognome, u.nome;
+            ORDER BY sm.caposquadra DESC, u.cognome, u.nome;
         `;
             const membriResult = await pool.query(membriQuery, [squadraId]);
             // L'idoneità medica è un dato sanitario: agli esterni no.
@@ -305,6 +404,7 @@ export function registraRotteSquadre(app) {
                  nome: m.nome,
                  cognome: m.cognome,
                  role: m.role,
+                 caposquadra: m.caposquadra === true,
                  ...(esterno ? {} : { medical_ok: m.medical_ok, course_ok: m.course_ok })
             }));
             res.json({ squadra, membri });
@@ -339,6 +439,7 @@ export function registraRotteSquadre(app) {
             if (invalidMembers.length > 0) {
                  throw erroreRichiesta(`Vincoli operativi di sicurezza non rispettati per: ${invalidMembers.join(', ')}`);
             }
+            const capo = caposquadraRichiesto(req.body, membriRisolti, null);
             const insertMembroQuery = `INSERT INTO squadra_membri (squadra_id, username, nome, cognome) VALUES ($1, $2, $3, $4)`;
             for (const membro of membriRisolti) {
                 await client.query(insertMembroQuery, [squadraId, membro.username, membro.nome, membro.cognome]);
@@ -349,10 +450,12 @@ export function registraRotteSquadre(app) {
                 username: m.username, nome: m.nome, cognome: m.cognome,
                 azione: 'membro_aggiunto', motivo: 'operazione'
             })), req);
+            if (capo) await scriviCaposquadra(client, { id: squadraId, nome_radio, nome: nomeDescrittivo }, capo, req);
 
             await client.query('COMMIT');
             res.status(201).json({ message: 'Squadra creata con successo.', squadraId });
-            registraAudit(req, 'squadra.creata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio, nome: nomeDescrittivo, membri: membri.map(m => m.username) } });
+            avvisaEntratiInSquadra(membriRisolti.map(m => m.username), [], { id: squadraId, nome_radio, nome: nomeDescrittivo });
+            registraAudit(req, 'squadra.creata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio, nome: nomeDescrittivo, membri: membri.map(m => m.username), caposquadra: req.body?.caposquadra || null } });
             if (typeof wss !== 'undefined' && wss) {
                 if (wss.clients && wss.clients instanceof Set) {
                      wss.clients.forEach(client => {
@@ -391,25 +494,32 @@ export function registraRotteSquadre(app) {
         const { id } = req.params;
         const squadraId = parseInt(id, 10);
         if (isNaN(squadraId)) return res.status(400).json({ message: 'ID Squadra non valido'});
-        const { nome_radio, nome, membri } = req.body; 
-        if (!nome_radio || !NOMI_RADIO.includes(nome_radio)) {
-            return res.status(400).json({ error: 'Serve un nome radio valido (Alfa, Bravo, Charlie...).' });
-        }
+        const { nome, membri } = req.body;
+        let { nome_radio } = req.body;
          if (!Array.isArray(membri)) { 
              return res.status(400).json({ error: 'Array membri richiesto.' });
          }
-        const nomeDescrittivo = nome ? String(nome).trim() : null;
+        let nomeDescrittivo = nome ? String(nome).trim() : null;
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
 
-            const esiste = await client.query('SELECT id, nome_radio FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
+            const esiste = await client.query('SELECT id, nome_radio, nome, coc FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
             if (esiste.rowCount === 0) throw erroreNonTrovato('Squadra non trovata.');
+            // La squadra COC tiene il suo nome: si cambiano solo i membri.
+            const coc = esiste.rows[0].coc;
+            if (coc) {
+                nome_radio = esiste.rows[0].nome_radio;
+                nomeDescrittivo = esiste.rows[0].nome;
+            } else if (!nome_radio || !NOMI_RADIO.includes(nome_radio)) {
+                throw erroreRichiesta('Serve un nome radio valido (Alfa, Bravo, Charlie...).');
+            }
 
             const membriPrima = (await client.query(
-                'SELECT username, nome, cognome FROM squadra_membri WHERE squadra_id = $1', [squadraId]
+                'SELECT username, nome, cognome, caposquadra FROM squadra_membri WHERE squadra_id = $1', [squadraId]
             )).rows;
+            const capoPrima = membriPrima.find(m => m.caposquadra)?.username || null;
             // Cambiare nome radio vale come crearne una nuova: stessi blocchi.
             if (nome_radio !== esiste.rows[0].nome_radio) {
                 const bloccatiPut = await nomiRadioBloccati(client);
@@ -417,7 +527,8 @@ export function registraRotteSquadre(app) {
                     throw erroreRichiesta(`Il nome radio ${nome_radio} apparteneva a una squadra sciolta durante questa emergenza e non può essere riassegnato fino alla chiusura.`);
                 }
             }
-            if (membri && membri.length > 0) {
+            // In sala non servono visita e corso base: i blocchi valgono per il campo.
+            if (!coc && membri && membri.length > 0) {
                 const invalidMembers = await validateTeamMembers(client, membri.map(m => m.username));
                 if (invalidMembers.length > 0) {
                      throw erroreRichiesta(`Vincoli operativi di sicurezza non rispettati per: ${invalidMembers.join(', ')}`);
@@ -425,13 +536,16 @@ export function registraRotteSquadre(app) {
             }
 
             const membriRisolti = await risolviMembriSquadra(client, membri, squadraId);
+            const capoDopo = caposquadraRichiesto(req.body, membriRisolti, capoPrima);
             await client.query('UPDATE squadre SET nome_radio = $1, nome = $2 WHERE id = $3', [nome_radio, nomeDescrittivo, squadraId]);
 
             await client.query('DELETE FROM squadra_membri WHERE squadra_id = $1', [squadraId]);
             if (membriRisolti.length > 0) {
-                const insertMembroQuery = `INSERT INTO squadra_membri (squadra_id, username, nome, cognome) VALUES ($1, $2, $3, $4)`;
+                const insertMembroQuery = `INSERT INTO squadra_membri (squadra_id, username, nome, cognome, caposquadra) VALUES ($1, $2, $3, $4, $5)`;
                 for (const membro of membriRisolti) {
-                    await client.query(insertMembroQuery, [squadraId, membro.username, membro.nome, membro.cognome]);
+                    // Il caposquadra di prima resta segnato: scriviCaposquadra sotto
+                    // vede così il cambio vero e lo annota una volta sola.
+                    await client.query(insertMembroQuery, [squadraId, membro.username, membro.nome, membro.cognome, membro.username === capoPrima]);
                 }
             }
 
@@ -440,10 +554,16 @@ export function registraRotteSquadre(app) {
                 membriPrima, membriRisolti,
                 { squadra_id: squadraId, nome_radio, squadra_nome: nomeDescrittivo }
             ), req);
+            await scriviCaposquadra(client, { id: squadraId, nome_radio, nome: nomeDescrittivo }, capoDopo, req);
 
             await client.query('COMMIT');
             res.status(200).json({ message: 'Squadra aggiornata con successo.' });
-            registraAudit(req, 'squadra.modificata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio, nome: nomeDescrittivo, membri: membri.map(m => m.username) } });
+            const primaNomi = new Set(membriPrima.map(m => m.username));
+            const dopoNomi = new Set(membriRisolti.map(m => m.username));
+            avvisaEntratiInSquadra(
+                [...dopoNomi].filter(u => !primaNomi.has(u)), [...primaNomi].filter(u => !dopoNomi.has(u)),
+                { id: squadraId, nome_radio, nome: nomeDescrittivo });
+            registraAudit(req, 'squadra.modificata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio, nome: nomeDescrittivo, membri: membri.map(m => m.username), caposquadra: capoDopo } });
             wss.clients.forEach(client => client.send(JSON.stringify({ action: 'reload_squadre', updatedTeamId: squadraId })));
         } catch (error) {
             await client.query('ROLLBACK');
@@ -459,6 +579,45 @@ export function registraRotteSquadre(app) {
         }
     });
 
+    // Il caposquadra con un clic, dal centro operativo: { username } lo
+    // nomina, { username: null } lo toglie. Uno solo per squadra.
+    app.put('/api/squadre/:id/caposquadra', nonEsterni, async (req, res) => {
+        const squadraId = parseInt(req.params.id, 10);
+        if (isNaN(squadraId)) return res.status(400).json({ message: 'ID Squadra non valido' });
+        const username = req.body?.username ? String(req.body.username).trim().toLowerCase() : null;
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const squadra = (await client.query('SELECT id, nome_radio, nome FROM squadre WHERE id = $1 FOR UPDATE', [squadraId])).rows[0];
+            if (!squadra) throw erroreNonTrovato('Squadra non trovata.');
+            const capo = await scriviCaposquadra(client, squadra, username, req);
+            await client.query('COMMIT');
+            const chi = capo ? `${capo.nome || ''} ${capo.cognome || ''}`.trim() || capo.username : null;
+            res.json({ message: chi ? `${chi} è il caposquadra di ${squadra.nome_radio}.` : `${squadra.nome_radio} non ha più un caposquadra.`, caposquadra: capo });
+            registraAudit(req, capo ? 'squadra.caposquadra' : 'squadra.caposquadra_tolto', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio: squadra.nome_radio, caposquadra: capo?.username || null } });
+            wss.clients.forEach(c => { if (c.readyState === 1) c.send(JSON.stringify({ action: 'reload_squadre', updatedTeamId: squadraId })); });
+            if (capo) {
+                const persona = (await pool.query('SELECT id FROM users WHERE username = $1', [capo.username])).rows[0];
+                if (persona) {
+                    notifiche.notificaA([persona.id], {
+                        tipo: 'caposquadra', categoria: 'emergenza',
+                        titolo: `Sei il caposquadra di ${squadra.nome_radio}`,
+                        testo: "Tieni l'app aperta: la posizione della squadra la manda il tuo telefono.",
+                        riferimento: { tipo: 'squadra', id: squadraId }, oreValidita: 24
+                    }).catch(e => logger.warn(`[Squadre] Avviso al caposquadra non mandato: ${e.message}`));
+                }
+            }
+        } catch (error) {
+            await client.query('ROLLBACK').catch(() => {});
+            if (error.nonTrovato) return res.status(404).json({ message: error.message });
+            if (error.richiestaNonValida) return res.status(400).json({ message: error.message });
+            logger.error(`Errore PUT /api/squadre/${squadraId}/caposquadra:`, error);
+            res.status(500).json({ message: 'Errore nel nominare il caposquadra.' });
+        } finally {
+            client.release();
+        }
+    });
+
     app.delete('/api/squadre/:id', nonEsterni, async (req, res) => {
         const { id } = req.params;
         const squadraId = parseInt(id, 10);
@@ -467,8 +626,11 @@ export function registraRotteSquadre(app) {
         try {
             await client.query('BEGIN');
 
-            const datiSquadra = await client.query('SELECT nome_radio, nome FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
+            const datiSquadra = await client.query('SELECT nome_radio, nome, coc FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
             if (datiSquadra.rowCount === 0) throw new Error('Squadra non trovata');
+            if (datiSquadra.rows[0].coc && activeEmergency) {
+                throw erroreRichiesta("La squadra COC dura quanto l'emergenza: si toglie da sola alla chiusura. Si possono togliere i suoi membri.");
+            }
             const { nome_radio: nomeRadio, nome: nomeSquadra } = datiSquadra.rows[0];
 
             // Una squadra sul posto non si scioglie.
@@ -513,6 +675,7 @@ export function registraRotteSquadre(app) {
             res.status(200).json({ message: `Squadra ${nomeRadio} rimossa.${avvisoNomeRadio}${avvisoBeni}`, beni: beniSistemati.sistemati });
             registraAudit(req, 'squadra.eliminata', { tipo: 'squadra', id: squadraId, dettagli: { nome_radio: nomeRadio, nome: nomeSquadra, beni: beniSistemati.sistemati } });
             wss.clients.forEach(client => client.send(JSON.stringify({ action: 'reload_squadre', deletedTeamId: squadraId })));
+            avvisaEntratiInSquadra([], membriUscenti.map(m => m.username), { id: squadraId, nome_radio: nomeRadio, nome: nomeSquadra });
         } catch (error) {
             await client.query('ROLLBACK');
             // Con materiale in carico la risposta porta l'elenco da decidere.

@@ -42,3 +42,5 @@ public/uploads/
 # installazione); public/logo2.png invece è sempre e solo caricato a runtime
 # (nessun default), quindi va ignorato
 public/logo2.png
+PRIMO-ACCESSO.txt
+chiave-dati.key

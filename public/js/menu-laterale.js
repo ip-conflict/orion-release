@@ -21,17 +21,23 @@
     const ruoli = typeof ruoliUtente === 'function' ? ruoliUtente() : [];
     const admin = haRuolo('admin');
     const esterno = !admin && ruoli.includes('esterno');
+    // I permessi (src/permessi.js); senza apiHelper aggiornato, come prima: solo l'amministratore.
+    const puo = (...codici) => (typeof haPermesso === 'function' ? haPermesso(...codici) : admin);
 
     // [id, indirizzo, icona, testo, chi la vede]. "moduli" arriva dopo, dalle
     // impostazioni pubbliche: finché non si sa se il modulo è acceso, la voce
     // resta nascosta.
     const VOCI = [
         ['sidebar-centro', '/centro-operativo.html', 'fa-tachometer-alt', 'Centro Operativo', () => true],
-        ['sidebar-segreteria', '/admin-segreteria.html', 'fa-folder-open', 'Segreteria', (m) => m.segreteria && haRuolo('segreteria')],
+        ['sidebar-segreteria', '/admin-segreteria.html', 'fa-folder-open', 'Segreteria', (m) => m.segreteria && puo('volontari.sanitario', 'volontari.anagrafica')],
         ['sidebar-magazzino', '/magazzino.html', 'fa-boxes-stacked', 'Magazzino', (m) => m.magazzino && !esterno],
         ['sidebar-teams', '/admin/squadre.html', 'fa-truck-pickup', 'Squadre', () => !esterno],
-        ['sidebar-users', '/admin/admin.html', 'fa-users', 'Utenti', () => admin],
-        ['sidebar-archive', '/admin/archive.html', 'fa-archive', 'Archivio emergenze', () => admin],
+        // Gli esterni ci trovano i documenti segnati per l'emergenza.
+        ['sidebar-calendario', '/calendario.html', 'fa-calendar-days', 'Calendario', (m) => m.attivita && !esterno],
+        ['sidebar-documenti', '/documenti.html', 'fa-book', 'Documenti', () => true],
+        ['sidebar-users', '/admin/admin.html', 'fa-users', 'Utenti', () => puo('volontari.anagrafica')],
+        ['sidebar-archive', '/admin/archive.html', 'fa-archive', 'Archivio emergenze', () => puo('emergenze.archivio')],
+        ['sidebar-funzioni', '/admin/funzioni.html', 'fa-sitemap', 'Funzioni', (m) => m.funzioni && puo('emergenze.funzioni')],
         ['sidebar-settings', '/admin/dashboard-admin.html', 'fa-cogs', 'Impostazioni', () => admin],
         ['sidebar-sistema', '/admin/sistema.html', 'fa-shield-halved', 'Sistema', () => admin],
         ['sidebar-profilo', '/profile.html', 'fa-user-circle', 'Il mio profilo', () => true]
@@ -89,7 +95,7 @@
     linkEsci.addEventListener('click', async (evento) => {
         evento.preventDefault();
         try { await fetchApi('/logout', { method: 'POST' }); } catch { /* si esce comunque */ }
-        ['userRole', 'userRuoli', 'username'].forEach(k => { try { localStorage.removeItem(k); } catch { /* niente */ } });
+        ['userRole', 'userRuoli', 'userPermessi', 'username'].forEach(k => { try { localStorage.removeItem(k); } catch { /* niente */ } });
         window.location.href = '/';
     });
     esci.appendChild(linkEsci);
@@ -102,8 +108,15 @@
         voci.forEach(({ li, vede }) => { li.style.display = vede(moduli) ? 'block' : 'none'; });
     }
 
-    // Subito le voci che non dipendono dai moduli, poi il resto.
-    mostra({ segreteria: false, magazzino: false });
+    // I moduli accesi si ricordano dall'ultima pagina: il menu è giusto al
+    // primo colpo, invece di comparire con le voci di base e poi allungarsi
+    // quando arrivano le impostazioni (passando da una pagina all'altra
+    // lampeggiava). Il foglio di stile lo tiene nascosto finché non è pronto.
+    const CHIAVE = 'orion.menu.moduli';
+    let ricordati = null;
+    try { ricordati = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); } catch { /* niente */ }
+    mostra(ricordati || { segreteria: false, magazzino: false, funzioni: false, attivita: true });
+    menu.classList.add('pronto');
     fetch('/api/branding/settings', { credentials: 'same-origin' })
         .then(r => (r.ok ? r.json() : {}))
         .then(impostazioni => {
@@ -113,7 +126,19 @@
                     ? JSON.parse(impostazioni.segreteria_config) : impostazioni.segreteria_config;
                 segreteria = !!conf?.enabled;
             } catch { /* configurazione illeggibile: la voce resta nascosta */ }
-            mostra({ segreteria, magazzino: String(impostazioni.magazzino_enabled) === 'true' });
+            const moduli = {
+                segreteria,
+                magazzino: String(impostazioni.magazzino_enabled) === 'true',
+                funzioni: String(impostazioni.funzioni_enabled) === 'true',
+                attivita: String(impostazioni.attivita_enabled) !== 'false'
+            };
+            mostra(moduli);
+            try { localStorage.setItem(CHIAVE, JSON.stringify(moduli)); } catch { /* niente */ }
+            // Ruoli e permessi possono essere cambiati dall'ultimo accesso: si
+            // rileggono, e il menu si riallinea.
+            if (typeof fetchApi === 'function' && typeof salvaRuoliEPermessi === 'function') {
+                fetchApi('/api/me/status').then(stato => { salvaRuoliEPermessi(stato); mostra(moduli); }).catch(() => {});
+            }
         })
         .catch(() => { /* senza impostazioni restano le voci di base */ });
 })();

@@ -32,9 +32,175 @@ async function loadLoginBranding() {
     }
 }
 
+// Accesso riuscito (con la password, o dopo la verifica in due passaggi):
+// si salvano i dati della persona e si va al centro operativo.
+async function entra(data, username, avviso = '') {
+    const messageDiv = document.getElementById('login-message');
+    if (!data || !data.userId || !data.role) {
+        console.error("ERRORE CRITICO: La risposta API di login non contiene userId o userRole!", data);
+        mostraVista(loginForm);
+        if (messageDiv) {
+            messageDiv.textContent = 'Errore: Dati utente incompleti ricevuti dal server. Contattare assistenza.';
+            messageDiv.style.color = 'red';
+        }
+        abilitaAccesso(true);
+        return;
+    }
+    try {
+        localStorage.setItem('userId', data.userId.toString());
+        localStorage.setItem('userRole', data.role);
+        localStorage.setItem('userRuoli', JSON.stringify(Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role]));
+        localStorage.setItem('userPermessi', JSON.stringify(Array.isArray(data.permessi) ? data.permessi : []));
+        localStorage.setItem('username', data.username || username.toLowerCase());
+    } catch (storageError) {
+        console.error("Errore durante il salvataggio in localStorage:", storageError);
+        avviso = avviso || "Attenzione: impossibile salvare le informazioni utente. Alcune funzionalità potrebbero non essere disponibili.";
+    }
+    mostraVista(loginForm);
+    if (messageDiv) {
+        messageDiv.textContent = avviso || 'Login effettuato con successo! Reindirizzamento...';
+        messageDiv.style.color = avviso ? 'var(--warning-color, #b45309)' : 'green';
+    }
+    // Da un telefono Android, prima si propone l'app, se c'e'. Poi la prima
+    // pagina: il centro operativo, ma per chi è solo volontario, quando non
+    // c'è un'emergenza, il suo profilo (DPI, scadenze, tesserino).
+    const destinazione = await primaPagina(data);
+    const vaiAlCentroOperativo = () => { window.location.href = destinazione; };
+    const proposta = await proponiApp(data.token, vaiAlCentroOperativo);
+    if (!proposta) setTimeout(vaiAlCentroOperativo, avviso ? 4000 : 500);
+}
+
+// Con un'emergenza aperta si va tutti in sala. Senza, ognuno dove lavora:
+// l'amministratore in sala (da lì apre l'emergenza), la segreteria alla
+// segreteria, il magazziniere al magazzino, il volontario al suo profilo.
+async function primaPagina(data) {
+    const ruoli = Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role];
+    if (ruoli.includes('admin') || ruoli.includes('esterno')) return '/centro-operativo.html';
+    try {
+        const r = await fetch('/api/emergencies/status', { headers: { Authorization: `Bearer ${data.token}` } });
+        const stato = await r.json();
+        if (stato?.active || stato?.emergency) return '/centro-operativo.html';
+    } catch { return '/centro-operativo.html'; }
+    // Solo se il modulo è acceso: spento, la sua pagina non serve.
+    const moduli = await fetch('/api/branding/settings').then(r => r.json()).catch(() => ({}));
+    const segreteria = (() => { try { const c = moduli.segreteria_config; return (typeof c === 'string' ? JSON.parse(c) : c)?.enabled === true; } catch { return false; } })();
+    if (ruoli.includes('segreteria') && segreteria) return '/admin-segreteria.html';
+    if (ruoli.includes('magazziniere') && String(moduli.magazzino_enabled) === 'true') return '/magazzino.html';
+    return '/profile.html';
+}
+
+function abilitaAccesso(si) {
+    document.getElementById('username').disabled = !si;
+    document.getElementById('password').disabled = !si;
+    loginForm.querySelector('button[type=submit]').disabled = !si;
+}
+
+// Una sola vista alla volta nel riquadro d'accesso.
+const VISTE = ['login-form', 'forgot-password-form', 'mfa-form', 'mfa-attiva-form', 'mfa-codici'];
+function mostraVista(vista) {
+    for (const id of VISTE) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const si = el === vista;
+        if (id === 'login-form' || id === 'forgot-password-form') el.style.display = si ? '' : 'none';
+        else el.hidden = !si;
+    }
+}
+
+// --- Verifica in due passaggi ---------------------------------------------------
+let sfidaMfa = null;
+let usernameMfa = '';
+
+function messaggioMfa(id, testo, errore = true) {
+    const el = document.getElementById(id);
+    el.textContent = testo || '';
+    el.classList.toggle('errore', !!errore);
+}
+
+function tornaAllAccesso(testo) {
+    sfidaMfa = null;
+    mostraVista(loginForm);
+    abilitaAccesso(true);
+    document.getElementById('password').value = '';
+    const messageDiv = document.getElementById('login-message');
+    if (messageDiv) {
+        messageDiv.textContent = testo || '';
+        messageDiv.style.color = 'red';
+    }
+    document.getElementById('password').focus();
+}
+
+function chiediMfa(data, username) {
+    sfidaMfa = data.sfida;
+    usernameMfa = username;
+    if (data.mfa === 'attivazione') {
+        OrionMfa.disegnaQr(document.getElementById('mfa-attiva-qr'), data.uri, data.segreto);
+        document.getElementById('mfa-attiva-codice').value = '';
+        messaggioMfa('mfa-attiva-messaggio', '');
+        mostraVista(document.getElementById('mfa-attiva-form'));
+        document.getElementById('mfa-attiva-codice').focus();
+    } else {
+        document.getElementById('mfa-codice').value = '';
+        messaggioMfa('mfa-messaggio', '');
+        mostraVista(document.getElementById('mfa-form'));
+        document.getElementById('mfa-codice').focus();
+    }
+}
+
+async function inviaCodiceMfa(modulo, campo, idMessaggio) {
+    const codice = document.getElementById(campo).value.trim();
+    if (!codice) return messaggioMfa(idMessaggio, 'Scrivi il codice.');
+    const pulsante = modulo.querySelector('button[type=submit]');
+    pulsante.disabled = true;
+    messaggioMfa(idMessaggio, '');
+    try {
+        const r = await fetch('/api/accesso/mfa', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sfida: sfidaMfa, codice })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            if (data.sfida_scaduta) return tornaAllAccesso(data.message);
+            messaggioMfa(idMessaggio, data.message || `Errore ${r.status}`);
+            document.getElementById(campo).select();
+            return;
+        }
+        sfidaMfa = null;
+        if (Array.isArray(data.codici_riserva) && data.codici_riserva.length) {
+            OrionMfa.mostraCodici(document.getElementById('mfa-codici-contenuto'), data.codici_riserva);
+            mostraVista(document.getElementById('mfa-codici'));
+            document.getElementById('mfa-codici-continua').onclick = () => entra(data, usernameMfa);
+            return;
+        }
+        let avviso = '';
+        if (Number.isInteger(data.codici_riserva_rimasti) && data.codici_riserva_rimasti <= 3) {
+            avviso = data.codici_riserva_rimasti === 0
+                ? 'Hai usato l\'ultimo codice di riserva: creane di nuovi dal profilo, in Sicurezza.'
+                : `Ti restano ${data.codici_riserva_rimasti} codici di riserva: creane di nuovi dal profilo, in Sicurezza.`;
+        }
+        entra(data, usernameMfa, avviso);
+    } catch {
+        messaggioMfa(idMessaggio, 'Il server non risponde. Riprova.');
+    } finally {
+        pulsante.disabled = false;
+    }
+}
+
+document.getElementById('mfa-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    inviaCodiceMfa(e.currentTarget, 'mfa-codice', 'mfa-messaggio');
+});
+document.getElementById('mfa-attiva-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    inviaCodiceMfa(e.currentTarget, 'mfa-attiva-codice', 'mfa-attiva-messaggio');
+});
+document.querySelectorAll('[data-mfa-indietro]').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    tornaAllAccesso('');
+}));
+
 document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    console.log("Inizio processo di login...");
 
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
@@ -43,121 +209,82 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
 
-    // Reset messaggio precedente
-    if(messageDiv) messageDiv.textContent = '';
-    usernameInput.disabled = true;
-    passwordInput.disabled = true;
-    e.submitter?.setAttribute('disabled', 'disabled');
+    if (messageDiv) messageDiv.textContent = '';
+    abilitaAccesso(false);
 
     try {
         const response = await fetch('/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: username.toLowerCase(), password })
         });
 
         const data = await response.json().catch(e => {
             console.error("Risposta non JSON dal server:", e);
-            // Lancia un errore che verrà catturato dal blocco catch esterno
             throw new Error(`Risposta non valida dal server (Status: ${response.status})`);
         });
 
         if (response.ok) {
-            // === LOGIN RIUSCITO ===
-            if(messageDiv) {
-                 messageDiv.textContent = 'Login effettuato con successo! Reindirizzamento...';
-                 messageDiv.style.color = 'green';
-            }
-
-            // SALVATAGGIO DATI UTENTE IN LOCALSTORAGE
-            if (data && data.userId && data.role) {
-                try {
-                    // > MODIFICA CHIAVE: Salva userId in localStorage <
-                    localStorage.setItem('userId', data.userId.toString());
-
-                    localStorage.setItem('userRole', data.role);
-                    localStorage.setItem('userRuoli', JSON.stringify(Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role]));
-
-                    if (data.username) {
-                        localStorage.setItem('username', data.username);
-                    } else {
-                        // Se il backend non manda username, usa quello inserito (già in minuscolo)
-                        localStorage.setItem('username', username.toLowerCase());
-                    }
-
-                    console.log("Dati utente (userId, userRole, username) salvati in localStorage.");
-
-                } catch (storageError) {
-                    console.error("Errore durante il salvataggio in localStorage:", storageError);
-                    // Avvisa l'utente che alcune funzionalità potrebbero non andare
-                    notifica("Attenzione: Impossibile salvare le informazioni utente. Alcune funzionalità potrebbero non essere disponibili.", 'attenzione');
-                    // Non interrompere il reindirizzamento, ma l'utente è avvisato.
-                }
-            } else {
-                // Se mancano dati FONDAMENTALI come userId o role, è un problema grave
-                console.error("ERRORE CRITICO: La risposta API di login non contiene userId o userRole!", data);
-                if(messageDiv) {
-                    messageDiv.textContent = 'Errore: Dati utente incompleti ricevuti dal server. Contattare assistenza.';
-                    messageDiv.style.color = 'red';
-                }
-                // Blocca il reindirizzamento e riabilita il form
-                usernameInput.disabled = false;
-                passwordInput.disabled = false;
-                e.submitter?.removeAttribute('disabled');
-                return;
-            }
-
-            // Reindirizza al Centro Operativo dopo un breve ritardo. Da un
-            // telefono Android, prima si propone l'app, se c'e'.
-            const vaiAlCentroOperativo = () => { window.location.href = '/centro-operativo.html'; };
-            const proposta = await proponiApp(data.token, vaiAlCentroOperativo);
-            if (!proposta) setTimeout(vaiAlCentroOperativo, 500);
-
+            await entra(data, username);
+        } else if (data?.mfa && data?.sfida) {
+            // Password giusta: ora il codice (o l'attivazione, per un amministratore).
+            passwordInput.value = '';
+            chiediMfa(data, username);
         } else {
             const errorMessage = data?.message || data?.errors?.[0]?.msg || `Errore ${response.status}`;
             console.warn("Login fallito:", errorMessage);
-            if(messageDiv) {
+            if (messageDiv) {
                 messageDiv.textContent = `Login fallito: ${errorMessage}`;
                 messageDiv.style.color = 'red';
             }
-            // Riabilita subito i campi in caso di errore
-            usernameInput.disabled = false;
-            passwordInput.disabled = false;
-            e.submitter?.removeAttribute('disabled');
+            abilitaAccesso(true);
         }
     } catch (error) {
-        // Errore fetch (rete) o JSON parse fallito o errore lanciato da !response.ok
         console.error('Errore grave durante il login:', error);
-        if(messageDiv) {
+        if (messageDiv) {
             messageDiv.textContent = `Errore: ${error.message}`;
             messageDiv.style.color = 'red';
         }
-        // Riabilita i campi
-        usernameInput.disabled = false;
-        passwordInput.disabled = false;
-        e.submitter?.removeAttribute('disabled');
+        abilitaAccesso(true);
     }
 });
 
+// Rimandati qui da una pagina: si dice perché.
+(function () {
+    const errore = new URLSearchParams(location.search).get('error');
+    const messageDiv = document.getElementById('login-message');
+    if (!messageDiv || !errore) return;
+    const testi = {
+        mfa_richiesta: 'Per gli amministratori serve la verifica in due passaggi: accedi di nuovo.',
+        account_sospeso: 'Il tuo account non è più attivo. Contatta la segreteria.'
+    };
+    if (testi[errore]) {
+        messageDiv.textContent = testi[errore];
+        messageDiv.style.color = 'red';
+    }
+})();
+
 document.addEventListener('DOMContentLoaded', async () => {
     loadLoginBranding();
+    // Appena attivato l'account: il nome utente è già scritto, manca la password.
+    const utente = new URLSearchParams(window.location.search).get('utente');
+    if (utente) {
+        document.getElementById('username').value = utente;
+        document.getElementById('password').focus();
+    }
 });
 
 if (showForgotBtn && showLoginBtn) {
     // Cambia vista: mostra "Recupero"
     showForgotBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        loginForm.style.display = 'none';
-        forgotForm.style.display = 'block';
+        mostraVista(forgotForm);
     });
 
     // Cambia vista: torna al "Login"
     showLoginBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        forgotForm.style.display = 'none';
-        loginForm.style.display = 'block';
+        mostraVista(loginForm);
     });
 }
 

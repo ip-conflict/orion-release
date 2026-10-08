@@ -11,8 +11,44 @@
     <div class="st-comandi">
         <button type="button" class="st-primario" id="st-stampa">Stampa o salva in PDF</button>
         <button type="button" id="st-aggiorna">Aggiorna</button>
+        <button type="button" id="st-quadro-apri" hidden>Quadro della situazione</button>
         <span class="st-nota" id="st-nota"></span>
     </div>
+
+    <!-- Il quadro della situazione: lo scrive la sala, finisce in testa al
+         foglio. Solo a video: in stampa c'è il risultato. -->
+    <form class="st-modulo" id="st-quadro" hidden>
+        <h2>Quadro della situazione</h2>
+        <p class="st-modulo-nota">Quello che chi legge il foglio fuori dalla sala (Prefettura, Regione, Comune) cerca per primo. Si salva per questa emergenza: alla stampa successiva si corregge solo quello che è cambiato. I campi vuoti non compaiono sul foglio.</p>
+        <label class="st-largo">Che cosa sta succedendo e come evolve
+            <textarea id="q-descrizione" rows="4" maxlength="3000" placeholder="Es. Piogge intense dalla notte, torrente Cordevole in crescita a Mis. Allerta arancione fino a domani alle 12. Due frane sulla SP 2, strada per Gron chiusa."></textarea></label>
+        <fieldset class="st-largo">
+            <legend>Popolazione coinvolta <span>(vuoto = non indicato, 0 = nessuno)</span></legend>
+            <div class="st-numeri-quadro">
+                <label>Evacuati<input type="number" id="q-evacuati" min="0" max="1000000" inputmode="numeric"></label>
+                <label>Assistiti<input type="number" id="q-assistiti" min="0" max="1000000" inputmode="numeric"></label>
+                <label>Isolati<input type="number" id="q-isolati" min="0" max="1000000" inputmode="numeric"></label>
+                <label>Feriti<input type="number" id="q-feriti" min="0" max="1000000" inputmode="numeric"></label>
+                <label>Dispersi<input type="number" id="q-dispersi" min="0" max="1000000" inputmode="numeric"></label>
+                <label>Deceduti<input type="number" id="q-deceduti" min="0" max="1000000" inputmode="numeric"></label>
+            </div>
+        </fieldset>
+        <label>Servizi essenziali interrotti
+            <textarea id="q-servizi" rows="2" maxlength="1500" placeholder="Es. Energia elettrica assente a Mis (circa 40 utenze), acquedotto regolare."></textarea></label>
+        <label>Richieste di supporto agli enti
+            <textarea id="q-richieste" rows="2" maxlength="1500" placeholder="Es. Una idrovora per via Susin; mezzo movimento terra per la SP 2."></textarea></label>
+        <label>Recapito del COC (h24)
+            <input type="text" id="q-recapito" maxlength="300" placeholder="Es. 0437 123456 · coc@comune.sospirolo.bl.it"></label>
+        <label>Responsabile
+            <input type="text" id="q-responsabile" maxlength="200" placeholder="Es. il Sindaco Mario Rossi"></label>
+        <label>Prossimo aggiornamento
+            <input type="datetime-local" id="q-prossimo"></label>
+        <div class="st-modulo-azioni st-largo">
+            <span id="q-stato" class="st-modulo-nota"></span>
+            <button type="button" id="q-annulla">Chiudi</button>
+            <button type="submit" class="st-primario" id="q-salva">Salva e aggiorna il foglio</button>
+        </div>
+    </form>
 
     <main class="st-foglio" id="st-foglio" aria-busy="true">
         <p class="st-vuoto">Preparo il punto di situazione…</p>

@@ -74,6 +74,7 @@ async function loadUserProfile() {
         generateQRCode(user.public_token);
 
         loadMioLibretto(user.id);
+        caricaMiePresenze();
 
     } catch (error) {
         console.error("Errore caricamento profilo:", error);
@@ -145,6 +146,38 @@ document.getElementById('profile-anagrafica-form').addEventListener('submit', as
 });
 
 // CARICAMENTO LIBRETTO (Corsi e Visite)
+// Le presenze dell'anno: attività ed emergenze, con le ore e l'attestato di ognuna.
+async function caricaMiePresenze() {
+    const card = document.getElementById('card-mie-presenze');
+    const lista = document.getElementById('my-presenze-list');
+    if (!card || !lista) return;
+    let dati;
+    try { dati = await fetchApi('/api/presenze/mie'); } catch { return; }
+    card.hidden = false;
+    document.getElementById('titolo-mie-presenze').textContent = `Le mie presenze nel ${dati.anno}: ${dati.ore_totali}`;
+    lista.replaceChildren();
+    if (!dati.voci.length) {
+        const li = document.createElement('li');
+        li.textContent = "Nessuna presenza quest'anno.";
+        lista.appendChild(li);
+        return;
+    }
+    for (const v of dati.voci.slice(0, 15)) {
+        const li = document.createElement('li');
+        const quando = new Date(String(v.inizio).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00')).toLocaleDateString('it-IT');
+        const testo = document.createElement('span');
+        testo.textContent = `${quando} · ${v.tipo}: ${v.titolo} · ${v.ore}`;
+        const link = document.createElement('a');
+        link.href = `/api/presenze/${v.id}/attestato`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Attestato';
+        link.style.marginLeft = 'auto';
+        li.append(testo, link);
+        lista.appendChild(li);
+    }
+}
+
 async function loadMioLibretto(userId) {
     const medList = document.getElementById('my-medical-list');
     const courseList = document.getElementById('my-courses-list');

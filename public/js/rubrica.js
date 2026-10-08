@@ -73,9 +73,11 @@
         const cerca = el('input', { type: 'search', placeholder: 'Cerca nome, ente, numero…', 'aria-label': 'Cerca nella rubrica' });
         const corpo = el('div', { class: 'rb-corpo' });
         const modulo = el('div', { class: 'rb-modulo', hidden: true });
+        // Gli esterni la consultano soltanto.
+        const scrive = typeof haRuolo === 'function' && (haRuolo('admin') || !(typeof ruoliUtente === 'function' && ruoliUtente().includes('esterno')));
         const barra = el('div', { class: 'rb-barra' },
             cerca,
-            el('button', { type: 'button', class: 'button-style', testo: 'Nuovo contatto', suClick: () => mostraModulo(null) }),
+            scrive ? el('button', { type: 'button', class: 'button-style', testo: 'Nuovo contatto', suClick: () => mostraModulo(null) }) : null,
             el('button', { type: 'button', class: 'button-style button-secondary', testo: 'Stampa', suClick: () => window.open('/rubrica.html', '_blank', 'noopener') }));
 
         const chiudi = () => {
@@ -100,7 +102,9 @@
             const filtro = cerca.value.trim().toLowerCase();
             const visibili = contatti.filter(c => corrisponde(c, filtro));
             if (!contatti.length) {
-                corpo.append(el('p', { class: 'rb-vuoto', testo: 'La rubrica è vuota. Aggiungi i numeri che in sala servono subito: Prefettura, sindaco e reperibili del Comune, 118, Vigili del fuoco, le ditte con mezzi e attrezzature.' }));
+                corpo.append(el('p', { class: 'rb-vuoto', testo: scrive
+                    ? 'La rubrica è vuota. Aggiungi i numeri che in sala servono subito: Prefettura, sindaco e reperibili del Comune, 118, Vigili del fuoco, le ditte con mezzi e attrezzature.'
+                    : 'La rubrica è vuota.' }));
                 return;
             }
             if (!visibili.length) {
@@ -122,7 +126,7 @@
                         c.telefono ? linkTelefono(c.telefono) : null,
                         c.telefono_alt ? linkTelefono(c.telefono_alt) : null,
                         c.email ? el('a', { class: 'rb-email', href: `mailto:${c.email}`, testo: c.email }) : null),
-                    el('button', { type: 'button', class: 'rb-modifica', title: `Modifica ${c.nome}`, 'aria-label': `Modifica ${c.nome}`, testo: 'Modifica', suClick: () => mostraModulo(c) })));
+                    scrive ? el('button', { type: 'button', class: 'rb-modifica', title: `Modifica ${c.nome}`, 'aria-label': `Modifica ${c.nome}`, testo: 'Modifica', suClick: () => mostraModulo(c) }) : null));
             });
         }
 

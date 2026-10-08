@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/css/admin-styles.css">
     <link rel="stylesheet" href="/css/dashboard-admin.css">
     <link rel="stylesheet" href="/css/profile.css">
+    <link rel="stylesheet" href="/css/mfa.css">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
 </head>
 <body>
@@ -146,6 +147,17 @@
                         </ul>
                     </div>
 
+                    <!-- Le presenze: attività ed emergenze, con le ore e gli attestati. -->
+                    <div class="modern-alert-card" id="card-mie-presenze" style="border-left-color: #f59e0b; margin: 0;" hidden>
+                        <div class="alert-card-header">
+                            <div class="alert-icon" style="background: rgba(245, 158, 11, 0.12); color: var(--warning-text);"><i class="fas fa-clock"></i></div>
+                            <div class="alert-info">
+                                <h3 style="color: var(--text-color);" id="titolo-mie-presenze">Le mie presenze</h3>
+                            </div>
+                        </div>
+                        <ul id="my-presenze-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;"></ul>
+                    </div>
+
                     <!-- I DPI compaiono solo se il modulo Magazzino è acceso:
                          altrimenti sarebbe un riquadro sempre vuoto. -->
                     <div class="modern-alert-card" id="card-miei-dpi" style="border-left-color: #0ea5e9; margin: 0;" hidden>
@@ -166,6 +178,9 @@
                 <header class="content-header" style="margin-bottom: 30px;">
                     <h1 style="margin-top: 0; font-size: 2rem;">Sicurezza</h1>
                 </header>
+                <p style="margin: -15px 0 20px; font-size: 0.9rem;">
+                    <a href="/informativa.html" style="color: var(--link-color);">Rileggi le condizioni d'uso</a>
+                </p>
                 
                 <form id="change-password-form" style="background: var(--surface-color); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);">
                     <div class="form-group">
@@ -191,6 +206,40 @@
                     </div>
                     <div id="change-pwd-feedback" style="margin-top: 15px; font-weight: bold; text-align: center;"></div>
                 </form>
+
+                <!-- La verifica in due passaggi (profilo-mfa.js). -->
+                <div id="mfa-profilo" class="mfa mfa-scheda" hidden>
+                    <h2>Verifica in due passaggi</h2>
+                    <p id="mfa-stato" class="mfa-spiega"></p>
+                    <div id="mfa-azioni" class="mfa-azioni"></div>
+                    <form id="mfa-password-form" hidden novalidate>
+                        <label for="mfa-password">Per continuare, la tua password</label>
+                        <input type="password" id="mfa-password" class="mfa-password" autocomplete="current-password" required>
+                        <div class="mfa-azioni">
+                            <button type="submit" class="button-style">Continua</button>
+                            <button type="button" class="button-style button-secondary" data-mfa-annulla>Annulla</button>
+                        </div>
+                    </form>
+                    <form id="mfa-conferma-form" hidden novalidate>
+                        <p class="mfa-spiega">Installa sul telefono un'app per i codici a tempo (Google Authenticator,
+                            Microsoft Authenticator, FreeOTP, Aegis o un'altra), aggiungi un account inquadrando il QR
+                            e scrivi il codice che compare.</p>
+                        <div id="mfa-profilo-qr"></div>
+                        <label for="mfa-profilo-codice">Codice che vedi nell'app</label>
+                        <input type="text" id="mfa-profilo-codice" class="mfa-codice" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" required>
+                        <div class="mfa-azioni">
+                            <button type="submit" class="button-style">Conferma</button>
+                            <button type="button" class="button-style button-secondary" data-mfa-annulla>Annulla</button>
+                        </div>
+                    </form>
+                    <div id="mfa-codici-pannello" hidden>
+                        <p class="mfa-spiega">I tuoi codici di riserva. Ognuno vale una volta, quando non hai il telefono.
+                            Stampali o scrivili e tienili lontano dal telefono: non si vedranno più.</p>
+                        <div id="mfa-profilo-codici"></div>
+                        <button type="button" class="button-style" id="mfa-codici-fatto">Li ho messi da parte</button>
+                    </div>
+                    <p id="mfa-profilo-messaggio" class="mfa-messaggio" role="status"></p>
+                </div>
             </section>
 
         </main>
@@ -204,5 +253,7 @@
     <script src="/js/apiHelper.js"></script>
     <script src="/js/menu-laterale.js"></script>
     <script src="/js/profile.js" defer></script>
+    <script src="/js/mfa-comune.js" defer></script>
+    <script src="/js/profilo-mfa.js" defer></script>
 </body>
 </html>

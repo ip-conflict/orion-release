@@ -308,6 +308,118 @@ Il repository Orion-Mobile resta con i difetti trovati a suo tempo (log delle
 richieste in chiaro in debug, Gson vecchio). Va ritirata dai telefoni ora che
 questa la sostituisce.
 
+## Quarta revisione: la 1.1.0 (5 ottobre 2026)
+
+Il controllo ha riguardato soprattutto quello che la 1.1.0 aggiunge (funzioni
+di supporto, strade chiuse e zone sulla mappa, filtri del magazzino, punto di
+situazione, rubrica, "Le mie attività" nell'app), ma è ripartito da tutto: ogni
+rotta del server chiamata da anonimo, da esterno temporaneo membro di una
+funzione e da volontario; i testi pericolosi seminati in ogni campo, vecchio e
+nuovo, e cercati nel browser in tutte le pagine, popup della mappa compresi;
+le dipendenze con npm audit; il manifest, i log e le parti nuove dell'app.
+
+### Cosa è stato corretto
+
+Con il modulo delle funzioni spento, o a incarico già concluso, un esterno
+temporaneo che faceva parte della funzione poteva ancora scrivere note,
+caricare foto e spostare il punto della segnalazione. Ora può farlo solo
+finché la sua funzione ha su quella segnalazione un incarico da concludere, con
+la funzione e il modulo accesi; dopo resta in sola lettura, come per tutto il
+resto dell'emergenza.
+
+Due "Concludi" sullo stesso incarico nello stesso istante passavano entrambi:
+nel diario finivano due esiti e restava l'ultimo. La riga dell'incarico ora si
+blocca dentro la transazione, e il secondo riceve "Incarico già concluso".
+
+Il limite di 8 MB per le richieste della mappa (serve all'importazione dei
+livelli da QGIS) valeva anche per chi non era collegato: il server leggeva
+tutto il corpo prima di rispondere 401. Ora il limite alto vale solo con un
+token valido; agli altri resta quello normale, e un corpo grande riceve subito
+413.
+
+I tipi degli elementi della mappa si controllavano con una ricerca che
+accettava anche nomi come "constructor". Non c'era un danno (il database
+rifiuta i tipi sconosciuti), ma ora valgono solo i tipi dichiarati.
+
+DOMPurify è passato alla 3.4.16. La vulnerabilità segnalata riguarda
+un'opzione che ORION non usa, quindi non era sfruttabile, ma l'aggiornamento
+non cambia niente altro. Restano due segnalazioni moderate su uuid, che arriva
+con exceljs: riguardano funzioni di uuid che exceljs non chiama (usa solo la
+v4 senza buffer), e correggerle vorrebbe dire tornare a una exceljs di anni fa.
+
+Ogni correzione ha la sua prova nella suite (398 controlli) e nel collaudo del
+WebSocket.
+
+### Guardato e a posto
+
+I permessi delle funzioni tengono: un esterno non si aggiunge ad altre
+funzioni, non si fa referente, non prende né conclude gli incarichi delle altre
+funzioni, non assegna e non annulla, non scrive a nome di una funzione che non
+è la sua e vede solo gli incarichi della propria; un volontario non crea né
+spegne funzioni, non mette utenti fissi nelle funzioni (solo gli accessi
+temporanei, a emergenza aperta) e non tocca il piano della mappa. Nessun testo
+seminato è finito nelle pagine come HTML: punto di situazione, rubrica e sua
+stampa, pagina delle funzioni, tavolo delle funzioni nel centro operativo,
+etichette sulle schede e nel diario, popup degli elementi della mappa,
+pannello del piano, filtri del magazzino. I link della rubrica partono sempre
+da "tel:" e "mailto:", quindi un indirizzo scritto apposta non diventa uno
+script. Il punto di situazione di un'emergenza chiusa lo vede solo
+l'amministratore. Il ripristino dei backup continua a rifiutare i comandi di
+psql nascosti nel file. Intestazioni di sicurezza, cookie di sessione
+(HttpOnly, Secure, SameSite=Strict) e rifiuto dei token senza firma sono quelli
+di prima. Nell'app i messaggi in tempo reale nuovi portano solo l'avviso di
+rileggere, i dati li chiede l'app alle rotte che decidono cosa può vedere; le
+mappe del telefono si aprono con indirizzi "geo:" costruiti con il testo
+codificato; nessun dato personale nei log.
+
+Le letture del magazzino da parte di ogni operatore interno (inventario,
+registro, chi ha cosa) e quelle dell'emergenza da parte degli esterni
+(segnalazioni con il contatto del segnalante, posizioni delle squadre) sono
+scelte del progetto, non difetti: sono scritte nel codice e nel manuale.
+
+## Protezioni aggiunte dopo la quarta revisione (ottobre 2026)
+
+**Il primo amministratore** non si crea più dentro `setup.sh` ma dal browser,
+con un codice monouso che ORION scrive in `PRIMO-ACCESSO.txt` (leggibile solo
+dal suo utente e da root) e che `setup.sh` mostra alla fine. Senza codice,
+il primo che arrivava all'indirizzo appena pubblicato poteva prendersi il
+posto dell'amministratore. Il codice ha circa 80 bit di casualità, il
+confronto avviene in tempo costante, i tentativi sono limitati e una
+richiesta doppia crea un amministratore solo.
+
+**Lo storico inalterabile.** Note, diario di sala, registro delle operazioni,
+movimenti e registro delle squadre sono bloccati da trigger contro modifiche
+e cancellazioni, e legati in una catena di impronte SHA-256 verificabile
+dalla pagina Sistema. L'ultima impronta (il sigillo) esce dal server alla
+chiusura di ogni emergenza (a schermo, per email, nel resoconto); un sigillo conservato smaschera anche chi, con il server in mano,
+spegne i trigger e ricalcola tutta la catena. La prova la fa
+`tests/integrita.mjs` nel ruolo dell'attaccante. La cancellazione delle
+emergenze archiviate resta possibile, ma resta scritta nella catena.
+
+**La cifratura** (AES-256-GCM) copre i file riservati, i backup e la password
+della posta, che non torna più al browser. Protegge dalle copie che escono
+dal server (backup, dischi), non da chi controlla il server mentre ORION
+gira: lì la chiave è in memoria. I campi del database (esiti delle visite,
+anagrafica) restano in chiaro dentro PostgreSQL: servono a cercare, ordinare
+e contare, e nei backup sono comunque cifrati. Il rischio nuovo è perdere la
+chiave: per questo la chiave di recupero, da conservare fuori dal server, e
+il riquadro che lo ricorda finché non la si segna come conservata.
+
+**La verifica in due passaggi** (TOTP, RFC 6238) è obbligatoria per gli
+amministratori e per chi ha il permesso dei dati sanitari (visite mediche e
+corsi), facoltativa per gli altri, esclusi gli accessi temporanei.
+Una password rubata, indovinata o finita in una raccolta di password trapelate
+da altri siti non basta più per entrare come amministratore, e quindi non
+basta per vedere la chiave di recupero. La sessione d'amministratore senza
+il contrassegno della verifica viene rifiutata a ogni richiesta, anche sul
+WebSocket. Il segreto sta cifrato con la chiave dei dati, i codici di riserva
+solo come impronta, lo stesso codice non vale due volte e la sfida cade dopo
+cinque errori. Restano fuori, per come è fatta: chi ruba insieme password e
+telefono sbloccato, chi inganna la persona facendosi dettare un codice (vale
+30 secondi, ma vale), e chi controlla il server, che il segreto lo può
+leggere. L'impronta dell'app vale come secondo passaggio, perché il token di
+rinnovo sta nel portachiavi hardware del telefono dietro il sensore.
+
 ---
 
 ## Cosa NON è stato guardato
@@ -321,3 +433,152 @@ Onestà sul perimetro:
 - l'app Android su un telefono vero (la terza revisione è sul codice e sulle
   prove automatiche);
 - l'app in esecuzione su un telefono con i permessi di root.
+
+## Dai ruoli ai permessi (ottobre 2026)
+
+Le rotte chiedono permessi (`src/permessi.js`) invece di ruoli. I permessi in
+più li concede solo l'amministratore, che resta l'unico a gestire account,
+ruoli e permessi: chi potesse darne se li darebbe tutti. Non si concedono agli
+esterni (rifiuto 409, e comunque `permessiDi()` non ne dà a chi ha il ruolo
+esterno). Ogni concessione e revoca va nel registro. Il permesso dei dati
+sanitari porta con sé la verifica in due passaggi: concesso a chi non l'ha,
+la sessione in corso cade (401 `mfa_richiesta`) e al nuovo accesso la si
+attiva. Chi gestisce l'anagrafica legge il libretto degli altri senza visite
+e corsi. Consegne e rientri del magazzino, prima aperti a ogni interno, ora
+chiedono il loro permesso anche dal web.
+
+
+## L'archivio dei documenti del gruppo (ottobre 2026)
+
+Caricare, cambiare e togliere chiede `gruppo.documenti`; collegare un
+documento a un bene anche `magazzino.gestione`. Chi vede un documento lo
+decide il server per ogni richiesta, elenco e file compresi: un documento
+riservato a certi ruoli, o non segnato per l'emergenza quando chiede un
+esterno, risponde 404 come uno che non esiste, e un esterno non vede più
+niente appena l'emergenza si chiude. Il file si accetta solo nei formati
+ammessi e se il contenuto corrisponde all'estensione (un eseguibile
+rinominato in .pdf si rifiuta), fino a 25 MB; il nome sul disco è casuale,
+il file si cifra subito come gli altri caricamenti e si manda con
+`X-Content-Type-Options: nosniff`, in linea solo PDF e immagini. Ogni
+operazione va nel registro.
+
+Sul telefono i documenti "sempre con me" stanno in chiaro nei file dell'app,
+perché li deve aprire il visualizzatore: li proteggono la sandbox e la
+cifratura del telefono, non un telefono con i permessi di root. Sono
+documenti del gruppo, non dati personali; chi carica un documento riservato
+non lo segna "sempre con me" se non vuole che stia sui telefoni. L'elenco è
+cifrato come gli altri file, le copie restano fuori dai backup del telefono
+e si cancellano all'uscita o quando entra un'altra persona. Una copia si
+tiene solo se la sua impronta SHA-256 è quella che dice il server.
+
+
+## Attività, calendario e presenze (ottobre 2026)
+
+Organizzare chiede `gruppo.attivita`; il responsabile di un'attività la
+gestisce senza il permesso, ma non può nominare un altro responsabile né
+creare attività nuove. Chi vede un'attività lo decide il server a ogni
+richiesta (chi organizza, il responsabile, i convocati, e tutti gli interni
+solo per quelle "per tutti" o "aperte"): un'attività non visibile risponde
+404 come una che non c'è, e gli esterni non vedono il calendario né hanno
+presenze. Le scadenze nel calendario seguono i permessi dei moduli: quelle
+di visite e corsi degli altri solo a chi ha `volontari.sanitario`, quelle
+del magazzino a chi ha `magazzino.gestione`; a tutti gli altri le proprie.
+Il calendario mostra solo il tipo e la data di una visita, mai l'esito.
+
+Le email di convocazione ripuliscono ogni campo scritto da chi organizza, e
+il collegamento porta al calendario, dove serve l'accesso. Il controllo dei
+posti di un'attività aperta blocca la riga, così due adesioni insieme non
+superano il limite. Le presenze in emergenza le scrive il server dal
+registro delle squadre, che non si cambia; le correzioni chiedono il
+permesso e restano nel registro delle operazioni con il prima e il dopo.
+L'attestato lo scarica la persona stessa o chi vede tutte le presenze. Nel
+CSV del riepilogo una cella che comincia con un segno di formula esce con un
+apostrofo davanti, perché il foglio di calcolo non la esegua.
+
+La squadra COC non manda posizioni (il server rifiuta con 409) e non si
+assegna agli interventi; chi ne fa parte, esterni compresi, legge tutte le
+segnalazioni dell'emergenza in corso, come già chi sta nel centro operativo,
+e niente di più: chiusa l'emergenza l'esterno perde l'accesso come prima.
+
+## Chiamata, simulazione e copione (ottobre 2026)
+
+Chiamare le persone in emergenza chiede `emergenze.apertura` o
+`gruppo.attivita`, e per un allertamento la gestione dell'attività; gli
+esterni non chiamano e non sono chiamati. Una chiamata la legge chi è stato
+chiamato e chi può chiamare; per gli altri risponde 404. Ognuno risponde
+solo per sé, e "Sono arrivato" scrive solo la propria disponibilità; segnare
+gli arrivi degli altri è della sala. Le assenze le scrive ognuno per sé, e
+l'elenco con il motivo lo vede solo chi organizza o chiama. Ogni chiamata,
+risposta, arrivo, congedo, turno e assenza resta nel registro delle
+operazioni.
+
+Il copione è della regia: chi organizza le attività, il responsabile e i
+registi scelti. Agli altri le rotte del copione e della regia rispondono 403,
+e il copione di un'attività che non si vede risponde 404 come le attività.
+La risposta attesa e i tempi attesi non escono mai verso i partecipanti
+finché la regia non pubblica copione e debriefing, e la pubblicazione vale
+solo a sala chiusa. Il debriefing concluso non si cambia più.
+
+Il foglio Excel si carica in memoria, fino a 2 MB, e non si salva su disco.
+Si legge con ExcelJS solo come valori: una cella con una formula vale per il
+risultato che vi è salvato, e niente viene eseguito. Il foglio si controlla
+tutto prima di scrivere, con i limiti di lunghezza dei campi e i valori
+ammessi, e se una riga è sbagliata non si carica niente. Il copione
+scaricato scrive le celle come testo, così una riga che comincia con un
+segno di formula non diventa una formula aprendolo. Le pagine del copione e
+della regia mettono in pagina i testi scritti dagli utenti come testo, mai
+come HTML.
+
+Una simulazione non si confonde con un'emergenza vera: il segno è nel
+database (`emergencies.simulazione`) e non in un nome che si possa
+scrivere, e lo riportano stato, notifiche, stampe e app. Un regista che non
+ha `emergenze.apertura` chiude la sua simulazione ma non apre emergenze vere
+(403), e un'emergenza vera interrompe la simulazione solo con la conferma
+esplicita di chi la apre.
+
+## Aggiornamento dell'app e impronta (ottobre 2026)
+
+L'app si aggiorna da sola dal server dell'associazione. Prima di passare
+l'APK all'installatore di Android controlla che sia proprio ORION, la
+versione annunciata e più recente, e firmato con la stessa chiave dell'app
+installata; un APK diverso si butta. Android stesso rifiuta comunque un
+aggiornamento firmato con un'altra chiave, quindi un server compromesso non
+può far installare un'app sua al posto di ORION. Il permesso di installare
+app lo dà la persona, una volta, dalle impostazioni di Android, e vale solo
+per ORION.
+
+Un'impronta registrata prima che la persona avesse la verifica in due
+passaggi non apre più la porta da sola: il server chiede il codice, una volta,
+subito dopo l'impronta, e solo con il codice giusto segna quel token come
+verificato. Prima veniva cancellato, e bisognava rientrare con password e
+codice e registrare di nuovo l'impronta. Il token resta legato al telefono e
+dietro il sensore; il codice chiesto una volta sola chiude il caso di chi
+avesse creato un token con la sola password prima che la verifica fosse
+attiva. Chi deve ancora attivare la verifica la attiva dal browser, come
+prima, e il suo token vecchio si cancella.
+
+## Rete scarsa (ottobre 2026)
+
+Il centro operativo tiene nel browser, in `localStorage`, l'ultima
+situazione ricevuta (segnalazioni con i loro dettagli, squadre, posizioni,
+mappa, eventi, rubrica), per mostrarla quando il server non risponde. Sono
+dati che chi è davanti a quella postazione ha già visto, ma restano sul
+disco del computer: ogni voce è legata all'utente che l'ha letta, e un
+altro utente sullo stesso browser non la vede; l'uscita da ORION le
+cancella tutte. Restano invece le operazioni in coda di chi è uscito senza
+che partissero: ripartono solo quando rientra la stessa persona, con la sua
+sessione, e mai con quella di un altro. Sui computer della sala condivisi
+si esce da ORION a fine turno, come già si faceva.
+
+Le chiavi di idempotenza sono per persona: la stessa chiave di un altro
+utente è un'altra chiave, e una chiave non fa ripetere a nessuno una
+risposta che non era sua. La stessa chiave con un corpo diverso è
+rifiutata, così una chiave indovinata non serve a riscrivere niente.
+
+La cartografia del territorio si carica e si toglie solo con il permesso
+del piano (`emergenze.piano`); il file si apre in sola lettura con
+`node:sqlite` e se ne leggono solo i tasselli e i metadati, con istruzioni
+preparate. Prima di sostituire quella di prima il server controlla che sia
+davvero un database SQLite con le tabelle di un MBTiles e tasselli raster.
+I tasselli si leggono solo con l'accesso, come il resto della mappa; non
+contano nei limiti di frequenza, ma passano comunque dall'autenticazione.

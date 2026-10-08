@@ -207,3 +207,28 @@ body {
     font-size: 1rem;
     cursor: pointer;
 }
+
+/* Configurazione iniziale: il primo amministratore */
+.primo-accesso { text-align: left; }
+.primo-accesso h2 { text-align: center; margin: 0 0 0.75rem; font-size: 1.6em; font-weight: 600; }
+.primo-accesso .pa-spiega { font-size: 0.9em; color: var(--text-muted, #6c757d); margin: 0 0 1.25rem; line-height: 1.45; }
+.primo-accesso .pa-spiega code { font-size: 0.95em; }
+.primo-accesso label { display: block; font-size: 0.85em; font-weight: 600; margin: 0 0 0.3rem; }
+.primo-accesso .pa-facoltativo { font-weight: 400; color: var(--text-muted, #6c757d); }
+.primo-accesso input {
+    width: 100%; box-sizing: border-box; padding: 0.7rem 0.8rem; margin-bottom: 0.9rem;
+    border: 1px solid var(--border-color, #ced4da); border-radius: 6px;
+    background: var(--form-input-bg, var(--bg-color, #fff)); color: var(--text-color, #212529); font-size: 1em;
+}
+.primo-accesso input:focus { outline: 2px solid var(--primary-color, #0d6efd); outline-offset: 1px; }
+.primo-accesso #pa-codice { font-family: ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.primo-accesso .pa-coppia { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.primo-accesso .pa-regole { font-size: 0.8em; color: var(--text-muted, #6c757d); margin: -0.4rem 0 1rem; }
+.primo-accesso button { width: 100%; }
+.primo-accesso #pa-messaggio { margin: 0.9rem 0 0; font-size: 0.9em; text-align: center; }
+.primo-accesso #pa-messaggio.errore { color: var(--danger-color, #dc3545); }
+@media (max-width: 420px) { .primo-accesso .pa-coppia { grid-template-columns: 1fr; gap: 0; } }
+/* Un riquadro più alto dello schermo (la configurazione iniziale sul
+   telefono) parte dall'alto invece di uscire sopra il bordo. */
+body { align-items: safe center; }
+@media (max-width: 480px) { .login-box { padding: 1.75rem 1.25rem; } }

@@ -389,6 +389,15 @@
     align-items: center;
 }
 
+/* I verbali, divisi fra DPI e attrezzature e mezzi. */
+.impostazioni .titolo-opzioni {
+    margin: 8px 0 -4px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
 .impostazioni select,
 .impostazioni input[type="number"] {
     padding: 10px;
@@ -947,3 +956,69 @@ a.riga-bene { color: inherit; text-decoration: none; }
     box-sizing: border-box;
 }
 .griglia-quantita .attuale { font-weight: 400; opacity: 0.65; font-size: 0.72rem; }
+
+/* Alla consegna, la taglia già usata dalla persona. */
+.etichetta-famiglia.sua-taglia { background: var(--success-soft-bg, #dcfce7); color: var(--success-text, #166534); border-color: transparent; }
+
+/* Alla consegna, un DPI a taglie è un riquadro solo: le taglie sono pulsanti,
+   con accanto quanti ce ne sono. */
+.riga-bene.gruppo-taglie { cursor: default; align-items: flex-start; align-content: flex-start; }
+.taglie-consegna { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+.taglia-consegna {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    min-height: 36px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg, var(--bg-color));
+    color: var(--text-color);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.taglia-consegna small { font-weight: 400; opacity: 0.65; }
+.taglia-consegna:hover { border-color: var(--primary-color, #2563eb); }
+.taglia-consegna.sua,
+.taglia-consegna.probabile { border-color: var(--success-text, #166534); background: var(--success-soft-bg, #dcfce7); color: var(--success-text, #166534); }
+.taglia-consegna.probabile { border-style: dashed; }
+.taglia-consegna.scelta { background: var(--primary-color, #2563eb); border-color: var(--primary-color, #2563eb); color: #fff; }
+.nota-taglia { flex: 1 1 100%; margin: 0; font-size: 0.82rem; color: var(--success-text, #166534); }
+.quantita-taglie { display: flex; flex-wrap: wrap; gap: 10px; flex: 1 1 100%; }
+.quantita-taglie label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.riga-bene .quantita-taglie input[type="number"] { margin-left: 0; }
+
+/* I documenti collegati a un bene (il libretto d'uso e manutenzione). */
+.elenco-documenti-bene {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+}
+
+.elenco-documenti-bene li { padding: 6px 0; }
+
+.elenco-documenti-bene a::before {
+    content: "\f02d";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    margin-right: 8px;
+    opacity: 0.7;
+}
+
+.riquadro-documenti-qr {
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-color);
+}
+
+.elenco-documenti-bene li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.elenco-documenti-bene .togli-documento { opacity: .65; }
+.elenco-documenti-bene .togli-documento:hover { opacity: 1; color: var(--danger-color, #b91c1c); }
+.azioni-documenti-bene { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.azioni-documenti-bene .gruppo-azioni { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.azioni-documenti-bene select { flex: 1 1 240px; min-width: 0; }
+.scelta-simili { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
+.scelta-simili input { width: auto; margin: 0; }
+.azioni-documenti-bene select { padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 8px; font: inherit; font-size: .92rem; background: var(--form-input-bg, var(--surface-color)); color: var(--text-color); }

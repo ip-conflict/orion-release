@@ -42,9 +42,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (response.ok) {
-                messageDiv.textContent = "Password impostata con successo! Reindirizzamento al login...";
+                messageDiv.textContent = data.username
+                    ? `Password impostata. Il tuo nome utente è ${data.username}: ora entra con la password appena scelta.`
+                    : "Password impostata con successo! Reindirizzamento al login...";
                 messageDiv.style.color = "green";
-                setTimeout(() => { window.location.href = '/'; }, 2500);
+                // Il nome utente arriva già scritto nell'accesso.
+                const verso = data.username ? `/?utente=${encodeURIComponent(data.username)}` : '/';
+                setTimeout(() => { window.location.href = verso; }, 2500);
             } else {
                 messageDiv.textContent = data.message || "Errore durante il salvataggio.";
                 messageDiv.style.color = "red";

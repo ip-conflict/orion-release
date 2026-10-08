@@ -1,0 +1,253 @@
+/* public/css/calendario.css
+ *
+ * Il calendario del gruppo. Sul computer il mese in griglia, sul telefono un
+ * elenco di giorni. Colori da theme.css: le attività in blu, le emergenze in
+ * rosso, le scadenze in ambra; chi deve ancora rispondere ha il bordo
+ * tratteggiato, chi ha risposto il segno. */
+
+.sottotitolo { margin: 4px 0 0; opacity: 0.75; font-size: 0.9rem; }
+.nota { color: var(--text-muted); font-size: 0.88rem; margin: 4px 0; }
+
+.riquadro-avviso {
+    margin: 14px 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--warning-soft-bg);
+    color: var(--text-color);
+    border-left: 4px solid var(--warning-text);
+}
+.riquadro-avviso a { color: var(--link-color); }
+
+.barra-calendario {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 18px 0 10px;
+}
+.navigazione-mese { display: flex; align-items: center; gap: 8px; }
+.navigazione-mese h2 { margin: 0; min-width: 190px; text-align: center; text-transform: capitalize; font-size: 1.3rem; }
+
+.filtri-calendario { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.filtro {
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.filtro.acceso { color: var(--text-color); font-weight: 600; }
+.filtro.acceso.filtro-attivita { border-color: var(--info-text); background: var(--info-soft-bg); }
+.filtro.acceso.filtro-emergenze { border-color: var(--danger-text); background: var(--danger-soft-bg); }
+.filtro.acceso.filtro-mie, .filtro.acceso.filtro-segreteria, .filtro.acceso.filtro-magazzino { border-color: var(--warning-text); background: var(--warning-soft-bg); }
+.filtro.acceso.filtro-reperibili { border-color: var(--success-text); background: var(--success-soft-bg); }
+.filtro.acceso.filtro-assenti { border-color: var(--text-muted); background: var(--secondary-bg-color); }
+
+/* --- Il mese --- */
+.griglia-mese {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--border-color);
+    gap: 1px;
+}
+.intestazione-giorno {
+    background: var(--secondary-bg-color);
+    padding: 6px;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.giorno {
+    background: var(--surface-color);
+    min-height: 104px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.giorno.fuori-mese { background: var(--secondary-bg-color); }
+.giorno.fuori-mese .numero-giorno { opacity: 0.45; }
+.numero-giorno { font-size: 0.8rem; font-weight: 600; padding: 2px 4px; align-self: flex-end; }
+.giorno.oggi .numero-giorno { background: var(--primary-color); color: #fff; border-radius: 10px; min-width: 22px; text-align: center; }
+
+.voce {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.voce-attivita { background: var(--info-soft-bg); color: var(--info-text); }
+.voce-attivita.da-rispondere { border: 1px dashed var(--info-text); font-weight: 600; }
+.voce-attivita.risposto-si { border-color: var(--success-text); }
+.voce-attivita.risposto-no { opacity: 0.6; }
+.voce-attivita.stato-annullata { text-decoration: line-through; opacity: 0.6; }
+.voce-attivita.stato-conclusa { background: var(--success-soft-bg); color: var(--success-text); }
+.voce-emergenza { background: var(--danger-soft-bg); color: var(--danger-text); font-weight: 600; }
+.voce-scadenze { background: var(--warning-soft-bg); color: var(--warning-text); }
+.voce-turni.cat-reperibili { background: var(--success-soft-bg); color: var(--success-text); }
+.voce-turni.cat-assenti { background: var(--secondary-bg-color); color: var(--text-muted); border: 1px dashed var(--border-color); }
+
+/* --- L'elenco per il telefono --- */
+.agenda { display: none; }
+.giorno-agenda {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+.giorno-agenda h3 { margin: 0 0 8px; font-size: 0.95rem; text-transform: capitalize; }
+.giorno-agenda.oggi { border-color: var(--primary-color); }
+.giorno-agenda .voce { font-size: 0.9rem; padding: 7px 10px; margin-bottom: 6px; white-space: normal; }
+
+@media (max-width: 760px) {
+    .griglia-mese { display: none; }
+    .agenda { display: block; }
+    .navigazione-mese h2 { min-width: 0; font-size: 1.1rem; }
+}
+
+/* --- Modali --- */
+.modale {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 16px; overflow-y: auto; z-index: 1000;
+}
+.contenuto-modale {
+    position: relative; width: 100%; max-width: 720px; padding: 26px; border-radius: 14px;
+    background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color);
+}
+.contenuto-modale.largo { max-width: 920px; }
+.contenuto-modale h2 { margin: 6px 0 10px; padding-right: 30px; }
+.contenuto-modale h3 { margin: 20px 0 6px; font-size: 1rem; }
+.chiudi-modale {
+    position: absolute; top: 14px; right: 16px; border: none; background: none;
+    font-size: 1.7rem; line-height: 1; color: var(--text-color); cursor: pointer;
+}
+.segni { display: flex; flex-wrap: wrap; gap: 6px; }
+.dati-attivita { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 10px; }
+.dati-attivita dt { color: var(--text-muted); font-size: 0.88rem; }
+.dati-attivita dd { margin: 0; }
+.descrizione { white-space: pre-line; }
+
+.riquadro-risposta, .riquadro-presenze {
+    margin: 16px 0;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-color);
+}
+.riquadro-risposta h3 { margin-top: 0; }
+.riquadro-risposta input[type=text], #cerca-presenti, #cerca-persone {
+    width: 100%; box-sizing: border-box; padding: 9px 10px; margin: 8px 0;
+    border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font: inherit;
+}
+.azioni-gestione { margin: 12px 0; flex-wrap: wrap; }
+
+.elenco-persone, .elenco-presenti, .elenco-scelta, .elenco-semplice { list-style: none; margin: 0; padding: 0; }
+.elenco-persone li {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 7px 0; border-bottom: 1px solid var(--border-light-color);
+}
+.nome-persona { font-weight: 600; min-width: 160px; }
+.nota-persona { color: var(--text-muted); font-size: 0.85rem; font-style: italic; }
+.risposta-no .nome-persona { opacity: 0.6; }
+
+.elenco-presenti { max-height: 380px; overflow-y: auto; }
+.riga-presente {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--border-light-color);
+}
+.nome-presente { display: flex; align-items: center; gap: 6px; }
+.orario-presente, .riga-presenza input, .aggiungi-presenza select, .aggiungi-presenza input {
+    padding: 5px 6px; border-radius: 6px; border: 1px solid var(--border-color);
+    background: var(--bg-color); color: var(--text-color); font: inherit; font-size: 0.85rem;
+}
+.elenco-scelta { max-height: 220px; overflow-y: auto; columns: 2; }
+.elenco-scelta li { break-inside: avoid; }
+
+.griglia-campi { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.griglia-campi label { display: block; font-size: 0.88rem; font-weight: 600; }
+.griglia-campi .campo-largo { grid-column: 1 / -1; }
+.griglia-campi input, .griglia-campi select, .griglia-campi textarea, .campo-posti input {
+    display: block; width: 100%; margin-top: 6px; box-sizing: border-box; padding: 10px;
+    border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color);
+    color: var(--text-color); font: inherit; font-weight: 400;
+}
+.campo-posti { max-width: 200px; margin: 6px 0 0 24px; font-size: 0.88rem; font-weight: 600; }
+.riquadro-scelte { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; }
+.riquadro-scelte legend { font-weight: 600; font-size: 0.9rem; padding: 0 6px; }
+.scelta { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 0.92rem; }
+.scelta input { margin-top: 3px; }
+.azioni-modale { display: flex; justify-content: flex-end; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+
+.elenco-semplice li { padding: 7px 0; border-bottom: 1px solid var(--border-light-color); }
+.elenco-semplice a, .tabella-riepilogo a { color: var(--link-color); }
+.tabella-presenze { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 14px; }
+.riga-presenza {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px; border: 1px solid var(--border-light-color); border-radius: 8px;
+}
+.riga-presenza .ore-presenza { width: 70px; }
+.dettaglio-presenza { flex-basis: 100%; }
+.aggiungi-presenza { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+
+.barra-presenze { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.barra-presenze select { padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); }
+.barra-presenze a { text-decoration: none; }
+.tabella-riepilogo { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tabella-riepilogo th, .tabella-riepilogo td { padding: 7px 8px; border-bottom: 1px solid var(--border-light-color); text-align: left; }
+.tabella-riepilogo th { color: var(--text-muted); font-weight: 600; }
+.tabella-riepilogo .totale { font-weight: 700; }
+
+@media (max-width: 640px) {
+    .contenuto-modale { padding: 20px 14px; }
+    .riga-presente { grid-template-columns: 1fr; }
+    .elenco-scelta { columns: 1; }
+    .dati-attivita { grid-template-columns: 1fr; }
+    .dati-attivita dt { margin-top: 6px; }
+}
+
+/* --- La simulazione --- */
+.voce-simulazione { background: repeating-linear-gradient(45deg, #ede9fe, #ede9fe 6px, #ddd6fe 6px, #ddd6fe 12px); color: #5b21b6; font-weight: 600; }
+.pastiglia.simulazione { background: #6d28d9; color: #fff; }
+.riquadro-simulazione { border-color: #a78bfa; }
+.riquadro-simulazione-scheda { margin: 12px 0; padding: 10px 12px; border: 1px solid #a78bfa; border-radius: 10px; background: rgba(109, 40, 217, 0.06); }
+.riquadro-simulazione-scheda .nota { align-self: center; }
+.elenco-scelta.corto { max-height: 160px; }
+.link-piccolo { border: 0; background: none; padding: 0 0 0 6px; color: var(--info-text); font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+.tabella-tipi { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+.tabella-tipi th { text-align: left; font-size: 0.8rem; color: var(--text-muted); padding: 4px; }
+.tabella-tipi td { padding: 4px; }
+.tabella-tipi input[type=text], .tabella-tipi select { width: 100%; margin: 0; }
+.riga-nuovo-tipo { display: flex; gap: 8px; flex-wrap: wrap; }
+.riga-nuovo-tipo input { flex: 1; min-width: 200px; margin: 0; }
+.riga-nuovo-tipo select { width: auto; margin: 0; }
+@media (prefers-color-scheme: dark) {
+    .voce-simulazione { background: repeating-linear-gradient(45deg, rgba(167, 139, 250, .25), rgba(167, 139, 250, .25) 6px, rgba(167, 139, 250, .15) 6px, rgba(167, 139, 250, .15) 12px); color: #ddd6fe; }
+}
+
+/* La regia: le persone scelte, una per etichetta. */
+#aggiungi-regia { width: 100%; margin-top: 6px; }
+.chip-regia { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-regia li { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 12px; border-radius: 999px; background: rgba(109, 40, 217, .1); color: var(--text-color); font-size: .9rem; }
+.chip-regia li .btn-icona { width: 26px; height: 26px; padding: 0; font-size: .85rem; }
+.chip-regia li.vuota { background: none; padding-left: 0; color: var(--text-muted, #6b7280); font-style: italic; }
+.nota-conduci { padding: 8px 12px; border-left: 3px solid var(--primary-color, #1e4f8c); background: rgba(30, 79, 140, .06); border-radius: 4px; }

@@ -31,7 +31,9 @@ function leggiContatto(corpo) {
 export function registraRotteRubrica(app, { pool, logger, nonEsterni, registraAudit, nomeUtente, avvisaClienti }) {
     const COLONNE = 'id, nome, ruolo, ente, categoria, telefono, telefono_alt, email, note, aggiornato_il, aggiornato_da';
 
-    app.get('/api/rubrica', nonEsterni, async (req, res) => {
+    // La leggono anche gli esterni (Croce Rossa, 118...): in sala i numeri
+    // servono a tutti. La scrivono solo gli interni.
+    app.get('/api/rubrica', async (req, res) => {
         try {
             const { rows } = await pool.query(`SELECT ${COLONNE} FROM rubrica
                 ORDER BY array_position($1::text[], categoria::text), lower(COALESCE(ente, '')), lower(nome)`, [CATEGORIE_RUBRICA]);

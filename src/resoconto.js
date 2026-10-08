@@ -10,7 +10,9 @@ import { ETICHETTA_PRIORITA, ETICHETTA_STATO, MOTIVI_SENZA_SQUADRA } from './cos
 import { pool } from './db.js';
 import { vociDiarioSala } from './diarioSala.js';
 import { ETICHETTE_MOVIMENTO } from './magazzino.js';
+import { sigilloAttuale, testoSigillo } from './integrita.js';
 import { fileURLToPath } from 'url';
+import { cifra, cifraturaPronta } from './cifratura.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,14 +71,18 @@ function titoloSezione(numero, testo) {
 
 export async function componiResocontoEmergenza(emergencyId, autore = null) {
     const { rows: emergenze } = await pool.query(
-        'SELECT id, code, name, start_time, end_time, status FROM emergencies WHERE id = $1',
+        `SELECT e.id, e.code, e.name, e.start_time, e.end_time, e.status, e.sigillo_chiusura, e.simulazione, e.interrotta_il,
+                a.titolo AS attivita_titolo, t.nome AS attivita_tipo, v.code AS interrotta_da_codice
+           FROM emergencies e LEFT JOIN attivita a ON a.id = e.attivita_id LEFT JOIN attivita_tipi t ON t.id = a.tipo_id
+           LEFT JOIN emergencies v ON v.id = e.interrotta_da
+          WHERE e.id = $1`,
         [emergencyId]
     );
     if (emergenze.length === 0) return null;
     const emergenza = emergenze[0];
 
 
-    const [diarioSala, segnalazioni, aggiornamenti, assegnazioni, immagini, documenti, operazioni, registroSquadre, materiali, materialiFuori, nomeAssociazione] = await Promise.all([
+    const [diarioSala, segnalazioni, aggiornamenti, assegnazioni, immagini, documenti, operazioni, registroSquadre, materiali, materialiFuori, nomeAssociazione, incarichi, elementiMappa] = await Promise.all([
         vociDiarioSala(pool, emergencyId),
         pool.query(`
             SELECT r.id, r.emergency_report_number, r.title, r.description, r.status, r.priority,
@@ -89,10 +95,11 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             ORDER BY COALESCE(r.emergency_report_number, r.id) ASC`, [emergencyId]),
         pool.query(`
             SELECT ru.report_id, ru.update_timestamp, ru.update_text, ru.is_system,
-                   CONCAT(u.nome, ' ', u.cognome) AS autore
+                   CONCAT(u.nome, ' ', u.cognome) AS autore, f.sigla AS funzione
             FROM report_updates ru
             JOIN reports r ON ru.report_id = r.id
             LEFT JOIN users u ON ru.user_id = u.id
+            LEFT JOIN funzioni f ON f.id = ru.funzione_id
             WHERE r.emergency_id = $1
             ORDER BY ru.update_timestamp ASC, ru.id ASC`, [emergencyId]),
         pool.query(`
@@ -156,7 +163,17 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             ORDER BY b.tipo, b.denominazione`, [emergencyId]),
         pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'association_name'")
             .then(r => r.rows[0]?.setting_value || null)
-            .catch(() => null)
+            .catch(() => null),
+        // Gli incarichi alle funzioni di supporto: motivazione ed esito sono
+        // già nel diario di ogni segnalazione, qui serve lo stato.
+        pool.query(`
+            SELECT i.report_id, i.stato, f.sigla
+            FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id JOIN reports r ON r.id = i.report_id
+            WHERE r.emergency_id = $1 ORDER BY f.ordine, f.sigla`, [emergencyId])
+            .then(r => r.rows).catch(() => []),
+        pool.query(`SELECT tipo, nome, note, creato_il, creato_da, rimosso_il, rimosso_da, oltre_emergenza
+                    FROM elementi_mappa WHERE emergency_id = $1 ORDER BY creato_il`, [emergencyId])
+            .then(r => r.rows).catch(() => [])
     ]);
 
     const perSegnalazione = (righe, chiave = 'report_id') => {
@@ -176,10 +193,17 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
 
     const parti = [];
     parti.push('='.repeat(LARGHEZZA_RESOCONTO));
-    parti.push(`RESOCONTO EMERGENZA - ${emergenza.code}`);
+    parti.push(emergenza.simulazione ? `RESOCONTO SIMULAZIONE - ${emergenza.code}` : `RESOCONTO EMERGENZA - ${emergenza.code}`);
     if (nomeAssociazione) parti.push(nomeAssociazione);
     parti.push('='.repeat(LARGHEZZA_RESOCONTO));
     parti.push('');
+    // Una simulazione non deve mai poter sembrare un'emergenza vera.
+    if (emergenza.simulazione) {
+        parti.push("*** SIMULAZIONE: scenario simulato in sala, non un'emergenza reale ***");
+        if (emergenza.attivita_titolo) parti.push(`Attivita' .........: ${emergenza.attivita_tipo ? `${emergenza.attivita_tipo}: ` : ''}${emergenza.attivita_titolo}`);
+        if (emergenza.interrotta_il) parti.push(`Interrotta ........: ${dataOraResoconto(emergenza.interrotta_il)}${emergenza.interrotta_da_codice ? `, per l'emergenza ${emergenza.interrotta_da_codice}` : ''}`);
+        parti.push('');
+    }
     parti.push(`Codice ............: ${emergenza.code}`);
     parti.push(`Denominazione .....: ${emergenza.name || '(non indicata)'}`);
     parti.push(`Apertura ..........: ${dataOraResoconto(emergenza.start_time)}`);
@@ -190,6 +214,10 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     const senzaSquadraPerScelta = segnalazioni.rows.filter(r => MOTIVI_SENZA_SQUADRA[r.no_team_reason]).length;
     if (senzaSquadraPerScelta) parti.push(`Senza squadra .....: ${senzaSquadraPerScelta} (per scelta, vedi dettaglio)`);
     parti.push(`Documenti allegati : ${documenti.rows.length}`);
+    if (incarichi.length) {
+        const rimasti = incarichi.filter(i => i.stato !== 'concluso').length;
+        parti.push(`Incarichi funzioni : ${incarichi.length}${rimasti ? ` (${rimasti} rimasti aperti)` : ''}`);
+    }
     if (diarioSala.length) parti.push(`Note di sala ......: ${diarioSala.length}`);
     if (materiali.rows.length) {
         const mezziEMateriali = new Set(materiali.rows.map(m => m.bene_denominazione)).size;
@@ -236,6 +264,10 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             ? squadre.map(s => `${s.nome} (dalle ${dataOraResoconto(s.assigned_at, true)})`).join(', ')
             : (motivoSenzaSquadra ? `nessuna - ${motivoSenzaSquadra.toLowerCase()}` : 'nessuna assegnata');
         parti.push(`     Squadre .....: ${descrizioneSquadre}`);
+        const funzioniReport = incarichi.filter(i => i.report_id === r.id);
+        if (funzioniReport.length) {
+            parti.push(`     Funzioni ....: ${funzioniReport.map(i => `${i.sigla} ${i.stato === 'concluso' ? 'conclusa' : 'ancora aperta'}`).join(', ')}`);
+        }
         const quanteImmagini = immaginiPerReport.get(r.id) || 0;
         if (quanteImmagini) parti.push(`     Immagini ....: ${quanteImmagini} allegate (consultabili in archivio)`);
         const descrizione = testoRientrato(r.description, '       ');
@@ -250,9 +282,10 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         } else {
             diario.forEach(v => {
                 const chi = (v.autore || '').trim() || 'utente rimosso';
+                const perConto = v.funzione && !v.is_system ? ` per la ${v.funzione}` : '';
                 const intestazione = v.is_system
                     ? `       [${dataOraResoconto(v.update_timestamp)}] (sistema, ${chi})`
-                    : `       [${dataOraResoconto(v.update_timestamp)}] ${chi}:`;
+                    : `       [${dataOraResoconto(v.update_timestamp)}] ${chi}${perConto}:`;
                 parti.push(intestazione);
                 parti.push(testoRientrato(v.update_text, '         ') || '         (vuoto)');
             });
@@ -297,8 +330,13 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             const squadra = `${v.nome_radio}${v.squadra_nome ? ` (${v.squadra_nome})` : ''}`;
             const perche = DESCRIZIONE_MOTIVO[v.motivo] || '';
             const daChi = v.eseguita_da ? ` [${v.eseguita_da}]` : '';
+            const chi = `${v.nome || ''} ${v.cognome || ''}`.trim() || v.username;
             if (v.azione === 'squadra_eliminata') {
                 parti.push(`[${quando}] squadra ${squadra} sciolta${daChi}`);
+            } else if (v.azione === 'caposquadra_nominato') {
+                parti.push(`[${quando}] ${chi} caposquadra di ${squadra}${perche}${daChi}`);
+            } else if (v.azione === 'caposquadra_tolto') {
+                parti.push(`[${quando}] ${chi} non è più caposquadra di ${squadra}${daChi}`);
             } else {
                 const verbo = v.azione === 'membro_aggiunto' ? 'entra in' : 'esce da';
                 parti.push(`[${quando}] ${`${v.nome || ''} ${v.cognome || ''}`.trim() || v.username} ${verbo} ${squadra}${perche}${daChi}`);
@@ -371,6 +409,35 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         });
     }
 
+    if (elementiMappa.length) {
+        const ETICHETTE = {
+            strada_chiusa: 'Strada chiusa', zona_interdetta: 'Zona interdetta', pericolo_alluvione: 'Pericolo alluvione',
+            pericolo_frana: 'Pericolo frana', pericolo_generico: 'Zona di pericolo', area_attesa: 'Area di attesa', area_accoglienza: 'Area di accoglienza',
+            area_ammassamento: 'Area di ammassamento', altro: 'Altro'
+        };
+        parti.push(titoloSezione(8, 'Strade chiuse e zone'));
+        elementiMappa.forEach(m => {
+            parti.push(`${ETICHETTE[m.tipo] || m.tipo}: ${m.nome || '(senza nome)'}`);
+            parti.push(`     Dal .........: ${dataOraResoconto(m.creato_il)}${m.creato_da ? ` (${m.creato_da})` : ''}`);
+            parti.push(`     Fino al .....: ${m.rimosso_il ? `${dataOraResoconto(m.rimosso_il)}${m.rimosso_da ? ` (${m.rimosso_da})` : ''}` : m.oltre_emergenza ? 'resta in vigore dopo la chiusura' : 'in vigore alla chiusura'}`);
+            const note = testoRientrato(m.note, '     ');
+            if (note) parti.push(note);
+            parti.push('');
+        });
+    }
+
+    // Il sigillo dello storico preso alla chiusura (o, per le emergenze
+    // chiuse prima che esistesse, quello di adesso): con questa riga si
+    // dimostra in seguito che note e diario non sono stati cambiati.
+    const sigillo = emergenza.sigillo_chiusura || await sigilloAttuale().then(testoSigillo).catch(() => null);
+    if (sigillo) {
+        parti.push('');
+        parti.push(emergenza.sigillo_chiusura
+            ? 'Sigillo dello storico alla chiusura (per verificarlo: ORION, pagina Sistema, "Integrità dello storico"):'
+            : 'Sigillo dello storico alla stesura del resoconto (per verificarlo: ORION, pagina Sistema, "Integrità dello storico"):');
+        parti.push(sigillo);
+    }
+
     parti.push('');
     parti.push('='.repeat(LARGHEZZA_RESOCONTO));
     parti.push(`Fine del resoconto - ${emergenza.code}`);
@@ -392,7 +459,8 @@ export async function salvaResocontoEmergenza(emergencyId, autore = null) {
         const marcaTemporale = new Date().toISOString().replace(/[:.]/g, '-');
         const nomeFile = `resoconto_${codiceSicuro}_${marcaTemporale}.txt`;
         const percorso = path.join(CARTELLA_RESOCONTI, nomeFile);
-        await fs.promises.writeFile(percorso, risultato.testo, 'utf8');
+        // Cifrato come gli altri file riservati, se la chiave c'è.
+        await fs.promises.writeFile(percorso, cifraturaPronta() ? cifra(Buffer.from(risultato.testo, 'utf8')) : risultato.testo);
         await pool.query(
             'UPDATE emergencies SET log_file_path = $1, log_generated_at = NOW() WHERE id = $2',
             [nomeFile, emergencyId]

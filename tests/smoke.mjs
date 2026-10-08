@@ -24,6 +24,8 @@
 // finite dietro il middleware sbagliato, risposte 500 al posto di 401/403,
 // permessi mancanti e dati riservati esposti su endpoint pubblici.
 
+import { accediConVerifica } from './accesso-prova.mjs';
+
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const ADMIN_USER = process.env.ORION_ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ORION_ADMIN_PASSWORD;
@@ -59,6 +61,7 @@ function creaClient() {
     return {
         cookies,
         async chiamata(percorso, opzioni = {}) {
+            const originali = opzioni;
             const headers = { ...(opzioni.headers || {}) };
             if (cookies.size > 0) {
                 headers.Cookie = [...cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
@@ -80,6 +83,13 @@ function creaClient() {
             let corpo = null;
             const testo = await risposta.text();
             try { corpo = JSON.parse(testo); } catch { corpo = testo; }
+            // Alla prima entrata si prende visione dell'informativa, come
+            // farebbe la persona, e si ripete la richiesta.
+            if (risposta.status === 428 && corpo?.informativa_da_vedere && !opzioni.vistaPresa) {
+                const auth = opzioni.headers?.Authorization ? { Authorization: opzioni.headers.Authorization } : {};
+                await this.chiamata('/api/informativa/presa-visione', { method: 'POST', headers: auth, body: { versione: corpo.versione }, vistaPresa: true });
+                return this.chiamata(percorso, { ...originali, vistaPresa: true });
+            }
             return { stato: risposta.status, corpo, tipo: risposta.headers.get('content-type') };
         }
     };
@@ -97,7 +107,8 @@ async function eseguiTest() {
 
     // ------------------------------------------------------------------
     console.log('[1] Accesso e sessione');
-    const login = await admin.chiamata('/login', { method: 'POST', body: { username: ADMIN_USER, password: ADMIN_PASSWORD } });
+    // Con la verifica in due passaggi, obbligatoria per gli amministratori.
+    const login = await accediConVerifica(admin.chiamata, BASE, ADMIN_USER, ADMIN_PASSWORD);
     verifica('login amministratore riuscito', login.stato === 200, `HTTP ${login.stato}`);
     if (login.stato !== 200) {
         console.error('\nImpossibile proseguire senza una sessione amministratore valida.');
@@ -303,22 +314,24 @@ async function eseguiTest() {
         verifica('un amministratore non puo\' togliersi il ruolo da solo -> 403',
             autoDeclassamento.stato === 403, `HTTP ${autoDeclassamento.stato}`);
 
-        // Il volontario di prova ha la sessione aperta: gli si aggiunge la
-        // segreteria e l'accesso deve aprirsi senza rifare il login.
-        const primaDelCambio = await volontario.chiamata('/api/admin/users');
-        verifica('il volontario non vede l\'elenco utenti', primaDelCambio.stato === 403, `HTTP ${primaDelCambio.stato}`);
+        // Il volontario di prova ha la sessione aperta: gli si aggiunge il
+        // ruolo di coordinatore e l'archivio delle emergenze deve aprirsi
+        // senza rifare il login. (La segreteria no: vede dati sanitari e
+        // chiede la verifica in due passaggi, che il volontario non ha.)
+        const primaDelCambio = await volontario.chiamata('/api/admin/emergencies/closed');
+        verifica('il volontario non vede l\'archivio delle emergenze', primaDelCambio.stato === 403, `HTTP ${primaDelCambio.stato}`);
 
         await admin.chiamata(`/api/users/${idVolontario}`, {
-            method: 'PUT', body: { nome: `Collaudo${suffisso}`, cognome: `Smoke${suffisso}`, ruoli: ['volontario', 'segreteria'] }
+            method: 'PUT', body: { nome: `Collaudo${suffisso}`, cognome: `Smoke${suffisso}`, ruoli: ['volontario', 'coordinatore'] }
         });
-        const dopoAggiunta = await volontario.chiamata('/api/admin/users');
-        verifica('aggiunto il ruolo segreteria, l\'accesso vale subito sulla stessa sessione',
+        const dopoAggiunta = await volontario.chiamata('/api/admin/emergencies/closed');
+        verifica('aggiunto il ruolo coordinatore, l\'accesso vale subito sulla stessa sessione',
             dopoAggiunta.stato === 200, `HTTP ${dopoAggiunta.stato}`);
 
         await admin.chiamata(`/api/users/${idVolontario}`, {
             method: 'PUT', body: { nome: `Collaudo${suffisso}`, cognome: `Smoke${suffisso}`, ruoli: ['volontario'] }
         });
-        const dopoRimozione = await volontario.chiamata('/api/admin/users');
+        const dopoRimozione = await volontario.chiamata('/api/admin/emergencies/closed');
         verifica('tolto il ruolo, l\'accesso e\' revocato subito', dopoRimozione.stato === 403, `HTTP ${dopoRimozione.stato}`);
     }
 
@@ -438,9 +451,9 @@ async function eseguiTest() {
     // Senza la posta e senza le configurazioni dei moduli (magazzino_config,
     // segreteria_config...): hanno le loro rotte, e riscriverle da questa
     // foto rimetterebbe le opzioni di prima a meta' delle prove. Lo stato
-    // degli aggiornamenti lo scrive solo il programma: da qui e' rifiutato.
+    // degli aggiornamenti e la versione dell'informativa li scrive solo il programma: da qui sono rifiutati.
     Object.entries(impostazioniPrima.corpo || {}).forEach(([k, v]) => {
-        if (!k.startsWith('smtp_') && !k.endsWith('_config') && !k.startsWith('aggiornamenti_')) impostazioniBase[k] = v;
+        if (!k.startsWith('smtp_') && !k.endsWith('_config') && !k.startsWith('aggiornamenti_') && !k.startsWith('cifratura_') && !k.startsWith('integrita_') && !k.startsWith('privacy_')) impostazioniBase[k] = v;
     });
 
     await admin.chiamata('/api/branding/settings', {
@@ -722,6 +735,8 @@ async function eseguiTest() {
         verifica('ma resta visibile in "chi ha cosa"',
             Array.isArray(chiHaCosa.corpo) && chiHaCosa.corpo.some(b => b.bene_id === dpiInDotazione.corpo.id),
             `${chiHaCosa.stato}`);
+        verifica('"chi ha cosa" porta categoria e modello, per filtrare',
+            (chiHaCosa.corpo || []).every(b => 'categoria_id' in b && 'modello_id' in b), JSON.stringify((chiHaCosa.corpo || [])[0]));
 
         // Un DPI scade dove si trova e li' si butta: obbligare a farlo prima
         // rientrare vorrebbe dire far scrivere una cosa che non e' successa.
@@ -893,6 +908,15 @@ async function eseguiTest() {
                 const r = await volontario.chiamata(`/api/magazzino/beni/${idGuanti}`);
                 return { magazzino: Number(r.corpo?.in_magazzino), fuori: Number(r.corpo?.fuori) };
             };
+            // Consegne e rientri li fa il magazziniere o chi ne ha il permesso:
+            // al volontario di prova lo si dà, e vale subito.
+            const senzaPermesso = await volontario.chiamata('/api/magazzino/consegna', {
+                method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 1 }] }
+            });
+            verifica('senza il permesso il volontario non consegna -> 403', senzaPermesso.stato === 403, `HTTP ${senzaPermesso.stato}`);
+            const concesso = await admin.chiamata(`/api/admin/users/${idVolontario}/permessi`, { method: 'PUT', body: { in_piu: ['magazzino.consegne'] } });
+            verifica('l\'amministratore gli dà il permesso delle consegne', concesso.stato === 200 && concesso.corpo?.effettivi?.includes('magazzino.consegne'),
+                `HTTP ${concesso.stato} ${JSON.stringify(concesso.corpo)}`);
             await volontario.chiamata('/api/magazzino/consegna', {
                 method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 3 }] }
             });
@@ -1023,6 +1047,10 @@ async function eseguiTest() {
             verifica('ogni verbale porta le sue righe',
                 unVerbale?.righe?.length === 1 && unVerbale.righe[0].bene_id === idScarpe && unVerbale.righe[0].taglia === '42',
                 JSON.stringify(unVerbale));
+            // Da qui il volontario torna senza il permesso delle consegne.
+            const tolto = await admin.chiamata(`/api/admin/users/${idVolontario}/permessi`, { method: 'PUT', body: { in_piu: [] } });
+            verifica('tolto il permesso, il volontario non consegna più', tolto.stato === 200
+                && (await volontario.chiamata('/api/magazzino/consegna', { method: 'POST', body: corpo })).stato === 403, `HTTP ${tolto.stato}`);
             const daConfermare = await volontario.chiamata('/api/magazzino/verbali/miei?stato=da_confermare');
             verifica('si filtrano per stato', daConfermare.stato === 200 && daConfermare.corpo.every(v => v.stato === 'da_confermare'));
             // Il verbale da stampare: il proprio lo apre il volontario, quelli
@@ -1032,6 +1060,12 @@ async function eseguiTest() {
                 suo.stato === 200 && suo.corpo?.righe?.length === 1, `HTTP ${suo.stato}`);
             const confermato = await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}/conferma`, { method: 'POST' });
             verifica('e lo conferma dal profilo', confermato.stato === 200, `HTTP ${confermato.stato}`);
+            // La conferma compila il verbale: nome, data, da dove e impronta.
+            const compilato = (await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}`)).corpo;
+            verifica('la conferma compila il verbale: nome, data, dal profilo, impronta',
+                !!compilato?.confermato_da && !!compilato?.confermato_il && compilato?.conferma_canale === 'web'
+                    && /^[0-9a-f]{64}$/.test(compilato?.conferma_impronta || '') && compilato?.conferma_impronta === confermato.corpo?.impronta,
+                JSON.stringify({ da: compilato?.confermato_da, canale: compilato?.conferma_canale, impronta: compilato?.conferma_impronta }));
             const dueVolte = await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}/conferma`, { method: 'POST' });
             verifica('una seconda conferma -> 404', dueVolte.stato === 404, `HTTP ${dueVolte.stato}`);
             const tutti = await admin.chiamata('/api/magazzino/verbali');
@@ -1054,6 +1088,58 @@ async function eseguiTest() {
                     method: 'POST', body: { da: { tipo: 'persona', id: io.corpo?.id }, righe: [{ bene_id: idScarpe, quantita: 1 }] }
                 });
             }
+
+            // DPI e attrezzature: con la conferma dei DPI il verbale c'è per i
+            // DPI, ma attrezzature e mezzi ci entrano solo se previsto e chiesto.
+            const configPrima = (await admin.chiamata('/api/magazzino/config')).corpo || {};
+            const attrezzo = await admin.chiamata('/api/magazzino/beni', {
+                method: 'POST', body: { tipo: 'attrezzatura', denominazione: `Motosega verbale ${Date.now().toString().slice(-6)}` }
+            });
+            if (attrezzo.stato === 201) {
+                const idAttrezzo = attrezzo.corpo.id;
+                const consegna = (righe, verbale) => admin.chiamata('/api/magazzino/consegna', {
+                    method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, verbale, righe }
+                });
+                const rientra = (righe, verbale) => admin.chiamata('/api/magazzino/rientro', {
+                    method: 'POST', body: { da: { tipo: 'persona', id: idVolontario }, verbale, righe }
+                });
+                const righeDi = async (id) => ((await admin.chiamata(`/api/magazzino/verbali/${id}`)).corpo?.righe || []).map(r => r.bene_id);
+                await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: {
+                    conferma_dpi: true, verbale_consegna_attrezzature: false, verbale_rientro: true, verbale_rientro_attrezzature: false } });
+                const soloAttrezzo = await consegna([{ bene_id: idAttrezzo }], true);
+                verifica('con la conferma dei DPI, un attrezzo da solo non ha verbale',
+                    soloAttrezzo.stato === 201 && soloAttrezzo.corpo?.verbale_id === null, JSON.stringify(soloAttrezzo.corpo));
+                const rientroAttrezzo = await rientra([{ bene_id: idAttrezzo }], true);
+                verifica('e nemmeno al rientro, se per le attrezzature è spento',
+                    rientroAttrezzo.stato === 201 && rientroAttrezzo.corpo?.verbale_id === null, JSON.stringify(rientroAttrezzo.corpo));
+                const misto = await consegna([{ bene_id: idScarpe, quantita: 1 }, { bene_id: idAttrezzo }], false);
+                const righeMisto = misto.corpo?.verbale_id ? await righeDi(misto.corpo.verbale_id) : [];
+                verifica('DPI e attrezzo insieme: nel verbale da confermare solo i DPI',
+                    misto.stato === 201 && righeMisto.length === 1 && righeMisto[0] === idScarpe, JSON.stringify(righeMisto));
+                const rientroMisto = await rientra([{ bene_id: idScarpe, quantita: 1, resto: 'in_carico' }, { bene_id: idAttrezzo }], true);
+                const righeRientro = rientroMisto.corpo?.verbale_id ? await righeDi(rientroMisto.corpo.verbale_id) : [];
+                verifica('al rientro lo stesso: nel verbale solo i DPI',
+                    rientroMisto.stato === 201 && righeRientro.length === 1 && righeRientro[0] === idScarpe, JSON.stringify(righeRientro));
+                await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { verbale_consegna_attrezzature: true } });
+                const chiesto = await consegna([{ bene_id: idAttrezzo }], true);
+                const righeChiesto = chiesto.corpo?.verbale_id ? await righeDi(chiesto.corpo.verbale_id) : [];
+                verifica('acceso per le attrezzature e chiesto, il verbale c\'è',
+                    chiesto.stato === 201 && righeChiesto.length === 1 && righeChiesto[0] === idAttrezzo, JSON.stringify(chiesto.corpo));
+                const nonChiesto = await rientra([{ bene_id: idAttrezzo }], false);
+                verifica('non chiesto, no', nonChiesto.stato === 201 && nonChiesto.corpo?.verbale_id === null, JSON.stringify(nonChiesto.corpo));
+                // Dall'app la conferma lo dice.
+                if (chiesto.corpo?.verbale_id) {
+                    const dallApp = await volontario.chiamata(`/api/magazzino/verbali/${chiesto.corpo.verbale_id}/conferma`, {
+                        method: 'POST', headers: { 'X-Orion-Client': 'app' } });
+                    const v = (await volontario.chiamata(`/api/magazzino/verbali/${chiesto.corpo.verbale_id}`)).corpo;
+                    verifica("confermato dall'app: il verbale lo dice", dallApp.stato === 200 && v?.conferma_canale === 'app', JSON.stringify(v?.conferma_canale));
+                }
+                await admin.chiamata('/api/magazzino/movimenti', { method: 'POST', body: { bene_id: idAttrezzo, tipo: 'dismissione', quantita: 1, note: 'prova' } });
+            }
+            await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: {
+                conferma_dpi: !!configPrima.conferma_dpi, verbale_rientro: !!configPrima.verbale_rientro,
+                verbale_consegna_attrezzature: !!configPrima.verbale_consegna_attrezzature,
+                verbale_rientro_attrezzature: !!configPrima.verbale_rientro_attrezzature } });
 
             const statoInventato = await volontario.chiamata('/api/magazzino/verbali/miei?stato=qualunque');
             verifica('uno stato inventato -> 400', statoInventato.stato === 400, `HTTP ${statoInventato.stato}`);
@@ -1261,7 +1347,8 @@ async function eseguiTest() {
     console.log('\n[7-bis] Resoconto testuale delle emergenze');
     const archivio = await admin.chiamata('/api/admin/emergencies/closed');
     verifica('elenco emergenze archiviate consultabile', archivio.stato === 200, `HTTP ${archivio.stato}`);
-    const emergenzaArchiviata = Array.isArray(archivio.corpo) ? archivio.corpo[0] : null;
+    // Un'emergenza vera: il resoconto di una simulazione ha la sua intestazione.
+    const emergenzaArchiviata = Array.isArray(archivio.corpo) ? (archivio.corpo.find(e => !e.simulazione) || archivio.corpo[0]) : null;
     if (emergenzaArchiviata) {
         const resoconto = await admin.chiamata(`/api/admin/emergencies/${emergenzaArchiviata.id}/resoconto`);
         verifica('resoconto scaricabile dall\'amministratore', resoconto.stato === 200, `HTTP ${resoconto.stato}`);
@@ -1683,8 +1770,8 @@ async function eseguiTest() {
                 `${contatto.stato}/${corretto.stato} ${JSON.stringify(inRubrica)}`);
             const rubricaEsterno = await clientEsterno.chiamata('/api/rubrica');
             const scriveEsterno = await clientEsterno.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Esterno', telefono: '123' } });
-            verifica('rubrica: un esterno non la legge e non la scrive -> 403',
-                rubricaEsterno.stato === 403 && scriveEsterno.stato === 403, `${rubricaEsterno.stato}/${scriveEsterno.stato}`);
+            verifica('rubrica: un esterno la legge ma non la scrive',
+                rubricaEsterno.stato === 200 && Array.isArray(rubricaEsterno.corpo) && scriveEsterno.stato === 403, `${rubricaEsterno.stato}/${scriveEsterno.stato}`);
             const tolto = await volontario.chiamata(`/api/rubrica/${contatto.corpo?.id}`, { method: 'DELETE' });
             const toltoDiNuovo = await volontario.chiamata(`/api/rubrica/${contatto.corpo?.id}`, { method: 'DELETE' });
             verifica('rubrica: il contatto si toglie (e una seconda volta -> 404)',
@@ -1695,8 +1782,9 @@ async function eseguiTest() {
             // Nell'app un esterno ha solo l'emergenza: la vede e, in squadra,
             // ne manda la posizione (la Croce Rossa arrivata al COC).
             const contestoEsterno = await clientEsterno.chiamata('/api/app/contesto');
+            // (e, a emergenza aperta, i documenti del gruppo segnati per l'emergenza)
             verifica("per un esterno l'app ha solo l'emergenza",
-                contestoEsterno.stato === 200 && (contestoEsterno.corpo?.capacita || []).join() === 'emergenza',
+                contestoEsterno.stato === 200 && (contestoEsterno.corpo?.capacita || []).filter(c => c !== 'documenti').join() === 'emergenza',
                 `HTTP ${contestoEsterno.stato} ${JSON.stringify(contestoEsterno.corpo?.capacita)}`);
             const offertaEsterno = await clientEsterno.chiamata('/api/app/offerta');
             verifica("anche a un esterno il web può proporre l'app", offertaEsterno.stato === 200, `HTTP ${offertaEsterno.stato}`);
@@ -1872,6 +1960,8 @@ async function eseguiTest() {
         // della segreteria.
         const completa = await admin.chiamata('/api/branding/settings/full');
         const segreteriaPrima = completa.corpo?.segreteria_config;
+        verifica('la password della posta non torna al browser, nemmeno all\'amministratore',
+            !('smtp_pass' in (completa.corpo || {})) && typeof completa.corpo?.smtp_pass_impostata === 'boolean', Object.keys(completa.corpo || {}).filter(k => k.startsWith('smtp')));
         const prova = JSON.stringify({ enabled: false, custom_emails: 'interno@esempio.it', custom_user_email_template: 'Ciao {NOME}' });
         await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { segreteria_config: prova } });
         const pubbliche = await anonimo.chiamata('/api/branding/settings');
@@ -2060,14 +2150,12 @@ async function eseguiTest() {
         if (!giaAperta) verifica('emergenza di prova aperta', aperta.stato === 200 || aperta.stato === 201, `HTTP ${aperta?.stato}`);
         let avvisoApertura = null;
         if (!giaAperta) {
-            // L'apertura finisce nella coda di tutti (non per email).
-            for (let i = 0; i < 20 && !avvisoApertura; i++) {
-                await new Promise(r => setTimeout(r, 150));
-                avvisoApertura = ((await volontario.chiamata('/api/notifiche')).corpo?.notifiche || [])
-                    .find(n => n.tipo === 'emergenza_aperta' && n.riferimento_id === aperta.corpo?.emergency?.id);
-            }
-            verifica("l'apertura dell'emergenza arriva nella coda dei volontari, come emergenza",
-                avvisoApertura?.categoria === 'emergenza' && !!avvisoApertura?.scade_il, JSON.stringify(avvisoApertura));
+            // L'apertura non finisce più nella coda di tutti: l'avviso arriva
+            // solo a chi entra in squadra (tests/emergenza-app.mjs).
+            await new Promise(r => setTimeout(r, 500));
+            avvisoApertura = ((await volontario.chiamata('/api/notifiche')).corpo?.notifiche || [])
+                .find(n => n.tipo === 'emergenza_aperta' && n.riferimento_id === aperta.corpo?.emergency?.id) || null;
+            verifica("l'apertura dell'emergenza non manda avvisi a tutti", !avvisoApertura, JSON.stringify(avvisoApertura));
             const contestoEmergenza = await volontario.chiamata('/api/app/contesto');
             verifica("in emergenza l'app controlla la coda ogni 15 minuti",
                 contestoEmergenza.corpo?.notifiche?.controllo_minuti === 15, JSON.stringify(contestoEmergenza.corpo?.notifiche));
@@ -2116,8 +2204,8 @@ async function eseguiTest() {
             entrato.stato === 200 && !!entrato.corpo?.token && (entrato.corpo?.ruoli || []).join() === 'esterno' && entrato.corpo?.ente === 'Croce Rossa',
             `HTTP ${entrato.stato} ${JSON.stringify(entrato.corpo)}`);
         const contestoCri = await cri.chiamata('/api/app/contesto');
-        verifica("nell'app l'esterno ha l'emergenza, e sa di essere temporaneo",
-            contestoCri.stato === 200 && (contestoCri.corpo?.capacita || []).join() === 'emergenza'
+        verifica("nell'app l'esterno ha l'emergenza e i suoi documenti, e sa di essere temporaneo",
+            contestoCri.stato === 200 && (contestoCri.corpo?.capacita || []).join() === 'emergenza,documenti'
                 && contestoCri.corpo?.utente?.temporaneo === true && contestoCri.corpo?.squadra?.id === idSquadra,
             `HTTP ${contestoCri.stato} ${JSON.stringify({ c: contestoCri.corpo?.capacita, u: contestoCri.corpo?.utente, s: contestoCri.corpo?.squadra })}`);
         const posizione = await cri.chiamata('/api/location', { method: 'POST', body: { squadra_id: idSquadra, latitude: 46.14, longitude: 12.21 } });
@@ -2207,7 +2295,143 @@ async function eseguiTest() {
             sospendiTemp.stato === 409 && azzeraTemp.stato === 409 && modificaTemp.stato === 409,
             `${sospendiTemp.stato}/${azzeraTemp.stato}/${modificaTemp.stato}`);
 
+        // La configurazione iniziale esiste solo finché non c'è un amministratore.
+        const primoGet = await anonimo.chiamata('/api/primo-accesso');
+        const primoPost = await anonimo.chiamata('/api/primo-accesso', { method: 'POST', body: { codice: 'AAAA-BBBB-CCCC-DDDD', nome: 'X', cognome: 'Y', username: 'intruso', password: 'Coc-Intruso-2026!' } });
+        verifica('primo accesso: con un amministratore già presente il modulo non c\'è (409)',
+            primoGet.corpo?.necessario === false && primoPost.stato === 409, `${JSON.stringify(primoGet.corpo)} ${primoPost.stato}`);
+
+        // Le funzioni di supporto: spente non esistono; accese, un incarico
+        // affida a una funzione un compito su una segnalazione, e concluderlo
+        // non chiude la segnalazione.
+        const statoFunzioniPrima = (await admin.chiamata('/api/branding/settings')).corpo?.funzioni_enabled;
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'false' } });
+        const funzioniSpente = await volontario.chiamata('/api/funzioni');
+        verifica('funzioni spente: le rotte non esistono (404)', funzioniSpente.stato === 404 && funzioniSpente.corpo?.modulo_spento === true, `HTTP ${funzioniSpente.stato}`);
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'true' } });
+        const catalogo = (await admin.chiamata('/api/admin/funzioni')).corpo?.funzioni || [];
+        const f2 = catalogo.find(f => f.sigla === 'F2');
+        const f7 = catalogo.find(f => f.sigla === 'F7');
+        verifica('funzioni: le funzioni del metodo Augustus ci sono già', !!f2 && !!f7, JSON.stringify(catalogo.map(f => f.sigla)));
+        const fissoDaVolontario = await volontario.chiamata(`/api/funzioni/${f7?.id}/membri`, { method: 'POST', body: { user_id: idVolontario } });
+        const tempDaVolontario = await volontario.chiamata(`/api/funzioni/${f2?.id}/membri`, { method: 'POST', body: { user_id: idTemp } });
+        const fissoDaAdmin = await admin.chiamata(`/api/funzioni/${f7?.id}/membri`, { method: 'POST', body: { user_id: idVolontario, referente: true } });
+        verifica('membri: un utente fisso lo mette solo l\'amministratore, un temporaneo ogni operatore in emergenza',
+            fissoDaVolontario.stato === 403 && tempDaVolontario.stato === 201 && fissoDaAdmin.stato === 201,
+            `${fissoDaVolontario.stato}/${tempDaVolontario.stato}/${fissoDaAdmin.stato}`);
+        const frana = await admin.chiamata('/api/reports', {
+            method: 'POST', body: { title: 'Frana in via Roma (funzioni)', reporter_name: 'Collaudo', reporter_contact: '000', priority: 'High' }
+        });
+        const idFrana = frana.corpo?.id;
+        const senzaMotivo = await volontario.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f2?.id, motivazione: '  ' } });
+        // Le note di diario restano legate a chi le scrive (e chi ne ha scritte
+        // non si elimina): le scrive l'amministratore, il volontario prova solo
+        // quello che viene rifiutato.
+        const incaricoF2 = await admin.chiamata(`/api/reports/${idFrana}/incarichi`, {
+            method: 'POST', body: { funzione_id: f2?.id, motivazione: 'Due persone allettate da trasferire' }
+        });
+        const doppio = await volontario.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f2?.id, motivazione: 'di nuovo' } });
+        const daEsterno = await subentro.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f7?.id, motivazione: 'no' } });
+        verifica('incarico: serve la motivazione (400), uno aperto per funzione (409), non lo assegna un esterno (403)',
+            senzaMotivo.stato === 400 && incaricoF2.stato === 201 && doppio.stato === 409 && daEsterno.stato === 403,
+            `${senzaMotivo.stato}/${incaricoF2.stato}/${doppio.stato}/${daEsterno.stato}`);
+        let avvisoIncarico = null;
+        for (let i = 0; i < 20 && !avvisoIncarico; i++) {
+            await new Promise(r => setTimeout(r, 150));
+            avvisoIncarico = ((await subentro.chiamata('/api/notifiche')).corpo?.notifiche || []).find(n => n.tipo === 'incarico_funzione');
+        }
+        verifica("incarico: chi è nella funzione lo trova fra le notifiche", avvisoIncarico?.categoria === 'emergenza', JSON.stringify(avvisoIncarico));
+        const contestoMembro = await subentro.chiamata('/api/app/contesto');
+        verifica("contesto dell'app: le funzioni della persona con gli incarichi aperti",
+            (contestoMembro.corpo?.funzioni?.mie || []).some(f => f.sigla === 'F2' && f.aperti >= 1), JSON.stringify(contestoMembro.corpo?.funzioni));
+        const incaricoF7 = await admin.chiamata(`/api/reports/${idFrana}/incarichi`, {
+            method: 'POST', body: { funzione_id: f7?.id, motivazione: 'Valutare la chiusura della strada' }
+        });
+        const mieiDaEsterno = await subentro.chiamata('/api/incarichi');
+        const notaF2 = await subentro.chiamata(`/api/reports/${idFrana}/updates`, { method: 'POST', body: { update_text: 'Contattata la RSA, posto dalle 16', funzione_id: f2?.id } });
+        const presaF2 = await subentro.chiamata(`/api/incarichi/${incaricoF2.corpo?.id}/presa`, { method: 'POST' });
+        const concludeAltrui = await subentro.chiamata(`/api/incarichi/${incaricoF7.corpo?.id}/concludi`, { method: 'POST', body: { esito: 'non mio' } });
+        verifica("l'esterno della F2 vede solo gli incarichi della F2, annota per la F2, la prende in carico, non tocca la F7",
+            (mieiDaEsterno.corpo || []).length === 1 && mieiDaEsterno.corpo[0].sigla === 'F2'
+                && notaF2.stato === 201 && notaF2.corpo?.funzione_sigla === 'F2' && presaF2.corpo?.stato === 'in_corso' && concludeAltrui.stato === 403,
+            `${(mieiDaEsterno.corpo || []).map(i => i.sigla)} ${notaF2.stato} ${presaF2.stato}/${presaF2.corpo?.stato} ${concludeAltrui.stato}`);
+        const senzaEsito = await subentro.chiamata(`/api/incarichi/${incaricoF2.corpo?.id}/concludi`, { method: 'POST', body: { esito: '' } });
+        const concluso = await subentro.chiamata(`/api/incarichi/${incaricoF2.corpo?.id}/concludi`, {
+            method: 'POST', body: { esito: 'Trasferite alla RSA con ambulanza CRI alle 16:40' }
+        });
+        const franaDopo = (await volontario.chiamata(`/api/reports/${idFrana}`)).corpo?.report;
+        verifica("concludere l'incarico (con l'esito) non chiude la segnalazione, e la scheda porta le etichette delle funzioni",
+            senzaEsito.stato === 400 && concluso.corpo?.stato === 'concluso' && franaDopo?.status !== 'Closed'
+                && (franaDopo?.incarichi || []).some(i => i.sigla === 'F2' && i.stato === 'concluso')
+                && (franaDopo?.incarichi || []).some(i => i.sigla === 'F7' && i.stato === 'aperto'),
+            `${senzaEsito.stato}/${concluso.stato} ${franaDopo?.status} ${JSON.stringify(franaDopo?.incarichi)}`);
+        const annullato = await admin.chiamata(`/api/incarichi/${incaricoF7.corpo?.id}`, { method: 'DELETE' });
+        const annullaConcluso = await volontario.chiamata(`/api/incarichi/${incaricoF2.corpo?.id}`, { method: 'DELETE' });
+        verifica('un incarico ancora aperto si annulla; uno preso o concluso no (409)',
+            annullato.stato === 200 && annullaConcluso.stato === 409, `${annullato.stato}/${annullaConcluso.stato}`);
+        // L'esterno della funzione agisce sulla segnalazione solo finché la sua
+        // funzione ha un incarico da concludere, e con il modulo acceso.
+        const dopoConcluso = await subentro.chiamata(`/api/reports/${idFrana}/updates`, { method: 'POST', body: { update_text: 'dopo la conclusione' } });
+        const riassegnato = await admin.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f2?.id, motivazione: 'Di nuovo' } });
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'false' } });
+        const aModuloSpento = await subentro.chiamata(`/api/reports/${idFrana}/coordinates`, { method: 'PUT', body: { latitude: 46.2, longitude: 12.3 } });
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'true' } });
+        verifica("l'esterno della funzione non scrive più a incarico concluso, né a modulo spento (403)",
+            dopoConcluso.stato === 403 && riassegnato.stato === 201 && aModuloSpento.stato === 403,
+            `${dopoConcluso.stato}/${riassegnato.stato}/${aModuloSpento.stato}`);
+        // Due "Concludi" nello stesso istante: uno passa, l'altro trova l'incarico già concluso.
+        const [primo, secondo] = await Promise.all(['primo', 'secondo'].map(esito =>
+            admin.chiamata(`/api/incarichi/${riassegnato.corpo?.id}/concludi`, { method: 'POST', body: { esito } })));
+        verifica('due conclusioni insieme: una sola passa, l\'altra 409', [primo.stato, secondo.stato].sort().join() === '200,409', `${primo.stato}/${secondo.stato}`);
+        await admin.chiamata(`/api/funzioni/${f7?.id}/membri/${idVolontario}`, { method: 'DELETE' });
+
+        // La mappa: strade chiuse e zone dell'emergenza le disegna la sala, gli
+        // elementi del piano l'amministratore; le vedono tutti, esterni compresi.
+        const linea = { type: 'LineString', coordinates: [[12.2010, 46.1395], [12.2050, 46.1400], [12.2090, 46.1410]] };
+        const area = { type: 'Polygon', coordinates: [[[12.20, 46.13], [12.21, 46.13], [12.21, 46.14], [12.20, 46.13]]] };
+        const stradaDaEsterno = await subentro.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'strada_chiusa', nome: 'no', geometria: linea } });
+        const stradaComeArea = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'strada_chiusa', geometria: area } });
+        const proiettata = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'zona_interdetta', geometria: { type: 'Polygon', coordinates: [[[1750000, 5110000], [1751000, 5110000], [1751000, 5111000], [1750000, 5110000]]] } } });
+        const pianoDaVolontario = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'pericolo_alluvione', geometria: area, piano: true } });
+        // Il limite alto della mappa (8 MB) vale solo per chi ha una sessione.
+        const grosso = JSON.stringify({ tipo: 'altro', geometria: { type: 'LineString', coordinates: Array.from({ length: 20000 }, (_, i) => [12 + i * 1e-6, 46]) } });
+        const anonimoGrosso = await fetch(`${BASE}/api/mappa/elementi`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: grosso });
+        const tipoEreditato = await admin.chiamata('/api/mappa/piano?tipo=constructor&disegnati=1', { method: 'DELETE' });
+        verifica('mappa: un anonimo non manda corpi grandi (413); "constructor" non è un tipo (400)',
+            anonimoGrosso.status === 413 && tipoEreditato.stato === 400, `${anonimoGrosso.status}/${tipoEreditato.stato}`);
+        verifica('mappa: un esterno non disegna (403), una strada è una linea (400), le coordinate sono in gradi (400), il piano è dell\'amministratore (403)',
+            stradaDaEsterno.stato === 403 && stradaComeArea.stato === 400 && proiettata.stato === 400 && /EPSG:4326/.test(proiettata.corpo?.message || '') && pianoDaVolontario.stato === 403,
+            `${stradaDaEsterno.stato}/${stradaComeArea.stato}/${proiettata.stato}/${pianoDaVolontario.stato}`);
+        const strada = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'strada_chiusa', nome: 'Via Feltre (collaudo)', note: 'Allagata', geometria: linea } });
+        const zonaPiano = await admin.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'pericolo_alluvione', nome: 'Area P3 (collaudo)', livello: 'P3', geometria: area, piano: true } });
+        const vistaEsterno = await subentro.chiamata('/api/mappa/elementi');
+        verifica('mappa: la strada chiusa è dell\'emergenza, la zona del piano no, e l\'esterno le vede',
+            strada.stato === 201 && strada.corpo?.emergency_id && zonaPiano.stato === 201 && zonaPiano.corpo?.emergency_id === null
+                && (vistaEsterno.corpo?.emergenza || []).some(m => m.id === strada.corpo?.id) && (vistaEsterno.corpo?.piano || []).some(m => m.id === zonaPiano.corpo?.id),
+            `${strada.stato}/${zonaPiano.stato}/${vistaEsterno.stato}`);
+        const riaperta = await volontario.chiamata(`/api/mappa/elementi/${strada.corpo?.id}`, { method: 'DELETE' });
+        const dopoRiapertura = await volontario.chiamata('/api/mappa/elementi');
+        const situazioneMappa = await volontario.chiamata('/api/situazione');
+        verifica('mappa: la strada riaperta sparisce dalla mappa ma resta nel punto di situazione, con chi e quando',
+            riaperta.stato === 200 && !(dopoRiapertura.corpo?.emergenza || []).some(m => m.id === strada.corpo?.id)
+                && (situazioneMappa.corpo?.mappa || []).some(m => m.id === strada.corpo?.id && m.rimosso_il && m.rimosso_da),
+            `${riaperta.stato} ${JSON.stringify((situazioneMappa.corpo?.mappa || []).slice(-1))}`);
+        const importa = await admin.chiamata('/api/mappa/importa', {
+            method: 'POST', body: { tipo: 'area_attesa', origine: 'collaudo.geojson', elementi: [{ geometria: area, nome: 'Piazza' }, { geometria: { type: 'Point', coordinates: [12.21, 46.14] }, nome: 'Parcheggio' }] }
+        });
+        const svuota = await admin.chiamata('/api/mappa/piano?tipo=area_attesa&origine=collaudo.geojson', { method: 'DELETE' });
+        const toltaZona = await admin.chiamata(`/api/mappa/elementi/${zonaPiano.corpo?.id}`, { method: 'DELETE' });
+        verifica('mappa: si importa un livello del piano e si toglie per reimportarlo',
+            importa.stato === 201 && importa.corpo?.importati === 2 && svuota.corpo?.tolti === 2 && toltaZona.stato === 200,
+            `${importa.stato}/${svuota.stato} ${svuota.corpo?.tolti}/${toltaZona.stato}`);
+
         // Il punto di situazione: lo legge chi lavora in sala, non l'esterno.
+        const situazioneFunzioni = await volontario.chiamata('/api/situazione');
+        verifica('punto di situazione: gli incarichi delle funzioni, con motivazione ed esito',
+            (situazioneFunzioni.corpo?.funzioni || []).some(f => f.sigla === 'F2'
+                && (f.incarichi || []).some(i => i.stato === 'concluso' && /RSA/.test(i.esito || ''))),
+            JSON.stringify(situazioneFunzioni.corpo?.funzioni));
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: statoFunzioniPrima ?? 'false' } });
         const situazione = await volontario.chiamata('/api/situazione');
         const squadraInSituazione = (situazione.corpo?.squadre || []).find(sq => sq.nome_radio === libero);
         verifica('punto di situazione: emergenza, segnalazioni aperte e chiuse, squadre con i componenti',
@@ -2254,13 +2478,14 @@ async function eseguiTest() {
             const chiusa = await admin.chiamata('/api/emergencies/close', { method: 'POST' });
             const dopoChiusura = await tecnico.chiamata('/api/app/contesto');
             const codiceDopo = await creaClient().chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: secondo.corpo?.codice } });
+            verifica("chiudendo l'emergenza si riceve il sigillo dello storico", /^ORION sigillo n\. \d+ del .+: [0-9a-f]{64}$/.test(chiusa.corpo?.sigillo || ''), chiusa.corpo?.sigillo);
             verifica("chiusa l'emergenza, l'accesso temporaneo finisce: sessione e codice",
                 secondo.stato === 201 && chiusa.stato === 200 && dopoChiusura.stato === 403
                     && dopoChiusura.corpo?.motivo === 'accesso_temporaneo_finito' && codiceDopo.stato === 401,
                 `${secondo.stato}/${chiusa.stato}/${dopoChiusura.stato}/${codiceDopo.stato}`);
             const codaDopo = await volontario.chiamata('/api/notifiche');
-            verifica("chiusa l'emergenza, il suo avviso esce dalla coda",
-                !(codaDopo.corpo?.notifiche || []).some(n => n.id === avvisoApertura?.id), JSON.stringify(codaDopo.corpo?.notifiche?.slice(-3)));
+            verifica("chiusa l'emergenza, i suoi avvisi escono dalla coda",
+                !(codaDopo.corpo?.notifiche || []).some(n => n.categoria === 'emergenza'), JSON.stringify(codaDopo.corpo?.notifiche?.slice(-3)));
             const contestoDopo = await volontario.chiamata('/api/app/contesto');
             verifica("fuori emergenza l'app controlla la coda ogni ora",
                 contestoDopo.corpo?.notifiche?.controllo_minuti === 60, JSON.stringify(contestoDopo.corpo?.notifiche));

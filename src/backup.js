@@ -10,6 +10,7 @@ import zlib from 'zlib';
 import { dbDatabase, dbHost, dbPort, dbUser } from './db.js';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
+import { cifraturaPronta, flussoCifrato } from './cifratura.js';
 
 // Oltre al backup notturno di cron, l'applicazione ne fa da sé alla chiusura di
 // un'emergenza e quando l'ultimo è troppo vecchio (il server era spento alle
@@ -58,8 +59,13 @@ export async function eseguiBackupDatabase(motivo) {
                 : rifiuta(new Error(`pg_dump terminato con codice ${codice}: ${erroriDump.trim().slice(0, 300)}`)));
         });
 
+        // Cifrato con la chiave dei dati, se c'è: un backup copiato altrove
+        // non si legge. Senza chiave resta in chiaro, come prima.
+        const passi = [processoDump.stdout, zlib.createGzip()];
+        if (cifraturaPronta()) passi.push(flussoCifrato());
+        else logger.warn('[Backup] Chiave dei dati non disponibile: backup in chiaro.');
         await Promise.all([
-            pipeline(processoDump.stdout, zlib.createGzip(), fs.createWriteStream(percorsoFile)),
+            pipeline(...passi, fs.createWriteStream(percorsoFile)),
             uscitaDump
         ]);
 

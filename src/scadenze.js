@@ -9,19 +9,22 @@ import { pool } from './db.js';
 import { escapeHtmlForEmail, sendEmailUtility } from './email.js';
 import { magazzino } from './istanze.js';
 import { notifiche } from './tempoReale.js';
+import { pulisciTokenAvvisi } from './avvisi.js';
+import { sqlHaPermesso } from './permessi.js';
 
 // I riepiloghi nell'app di chi fa la segreteria e di chi tiene il magazzino
 // (gli amministratori li ricevono entrambi). Uno solo valido alla volta, e
 // solo se i numeri sono cambiati: un avviso identico ogni mattina non si legge.
 async function accodaRiepiloghi(segreteriaAttiva) {
-    async function aChi(ruolo) {
+    // Chi ha il permesso, dal ruolo o in più (permessi.js).
+    async function aChi(permesso) {
+        const chi = sqlHaPermesso(permesso, 1);
         const { rows } = await pool.query(
-            `SELECT DISTINCT u.id FROM users u JOIN utenti_ruoli ur ON ur.user_id = u.id
-             WHERE COALESCE(u.is_active, true) = true AND ur.ruolo IN ($1, 'admin')`, [ruolo]);
+            `SELECT u.id FROM users u WHERE COALESCE(u.is_active, true) = true AND u.eliminato_il IS NULL AND ${chi.condizione}`, chi.parametri);
         return rows.map(r => r.id);
     }
-    async function accoda(ruolo, tipo, titolo, testo, riferimento) {
-        for (const id of await aChi(ruolo)) {
+    async function accoda(permesso, tipo, titolo, testo, riferimento) {
+        for (const id of await aChi(permesso)) {
             const uguale = await pool.query(
                 `SELECT 1 FROM notifiche WHERE user_id = $1 AND tipo = $2 AND testo = $3
                    AND (scade_il IS NULL OR scade_il > NOW())`, [id, tipo, testo]);
@@ -53,7 +56,7 @@ async function accodaRiepiloghi(segreteriaAttiva) {
                        (SELECT COUNT(DISTINCT id) FROM (SELECT id FROM visite UNION
                             SELECT user_id FROM corsi WHERE expiry_date IS NOT NULL AND expiry_date::date <= CURRENT_DATE + 30) p)::int AS persone`);
             if (c.persone > 0) {
-                await accoda('segreteria', 'segreteria_riepilogo',
+                await accoda('volontari.sanitario', 'segreteria_riepilogo',
                     `Segreteria: ${c.persone} ${c.persone === 1 ? 'volontario' : 'volontari'} da sistemare`,
                     `${c.visite} ${c.visite === 1 ? 'visita' : 'visite'} e ${c.corsi} ${c.corsi === 1 ? 'corso' : 'corsi'} da rinnovare, scaduti o mancanti.`,
                     { tipo: 'segreteria', id: null });
@@ -66,7 +69,7 @@ async function accodaRiepiloghi(segreteriaAttiva) {
             const parti = [];
             if (m.scadenze) parti.push(`${m.scadenze} ${m.scadenze === 1 ? 'scadenza' : 'scadenze'} entro un mese`);
             if (m.fuori) parti.push(`${m.fuori} ${m.fuori === 1 ? 'oggetto fuori' : 'oggetti fuori'} da troppo tempo`);
-            await accoda('magazziniere', 'magazzino_riepilogo',
+            await accoda('magazzino.gestione', 'magazzino_riepilogo',
                 `Magazzino: ${m.scadenze + m.fuori} ${m.scadenze + m.fuori === 1 ? 'cosa' : 'cose'} da guardare`,
                 `${parti.join(', ')}.`, { tipo: 'magazzino', id: null });
         } else if (m) {
@@ -216,10 +219,10 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
             if ((isFirstOfMonth || forceAdminReport) && (config.notify_admin || config.custom_emails)) {
                 let adminEmails = [];
                 if (config.notify_admin) {
+                    const chi = sqlHaPermesso('volontari.sanitario', 1);
                     const admins = await client.query(`
                         SELECT DISTINCT u.email FROM users u
-                        JOIN utenti_ruoli ur ON ur.user_id = u.id
-                        WHERE ur.ruolo IN ('admin', 'segreteria') AND u.is_active = true AND u.email IS NOT NULL`);
+                        WHERE ${chi.condizione} AND u.is_active = true AND u.email IS NOT NULL`, chi.parametri);
                     adminEmails = admins.rows.map(a => a.email);
                 }
                 if (config.custom_emails) {
@@ -351,6 +354,7 @@ export async function cleanupRevokedTokens() {
         }
         const rinnovi = await pool.query('DELETE FROM token_rinnovo WHERE scade_il < NOW()');
         if (rinnovi.rowCount > 0) logger.info(`[Manutenzione] Rimossi ${rinnovi.rowCount} token di rinnovo scaduti.`);
+        await pulisciTokenAvvisi();
     } catch (error) {
         logger.error('[Manutenzione] Pulizia revoked_tokens fallita:', { error });
     }

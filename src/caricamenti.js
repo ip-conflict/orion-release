@@ -11,6 +11,7 @@ import path from 'path';
 import { CARTELLA_BACKUP_APP } from './backup.js';
 import { fileTypeFromFile } from 'file-type';
 import { fileURLToPath } from 'url';
+import { inviaFile } from './cifratura.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -347,7 +348,5 @@ export function inviaFoto(res, nomeFile) {
     if (!filePath.startsWith(CARTELLA_FOTO + path.sep)) {
         return res.status(403).json({ message: 'Accesso negato' });
     }
-    res.sendFile(filePath, { headers: { 'Cache-Control': 'private, max-age=300' } }, (err) => {
-        if (err && !res.headersSent) res.status(404).json({ message: 'Foto non trovata.' });
-    });
+    inviaFile(res, filePath, { headers: { 'Cache-Control': 'private, max-age=300' } });
 }

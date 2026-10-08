@@ -8,12 +8,15 @@ import logger from './logger.js';
 import path from 'path';
 import { leggiCampiAnagrafici } from './anagrafica.js';
 import { registraAudit } from './audit.js';
-import { checkAdminOrSegreteriaRole, checkAdminRole, checkOwnershipOrSegreteria, checkSegreteriaAccess } from './autenticazione.js';
+import { checkAdminRole, checkOwnershipOrSegreteria, checkSegreteriaAccess } from './autenticazione.js';
+import { haPermesso, richiedePermesso } from './permessi.js';
 import { certDir, uploadCertificate, uploadPhoto, verifyCertificateUpload, verifySingleUploadedImage } from './caricamenti.js';
 import { pool } from './db.js';
 import { magazzino } from './istanze.js';
 import { qrVolontariAttivi } from './pubbliche.js';
 import { runDailyExpiryCheck } from './scadenze.js';
+import { inviaFile, proteggiCaricati } from './cifratura.js';
+import { cancellaFile, fileDaIndirizzi } from './eliminazionePersona.js';
 
 // Gli esiti che la segreteria può scegliere.
 const ESITI_VISITA = ['Idoneo', 'Non Idoneo'];
@@ -27,8 +30,17 @@ async function riferimentoInesistente(error, req) {
 }
 
 export function registraRotteSegreteria(app) {
-    app.get('/api/users/:userId/libretto', checkOwnershipOrSegreteria, async (req, res) => {
+    // Il libretto: suo, o di chi gestisce visite e corsi. Chi gestisce solo
+    // l'anagrafica lo legge senza visite e corsi (dati_sanitari: false).
+    app.get('/api/users/:userId/libretto', (req, res, next) => {
+        if (haPermesso(req, 'volontari.anagrafica') && !haPermesso(req, 'volontari.sanitario')) {
+            req.senzaDatiSanitari = Number(req.params.userId) !== req.user.id;
+            return next();
+        }
+        return checkOwnershipOrSegreteria(req, res, next);
+    }, async (req, res) => {
         const userId = parseInt(req.params.userId, 10);
+        if (!Number.isInteger(userId)) return res.status(400).json({ message: 'ID utente non valido.' });
         const client = await pool.connect();
         
         try {
@@ -89,9 +101,11 @@ export function registraRotteSegreteria(app) {
                 "SELECT setting_value FROM branding_settings WHERE setting_key = 'magazzino_enabled'");
             const magazzinoAttivo = magazzino.rowCount > 0 && String(magazzino.rows[0].setting_value) === 'true';
 
+            const nascondi = req.senzaDatiSanitari === true;
             res.json({
-                medical_records: medicalRes.rows, 
-                courses: coursesRes.rows,
+                medical_records: nascondi ? [] : medicalRes.rows,
+                courses: nascondi ? [] : coursesRes.rows,
+                dati_sanitari: !nascondi,
                 equipment: magazzinoAttivo ? equipmentRes.rows : [],
                 magazzino_attivo: magazzinoAttivo
             });
@@ -106,7 +120,7 @@ export function registraRotteSegreteria(app) {
 
 
     // Il QR e la foto per stampare il tesserino di un volontario.
-    app.get('/api/admin/users/:id/tesserino', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.get('/api/admin/users/:id/tesserino', richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
         try {
@@ -121,18 +135,23 @@ export function registraRotteSegreteria(app) {
     });
 
     // La foto la carica anche la segreteria, che stampa i tesserini.
-    app.post('/api/admin/users/:id/photo', checkAdminOrSegreteriaRole, uploadPhoto.single('photo'), async (req, res) => {
+    app.post('/api/admin/users/:id/photo', richiedePermesso('volontari.anagrafica'), uploadPhoto.single('photo'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
         if (!req.file) return res.status(400).json({ message: 'Nessuna immagine caricata.' });
         if (!(await verifySingleUploadedImage(req, res, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']))) return;
+        await proteggiCaricati(req.file);
         const photoUrl = `/api/photos/${req.file.filename}`;
         try {
-            const r = await pool.query('UPDATE users SET photo_url = $1 WHERE id = $2', [photoUrl, userId]);
+            // La foto di prima non serve più: si toglie dal disco.
+            const r = await pool.query(
+                `UPDATE users u SET photo_url = $1 FROM (SELECT photo_url AS vecchia FROM users WHERE id = $2) v
+                  WHERE u.id = $2 AND u.eliminato_il IS NULL RETURNING v.vecchia`, [photoUrl, userId]);
             if (r.rowCount === 0) {
                 await fs.promises.unlink(req.file.path).catch(() => {});
                 return res.status(404).json({ message: 'Utente non trovato' });
             }
+            await cancellaFile(fileDaIndirizzi([r.rows[0].vecchia]));
             registraAudit(req, 'utente.foto_cambiata', { tipo: 'utente', id: userId });
             res.json({ message: 'Foto aggiornata.', photo_url: photoUrl });
         } catch (error) {
@@ -142,7 +161,7 @@ export function registraRotteSegreteria(app) {
     });
 
     // Tesserino perso: un token nuovo, il vecchio QR non vale più.
-    app.post('/api/admin/users/:id/rigenera-tesserino', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.post('/api/admin/users/:id/rigenera-tesserino', richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
         try {
@@ -163,13 +182,15 @@ export function registraRotteSegreteria(app) {
 
         try {
             const result = await pool.query(
-                'DELETE FROM user_medical_records WHERE id = $1 RETURNING id',
+                'DELETE FROM user_medical_records WHERE id = $1 RETURNING id, document_url',
                 [recordId]
             );
             
             if (result.rowCount === 0) {
                 return res.status(404).json({ message: 'Visita non trovata.' });
             }
+            // Con la visita se ne va il suo certificato.
+            await cancellaFile(fileDaIndirizzi([result.rows[0].document_url]));
             
             res.json({ message: 'Visita eliminata con successo.' });
             registraAudit(req, 'libretto.visita_eliminata', { tipo: 'visita_medica', id: recordId });
@@ -184,6 +205,7 @@ export function registraRotteSegreteria(app) {
         uploadCertificate.single('document'), 
         async (req, res) => {
             if (!(await verifyCertificateUpload(req, res))) return;
+            await proteggiCaricati(req.file);
             const { visit_type_id, last_visit_date, expiry_date, status } = req.body;
 
             const visitDate = new Date(last_visit_date);
@@ -223,6 +245,7 @@ export function registraRotteSegreteria(app) {
         uploadCertificate.single('document'),
         async (req, res) => {
             if (!(await verifyCertificateUpload(req, res))) return;
+            await proteggiCaricati(req.file);
             const userId = parseInt(req.params.userId, 10);
             const { course_id, acquisition_date, expiry_date } = req.body;
 
@@ -315,7 +338,7 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    app.get('/api/admin/medical-visit-types', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.get('/api/admin/medical-visit-types', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const client = await pool.connect();
         try {
             const result = await client.query('SELECT id, name, validity_months FROM medical_visit_types ORDER BY name ASC');
@@ -326,7 +349,7 @@ export function registraRotteSegreteria(app) {
         } finally { client.release(); }
     });
 
-    app.get('/api/admin/courses-catalog', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.get('/api/admin/courses-catalog', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const client = await pool.connect();
         try {
             const result = await client.query('SELECT id, name, validity_months, course_code FROM courses_catalog ORDER BY name ASC');
@@ -337,7 +360,7 @@ export function registraRotteSegreteria(app) {
         } finally { client.release(); }
     });
 
-    app.post('/api/admin/courses-catalog', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.post('/api/admin/courses-catalog', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const { name, validity_months, course_code } = req.body;
         if (!name || name.trim() === '') {
             return res.status(400).json({ message: 'Il nome del corso non può essere vuoto.' });
@@ -358,7 +381,7 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    app.post('/api/admin/medical-visit-types', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.post('/api/admin/medical-visit-types', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const { name, validity_months } = req.body;
         if (!name || name.trim() === '') {
             return res.status(400).json({ message: 'Il nome della visita non può essere vuoto.' });
@@ -378,7 +401,7 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    app.delete('/api/admin/medical-visit-types/:id', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.delete('/api/admin/medical-visit-types/:id', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const visitId = parseInt(req.params.id, 10);
         try {
             const visitCheck = await pool.query('SELECT name FROM medical_visit_types WHERE id = $1', [visitId]);
@@ -401,7 +424,7 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    app.put('/api/admin/courses-catalog/:id', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.put('/api/admin/courses-catalog/:id', richiedePermesso('volontari.sanitario'), async (req, res) => {
         const courseId = parseInt(req.params.id, 10);
         const { name, validity_months, course_code } = req.body;
         if (isNaN(courseId)) return res.status(400).json({ message: 'ID non valido.' });
@@ -463,6 +486,7 @@ export function registraRotteSegreteria(app) {
 
     app.put('/api/admin/courses/:id', checkSegreteriaAccess, uploadCertificate.single('document'), async (req, res) => {
         if (!(await verifyCertificateUpload(req, res))) return;
+        await proteggiCaricati(req.file);
         const recordId = parseInt(req.params.id, 10);
         const { acquisition_date, expiry_date, delete_document } = req.body;
 
@@ -474,6 +498,8 @@ export function registraRotteSegreteria(app) {
         try {
             const expDate = expiry_date ? expiry_date : null;
             const delDoc = delete_document === 'true';
+            // Il documento di prima, da togliere dal disco se viene sostituito o rimosso.
+            const prima = (await client.query('SELECT document_url FROM user_courses WHERE id = $1', [recordId])).rows[0]?.document_url;
 
             if (req.file) {
                 const new_document_url = `/api/documents/certificates/${req.file.filename}`;
@@ -493,6 +519,7 @@ export function registraRotteSegreteria(app) {
                 );
             }
 
+            if ((req.file || delDoc) && prima) await cancellaFile(fileDaIndirizzi([prima]));
             res.json({ message: 'Corso aggiornato con successo.' });
         } catch (error) {
             logger.error(`Errore PUT courses ${recordId}:`, error);
@@ -507,8 +534,10 @@ export function registraRotteSegreteria(app) {
         if (isNaN(recordId)) return res.status(400).json({ message: 'ID non valido.' });
 
         try {
-            const result = await pool.query('DELETE FROM user_courses WHERE id = $1 RETURNING id', [recordId]);
+            const result = await pool.query('DELETE FROM user_courses WHERE id = $1 RETURNING id, document_url', [recordId]);
             if (result.rowCount === 0) return res.status(404).json({ message: 'Corso non trovato nel libretto.' });
+            // Con il corso se ne va il suo attestato.
+            await cancellaFile(fileDaIndirizzi([result.rows[0].document_url]));
             
             res.json({ message: 'Corso eliminato dal libretto.' });
             registraAudit(req, 'libretto.corso_eliminato', { tipo: 'corso_utente', id: recordId });
@@ -550,7 +579,7 @@ export function registraRotteSegreteria(app) {
         }
 
 
-        res.sendFile(safePath);
+        inviaFile(res, safePath);
     });
 
     app.put('/api/admin/medical-records/:id', 
@@ -558,6 +587,7 @@ export function registraRotteSegreteria(app) {
         uploadCertificate.single('document'),
         async (req, res) => {
             if (!(await verifyCertificateUpload(req, res))) return;
+            await proteggiCaricati(req.file);
             const recordId = parseInt(req.params.id, 10);
             const { last_visit_date, expiry_date, status } = req.body;
             // Prima i campi obbligatori, poi il confronto fra date.
@@ -579,7 +609,8 @@ export function registraRotteSegreteria(app) {
             const client = await pool.connect();
             try {
                 const delete_document = req.body.delete_document === 'true';
-
+                // Il certificato di prima, da togliere dal disco se viene sostituito o rimosso.
+                const prima = (await client.query('SELECT document_url FROM user_medical_records WHERE id = $1', [recordId])).rows[0]?.document_url;
 
                 if (req.file) {
                     const new_document_url = `/api/documents/certificates/${req.file.filename}`;
@@ -603,6 +634,7 @@ export function registraRotteSegreteria(app) {
                     );
                 }
 
+                if ((req.file || delete_document) && prima) await cancellaFile(fileDaIndirizzi([prima]));
                 res.json({ message: 'Visita medica aggiornata con successo.' });
             } catch (error) {
                 logger.error(`Errore PUT medical-records ${recordId}:`, error);
@@ -612,7 +644,7 @@ export function registraRotteSegreteria(app) {
             }
     });
 
-    app.put('/api/admin/users/:id/anagrafica', checkAdminOrSegreteriaRole, async (req, res) => {
+    app.put('/api/admin/users/:id/anagrafica', richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID non valido.' });
         const { valori, errore } = leggiCampiAnagrafici(

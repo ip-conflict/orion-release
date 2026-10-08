@@ -53,6 +53,7 @@
     .et-invio button, .et-secondario { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color, #ccc); background: transparent; color: inherit; font-weight: 600; cursor: pointer; font-size: .85rem; }
     .et-secondario { display: block; margin: 12px auto 0; font-weight: 500; font-size: .8rem; opacity: .85; }
     .et-ok { color: var(--success-text); font-size: .85rem; margin: 6px 0 0; }
+    .et-finestra [hidden] { display: none !important; }
     `;
 
     function el(tag, attributi = {}, ...figli) {
@@ -82,9 +83,7 @@
             el('button', { type: 'button', testo: 'Copia il link', suClick: async (ev) => {
                 try { await navigator.clipboard.writeText(dati.link); ev.target.textContent = 'Copiato'; } catch { window.prompt('Copia il link:', dati.link); }
             } }),
-            navigator.share ? el('button', { type: 'button', testo: 'Condividi', suClick: () => navigator.share({ title: 'Accesso a ORION', text: testoInvito }).catch(() => {}) }) : null,
-            el('a', { href: `https://wa.me/?text=${encodeURIComponent(testoInvito)}`, target: '_blank', rel: 'noopener', testo: 'WhatsApp' }),
-            el('a', { href: `sms:?&body=${encodeURIComponent(testoInvito)}`, testo: 'SMS' })
+            navigator.share ? el('button', { type: 'button', testo: 'Condividi', suClick: () => navigator.share({ title: 'Accesso a ORION', text: testoInvito }).catch(() => {}) }) : null
         );
         const stato = dati.usato_il ? ` Già usato alle ${dataOra(dati.usato_il)}: chi lo apre di nuovo entra come ${nome}.` : '';
         contenitore.append(
@@ -138,6 +137,14 @@
             el('label', { class: 'et-campo' }, 'Nome radio', nomeRadio),
             el('label', { class: 'et-campo' }, 'Nome della squadra', nomeSquadra));
         const email = el('input', { type: 'email', maxlength: 100, placeholder: 'facoltativa' });
+        // La funzione di supporto per cui arriva (il medico nella F2), se il modulo è acceso.
+        const funzione = el('select', {}, el('option', { value: '', testo: 'Nessuna' }));
+        const campoFunzione = el('label', { class: 'et-campo', hidden: true }, 'Funzione di supporto', funzione);
+        fetchApi('/api/funzioni').then(dati => {
+            if (!dati?.attivo || !dati.funzioni?.length) return;
+            dati.funzioni.forEach(f => funzione.append(el('option', { value: f.id, testo: `${f.sigla} ${f.nome}` })));
+            campoFunzione.hidden = false;
+        }).catch(() => { /* modulo spento */ });
         const esito = el('div', { class: 'et-esito', hidden: true });
         const elenco = el('div', { class: 'et-elenco' });
         const crea = el('button', { type: 'submit', class: 'et-principale', testo: 'Crea accesso' });
@@ -148,6 +155,7 @@
             el('label', { class: 'et-campo' }, 'Ente', ente, enti),
             el('label', { class: 'et-campo' }, 'Squadra', squadra),
             bloccoNuova,
+            campoFunzione,
             el('label', { class: 'et-campo' }, 'Email per mandargli il link', email),
             errore,
             el('div', { class: 'et-pulsanti' }, el('button', { type: 'button', testo: 'Chiudi', suClick: chiudi }), crea)
@@ -292,6 +300,7 @@
             errore.hidden = true;
             const corpo = { nome: nome.value, ente: ente.value, email: email.value };
             if (squadra.value === 'nuova') corpo.nuova_squadra = { nome_radio: nomeRadio.value, nome: nomeSquadra.value };
+            if (funzione.value) corpo.funzione_id = Number(funzione.value);
             else if (squadra.value) corpo.squadra_id = Number(squadra.value);
             crea.disabled = true;
             try {

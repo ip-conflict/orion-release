@@ -36,9 +36,9 @@ export function registraRotteSessioni(app) {
         const rinnovo = crypto.randomBytes(32).toString('base64url');
         try {
             await pool.query(
-                `INSERT INTO token_rinnovo (user_id, impronta, dispositivo, scade_il)
-             VALUES ($1, $2, $3, NOW() + ($4::int * INTERVAL '1 day'))`,
-                [req.user.id, impronta(rinnovo), dispositivo, GIORNI_RINNOVO]);
+                `INSERT INTO token_rinnovo (user_id, impronta, dispositivo, scade_il, mfa)
+             VALUES ($1, $2, $3, NOW() + ($4::int * INTERVAL '1 day'), $5)`,
+                [req.user.id, impronta(rinnovo), dispositivo, GIORNI_RINNOVO, req.user.mfa === true]);
             // Solo gli ultimi: un telefono che reinstalla l'app non li accumula.
             await pool.query(
                 `DELETE FROM token_rinnovo WHERE user_id = $1 AND id NOT IN

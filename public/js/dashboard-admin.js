@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const enableSegBtn = document.getElementById('enable-segreteria');
     const constraintsDiv = document.getElementById('segreteria-constraints');
     const enableMagBtn = document.getElementById('enable-magazzino');
+    const enableFunzioniBtn = document.getElementById('enable-funzioni');
     const magazzinoNote = document.getElementById('magazzino-note');
     const blockMed = document.getElementById('block-on-medical');
     const blockCourse = document.getElementById('block-on-course');
@@ -113,9 +114,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (smtpPortInput) smtpPortInput.value = settings.smtp_port || '';
                 if (smtpSecureInput) smtpSecureInput.value = settings.smtp_secure || 'true';
                 if (smtpUserInput) smtpUserInput.value = settings.smtp_user || '';
-                if (smtpPassInput) smtpPassInput.value = settings.smtp_pass || '';
+                // La password non torna dal server: se c'è, il campo vuoto la lascia com'è.
+                if (smtpPassInput) {
+                    smtpPassInput.value = '';
+                    smtpPassInput.placeholder = settings.smtp_pass_impostata ? 'Salvata: lascia vuoto per non cambiarla' : 'Password o App Password';
+                }
                 if (badgeAlwaysOnInput) badgeAlwaysOnInput.checked = settings.badge_qr_always_on === 'true';
                 if (badgeQrEnabledInput) badgeQrEnabledInput.checked = settings.badge_qr_enabled !== 'false';
+                const cfSulTesserino = document.getElementById('badge-cf-barcode');
+                if (cfSulTesserino) cfSulTesserino.checked = settings.badge_cf_barcode !== 'false';
                 aggiornaRigaSempreAttivo();
                 // Mai toccata vuol dire disponibile: l'APK arriva con il server.
                 if (appAndroidInput) appAndroidInput.checked = settings.app_android_enabled !== 'false';
@@ -150,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         if (customEmailTemplateInput) customEmailTemplateInput.value = sConf.custom_user_email_template || "Ciao {NOME},\n\nTi informiamo che il tuo requisito '{REQUISITO}' è in scadenza il giorno {SCADENZA}.\n\nTi preghiamo di contattare il coordinatore o la segreteria per organizzare il rinnovo.\n\nSaluti,\nLa Segreteria";
                         const sidebarSegreteria = document.getElementById('sidebar-segreteria');
-                        if (sidebarSegreteria && sConf.enabled && haRuolo('segreteria')) {
+                        if (sidebarSegreteria && sConf.enabled && haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
                             sidebarSegreteria.style.display = 'block';
                         }
                     } catch(e) { console.error("Errore parse segreteria_config"); }
@@ -162,10 +169,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // scrivono lo stesso oggetto si cancellano a vicenda.
                 if (enableMagBtn) {
                     enableMagBtn.checked = String(settings.magazzino_enabled) === 'true';
+                    if (enableFunzioniBtn) enableFunzioniBtn.checked = String(settings.funzioni_enabled) === 'true';
+                    const enableAttivitaBtn = document.getElementById('enable-attivita');
+                    if (enableAttivitaBtn) enableAttivitaBtn.checked = String(settings.attivita_enabled) !== 'false';
                     const vociMagazzinoMenu = document.getElementById('sidebar-magazzino');
                     if (vociMagazzinoMenu) {
                         vociMagazzinoMenu.style.display =
-                            (enableMagBtn.checked && haRuolo('magazziniere')) ? 'block' : 'none';
+                            (enableMagBtn.checked && haPermesso('magazzino.gestione', 'magazzino.consegne')) ? 'block' : 'none';
                     }
                     if (magazzinoNote) {
                         magazzinoNote.style.display = enableMagBtn.checked ? 'block' : 'none';
@@ -208,8 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
             smtp_pass: smtpPassInput?.value?.trim() || '',
             badge_qr_always_on: badgeAlwaysOnInput?.checked ? 'true' : 'false',
             ...(badgeQrEnabledInput ? { badge_qr_enabled: badgeQrEnabledInput.checked ? 'true' : 'false' } : {}),
+            ...(document.getElementById('badge-cf-barcode') ? { badge_cf_barcode: document.getElementById('badge-cf-barcode').checked ? 'true' : 'false' } : {}),
             ...(appAndroidInput ? { app_android_enabled: appAndroidInput.checked ? 'true' : 'false' } : {}),
             magazzino_enabled: enableMagBtn?.checked ? 'true' : 'false',
+            funzioni_enabled: enableFunzioniBtn?.checked ? 'true' : 'false',
+            ...(document.getElementById('enable-attivita') ? { attivita_enabled: document.getElementById('enable-attivita').checked ? 'true' : 'false' } : {}),
             card_district_label: cardDistrictLabelInput?.value?.trim() || '',
             card_regional_entity_name: cardRegionalEntityNameInput?.value?.trim() || '',
             segreteria_config: JSON.stringify({
@@ -300,6 +313,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }).addTo(pickerMap);
 
         pickerMap.on('click', onPickerMapClick);
+        // Con la ricerca si scrive il nome del comune invece di cercarlo a
+        // occhio sulla carta d'Italia: il punto trovato diventa il centro.
+        import('/js/mappa-strumenti.js').then(({ creaRicerca }) => creaRicerca(pickerMap, {
+            position: 'topright',
+            cercaLocale: () => [],
+            suScelta: (r) => {
+                if (!Number.isFinite(r?.lat) || !Number.isFinite(r?.lng)) return;
+                pickerMap.setView([r.lat, r.lng], Math.max(pickerMap.getZoom(), 13));
+                onPickerMapClick({ latlng: L.latLng(r.lat, r.lng) });
+            }
+        })).catch(e => console.warn('Ricerca non disponibile nella scelta del centro:', e.message));
     }
 
     function openMapPicker() {

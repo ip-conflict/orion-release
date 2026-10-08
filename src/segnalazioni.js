@@ -8,6 +8,7 @@ import logger from './logger.js';
 import multer from 'multer';
 import path from 'path';
 import { authenticateToken, haRuolo, puoVedereEmergenza, ruoliDi } from './autenticazione.js';
+import { haPermesso } from './permessi.js';
 import { uploadImageMulter, verifyMultipleUploadedImages } from './caricamenti.js';
 import { ACTIVE_REPORT_STATUSES_BACKEND, ETICHETTA_PRIORITA, ETICHETTA_STATO, MOTIVI_SENZA_SQUADRA, TERMINAL_REPORT_STATUSES_BACKEND, VALID_REPORT_STATUSES, erroreConflitto, erroreNonTrovato, erroreRichiesta } from './costanti.js';
 import { pool } from './db.js';
@@ -16,22 +17,40 @@ import { avvisaSquadra } from './squadre.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { notifiche, wss } from './tempoReale.js';
 import { fileURLToPath } from 'url';
+import { inviaFile, proteggiCaricati } from './cifratura.js';
+import { aggiornaRischi } from './rischiZone.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Dopo quanti minuti di silenzio di chi manda la posizione di una squadra
+// (il caposquadra, o il primo telefono che l'ha mandata) un altro membro
+// subentra. Il centro operativo segna ferma una posizione dopo cinque.
+export const MINUTI_SUBENTRO = 3;
+
 export function registraRotteSegnalazioni(app) {
 
-    // Un esterno temporaneo agisce solo sulle segnalazioni della sua squadra.
-    // Legge tutta l'emergenza (gli serve il quadro), ma scrivere note, spostare
-    // il punto o caricare foto su un intervento di un'altra squadra non è suo:
-    // la stessa regola che vale già per il caricamento delle immagini.
+    // Un esterno temporaneo agisce solo sulle segnalazioni della sua squadra,
+    // o su quelle dove una funzione di cui fa parte ha un incarico ancora da
+    // concludere (l'operatore ASL nella funzione sanità), con la funzione e il
+    // modulo accesi. Legge tutta l'emergenza (gli serve il quadro),
+    // ma scrivere note, spostare il punto o caricare foto su un intervento non
+    // suo non gli spetta: la stessa regola delle immagini.
     async function esternoFuoriDallaSuaSquadra(req, reportId) {
         if (!ruoliDi(req.user).includes('esterno')) return false;
+        // Chi è nella squadra COC lavora in sala: segue tutte le segnalazioni.
+        const inSala = await pool.query(
+            'SELECT 1 FROM squadra_membri sm JOIN squadre s ON s.id = sm.squadra_id WHERE s.coc AND sm.username = $1', [req.user.username]);
+        if (inSala.rowCount) return false;
         const suo = await pool.query(
             `SELECT 1 FROM report_team_assignments rta
              JOIN squadra_membri sm ON sm.squadra_id = rta.squadra_id
-             WHERE rta.report_id = $1 AND sm.username = $2`,
-            [reportId, req.user.username]);
+             WHERE rta.report_id = $1 AND sm.username = $2
+             UNION ALL
+             SELECT 1 FROM incarichi i JOIN funzione_membri fm ON fm.funzione_id = i.funzione_id
+                                       JOIN funzioni f ON f.id = i.funzione_id AND f.attiva
+             WHERE i.report_id = $1 AND fm.user_id = $3 AND i.stato <> 'concluso'
+               AND EXISTS (SELECT 1 FROM branding_settings b WHERE b.setting_key = 'funzioni_enabled' AND b.setting_value = 'true')`,
+            [reportId, req.user.username, req.user.id]);
         return suo.rowCount === 0;
     }
 
@@ -48,14 +67,14 @@ export function registraRotteSegnalazioni(app) {
             const r = await pool.query(
                 `SELECT r.emergency_id FROM report_images ri JOIN reports r ON r.id = ri.report_id
              WHERE ri.image_url = $1 LIMIT 1`, [`/uploads/${req.params.filename}`]);
-            if (r.rowCount === 0 ? !haRuolo(req, 'admin') : !puoVedereEmergenza(req, r.rows[0].emergency_id)) {
+            if (r.rowCount === 0 ? !haPermesso(req, 'emergenze.archivio') : !puoVedereEmergenza(req, r.rows[0].emergency_id)) {
                 return res.status(403).json({ message: 'Accesso negato' });
             }
         } catch (error) {
             logger.error('Errore controllo accesso immagine:', error);
             return res.status(500).json({ message: 'Errore interno.' });
         }
-        res.sendFile(safePath);
+        inviaFile(res, safePath);
     });
 
 
@@ -74,8 +93,10 @@ export function registraRotteSegnalazioni(app) {
             longitude 
         } = req.body;
         const creator_user_id = req.user.id;
-        if (!title || !reporter_name || !reporter_contact || String(title).trim() === '' || String(reporter_name).trim() === '' || String(reporter_contact).trim() === '') {
-            return res.status(400).json({ message: 'Titolo, Nome Segnalante e Contatto Segnalante sono obbligatori.' });
+        // Basta il titolo: una chiamata girata dal 112 o di un passante che
+        // riattacca non ha sempre un nome o un numero, e non si inventano.
+        if (!title || String(title).trim() === '') {
+            return res.status(400).json({ message: 'Scrivi almeno cosa succede (il titolo).' });
         }
         let reportLatitude = null;
         let reportLongitude = null;
@@ -102,7 +123,7 @@ export function registraRotteSegnalazioni(app) {
             INSERT INTO reports (title, description, location_address, priority, creator_user_id, reporter_name, reporter_contact, status, emergency_id, emergency_report_number, latitude, longitude, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) RETURNING *;
         `;
-            const reportValues = [title, description || null, location_address || null, priority || 'Medium', creator_user_id, reporter_name, reporter_contact || null, 'New', currentEmergencyId, emergencyReportNumber, reportLatitude, reportLongitude];
+            const reportValues = [title, description || null, location_address || null, priority || 'Medium', creator_user_id, String(reporter_name ?? '').trim() || null, String(reporter_contact ?? '').trim() || null, 'New', currentEmergencyId, emergencyReportNumber, reportLatitude, reportLongitude];
             const reportResult = await client.query(reportInsertQuery, reportValues);
             const newReport = reportResult.rows[0];
             const newReportId = newReport.id;
@@ -112,12 +133,14 @@ export function registraRotteSegnalazioni(app) {
             wss.clients.forEach(wsClient => {
                  if (wsClient.readyState === 1) {
                      try {
-                         wsClient.send(JSON.stringify({ action: 'reload_reports', createdReportId: newReportId }));
+                         wsClient.send(JSON.stringify({ action: 'reload_reports', createdReportId: newReportId, daUtente: req.user.id }));
 
                      } catch (e) { logger.error("WS Send Error:", e); }
                  }
             });
             res.status(201).json(newReport);
+            // Dentro una zona di pericolo della mappa? Lo dicono i rischi.
+            if (coordinatesProvided) aggiornaRischi({ emergencyId: currentEmergencyId, reportIds: [newReportId], userId: creator_user_id });
         } catch (err) {
             await client.query('ROLLBACK');
             logger.error('Error creating report:', err);
@@ -139,7 +162,7 @@ export function registraRotteSegnalazioni(app) {
         const requestedEmergencyId = req.query.emergency_id ? parseInt(req.query.emergency_id, 10) : null;
         if (requestedEmergencyId &&
             (!activeEmergency || requestedEmergencyId !== activeEmergency.id)) {
-            if (!haRuolo(req, 'admin')) {
+            if (!haPermesso(req, 'emergenze.archivio')) {
                 return res.status(403).json({
                     message: 'Accesso Negato'
                 });
@@ -196,7 +219,16 @@ export function registraRotteSegnalazioni(app) {
                     r.no_team_reason,
                     CONCAT(u.nome, ' ', u.cognome) AS creator_fullname,
                     COALESCE(rt.assigned_teams, '[]'::json) AS assigned_teams,
-                    COALESCE(ri.image_count, 0)::integer AS image_count
+                    -- Le funzioni con un incarico, per le etichette sulla scheda.
+                    COALESCE((SELECT json_agg(json_build_object('sigla', f.sigla, 'stato', i.stato, 'funzione_id', f.id) ORDER BY f.ordine, f.sigla)
+                                FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id WHERE i.report_id = r.id), '[]'::json) AS incarichi,
+                    COALESCE(ri.image_count, 0)::integer AS image_count,
+                    -- L'ultima notizia scritta da una persona: sulla scheda dice
+                    -- a che punto è l'intervento senza doverla aprire.
+                    (SELECT json_build_object('testo', ru.update_text, 'quando', ru.update_timestamp, 'autore', TRIM(CONCAT(uu.nome, ' ', uu.cognome)))
+                       FROM report_updates ru LEFT JOIN users uu ON uu.id = ru.user_id
+                      WHERE ru.report_id = r.id AND NOT COALESCE(ru.is_system, false)
+                      ORDER BY ru.update_timestamp DESC, ru.id DESC LIMIT 1) AS ultima_nota
                 FROM reports r
                 LEFT JOIN emergencies e ON r.emergency_id = e.id
                 LEFT JOIN users u ON r.creator_user_id = u.id
@@ -250,7 +282,13 @@ export function registraRotteSegnalazioni(app) {
                                                               'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio),
                                                               'nome_radio', COALESCE(s.nome_radio, rta.nome_radio)))
                          FILTER (WHERE rta.assignment_id IS NOT NULL), '[]'::json) AS assigned_teams,
-                COALESCE(json_agg(DISTINCT ri.image_url) FILTER (WHERE ri.image_id IS NOT NULL), '[]'::json) AS image_urls
+                COALESCE((SELECT json_agg(json_build_object('sigla', f.sigla, 'stato', i.stato, 'funzione_id', f.id) ORDER BY f.ordine, f.sigla)
+                            FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id WHERE i.report_id = r.id), '[]'::json) AS incarichi,
+                COALESCE(json_agg(DISTINCT ri.image_url) FILTER (WHERE ri.image_id IS NOT NULL), '[]'::json) AS image_urls,
+                (SELECT json_build_object('testo', ru.update_text, 'quando', ru.update_timestamp, 'autore', TRIM(CONCAT(uu.nome, ' ', uu.cognome)))
+                       FROM report_updates ru LEFT JOIN users uu ON uu.id = ru.user_id
+                      WHERE ru.report_id = r.id AND NOT COALESCE(ru.is_system, false)
+                      ORDER BY ru.update_timestamp DESC, ru.id DESC LIMIT 1) AS ultima_nota
             FROM
                 reports r
             LEFT JOIN emergencies e ON r.emergency_id = e.id
@@ -270,7 +308,7 @@ export function registraRotteSegnalazioni(app) {
             }
             const reportDetails = reportResult.rows[0];
 
-            if (!haRuolo(req, 'admin')) {
+            if (!haPermesso(req, 'emergenze.archivio')) {
                 if (!activeEmergency || reportDetails.emergency_id !== activeEmergency.id) {
                     logger.warn(`[IDOR Attempt] User ${req.user.username} (role: ${req.user.role}) tried to access report ${reportId} from inactive/closed emergency ${reportDetails.emergency_id}.`);
                     // 404: non si rivela che esiste.
@@ -285,11 +323,13 @@ export function registraRotteSegnalazioni(app) {
                 ru.update_text,
                 ru.is_system,
                 ru.user_id,
-                CONCAT(upd_u.nome, ' ', upd_u.cognome) AS updater_fullname
+                CONCAT(upd_u.nome, ' ', upd_u.cognome) AS updater_fullname,
+                f.sigla AS funzione_sigla
             FROM
                 report_updates ru
             LEFT JOIN
                 users upd_u ON ru.user_id = upd_u.id
+            LEFT JOIN funzioni f ON f.id = ru.funzione_id
             WHERE
                 ru.report_id = $1
             ORDER BY
@@ -342,6 +382,18 @@ export function registraRotteSegnalazioni(app) {
                 await client.query('ROLLBACK');
                 logger.warn(`Tentativo modifica report ${reportId} fuori emergenza attiva.`);
                 return res.status(403).json({ message: 'Operazione permessa solo per report dell\'emergenza attiva.' });
+            }
+            // Cambio di stato rimandato dopo un buco di rete: se nel frattempo
+            // qualcun altro l'ha cambiato, non si scrive sopra alla cieca.
+            const statoAtteso = receivedUpdates.stato_atteso;
+            if (statoAtteso !== undefined && receivedUpdates.status !== undefined
+                && receivedUpdates.status !== oldStatus && statoAtteso !== oldStatus) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({
+                    conflitto: true,
+                    stato_attuale: oldStatus,
+                    message: `Nel frattempo la segnalazione è passata a "${oldStatus}": il cambio a "${receivedUpdates.status}" non è stato fatto. Guardala e decidi di nuovo.`
+                });
             }
 
             let lastNewUpdate = null;
@@ -422,9 +474,11 @@ export function registraRotteSegnalazioni(app) {
                              throw erroreRichiesta(`Motivo non valido per la squadra non necessaria: ${parsedReceivedValue}`);
                          }
                      }
-                     if ((key === 'title' || key === 'reporter_name' || key === 'reporter_contact') && (!parsedReceivedValue || String(parsedReceivedValue).trim() === '')) {
+                     if (key === 'title' && (!parsedReceivedValue || String(parsedReceivedValue).trim() === '')) {
                          throw erroreRichiesta(`Il campo '${fieldNamesMap[key] || key}' non può essere vuoto.`);
                      }
+                     // Nome e recapito di chi ha chiamato si possono lasciare vuoti.
+                     if ((key === 'reporter_name' || key === 'reporter_contact') && String(parsedReceivedValue ?? '').trim() === '') parsedReceivedValue = null;
                     reportUpdatesToApply[key] = parsedReceivedValue;
                     hasReportUpdates = true;
                     const fieldName = fieldNamesMap[key] || key;
@@ -499,6 +553,9 @@ export function registraRotteSegnalazioni(app) {
                 }
                 await client.query('COMMIT');
                 res.status(200).json(reportAfterUpdate); 
+                if ('latitude' in receivedUpdates || 'longitude' in receivedUpdates) {
+                    aggiornaRischi({ emergencyId: reportAfterUpdate?.emergency_id, reportIds: [reportId], userId });
+                }
 
                 if (reportAfterUpdate?.status && !ACTIVE_REPORT_STATUSES_BACKEND.includes(reportAfterUpdate.status)) {
                     notifiche.scadi({ tipo: 'intervento_assegnato', riferimento: { tipo: 'intervento', id: reportId } });
@@ -506,7 +563,7 @@ export function registraRotteSegnalazioni(app) {
                 wss.clients.forEach(wsClient => {
                  if (wsClient.readyState === 1) {
                      try {
-                         wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId }));
+                         wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId, daUtente: req.user.id }));
                          if (lastNewUpdate) {
                              wsClient.send(JSON.stringify({
                                  action: 'new_report_update',
@@ -550,10 +607,7 @@ export function registraRotteSegnalazioni(app) {
         }
 
 
-        if (!haRuolo(req, 'esterno', 'volontario')) {
-            logger.warn(`[API /api/reports/${reportId}/coordinates] Errore: Permesso negato per i ruoli ${ruoliDi(req.user).join(', ')}.`);
-            return res.status(403).json({ message: 'Permesso negato per aggiornare le coordinate.' });
-        }
+        // Ogni interno sposta il punto; un esterno solo sulle segnalazioni della sua squadra.
         if (await esternoFuoriDallaSuaSquadra(req, reportId)) {
             logger.warn(`[API /api/reports/${reportId}/coordinates] Esterno ${req.user.username} su una segnalazione non della sua squadra.`);
             return res.status(403).json({ message: 'Puoi aggiornare solo le segnalazioni della tua squadra.' });
@@ -626,12 +680,13 @@ export function registraRotteSegnalazioni(app) {
             logger.debug('[DB Query Log] COMMIT completato.');
             
             res.status(200).json({ message: 'Coordinate aggiornate con successo.', report: updatedReport });
+            aggiornaRischi({ emergencyId: updatedReport.emergency_id, reportIds: [reportId], userId });
 
 
             wss.clients.forEach(wsClient => {
                 if (wsClient.readyState === 1) { 
                     try {
-                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId }));
+                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId, daUtente: req.user.id }));
                         if (newUpdateLog) {
                             wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateLog }));
                         }
@@ -665,6 +720,9 @@ export function registraRotteSegnalazioni(app) {
         if (!update_text || typeof update_text !== 'string' || update_text.trim() === '') return res.status(400).json({ message: 'Testo aggiornamento richiesto.' });
         const trimmedUpdateText = update_text.trim();
         const userId = req.user.id;
+        // Una nota scritta per conto di una funzione che ha un incarico sulla
+        // segnalazione: la scrive un suo membro o un operatore interno.
+        const funzioneNota = Number.isInteger(req.body.funzione_id) && req.body.funzione_id > 0 ? req.body.funzione_id : null;
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
@@ -684,14 +742,24 @@ export function registraRotteSegnalazioni(app) {
             const checkReportQuery = 'SELECT id FROM reports WHERE id = $1 FOR UPDATE';
             const reportCheckResult = await client.query(checkReportQuery, [reportId]);
             if (reportCheckResult.rowCount === 0) throw erroreNonTrovato();
+            if (funzioneNota) {
+                const ammessa = await client.query(
+                    `SELECT 1 FROM incarichi i WHERE i.report_id = $1 AND i.funzione_id = $2
+                       AND ($3::boolean OR EXISTS (SELECT 1 FROM funzione_membri m WHERE m.funzione_id = i.funzione_id AND m.user_id = $4))`,
+                    [reportId, funzioneNota, !ruoliDi(req.user).includes('esterno'), userId]);
+                if (ammessa.rowCount === 0) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ message: 'Puoi scrivere per conto di una funzione solo se ne fai parte e ha un incarico su questa segnalazione.' });
+                }
+            }
             const insertUpdateQuery = `
             WITH inserted AS (
-                INSERT INTO report_updates (report_id, update_text, user_id) VALUES ($1, $2, $3) RETURNING *
+                INSERT INTO report_updates (report_id, update_text, user_id, funzione_id) VALUES ($1, $2, $3, $4) RETURNING *
             )
-            SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname
-            FROM inserted i JOIN users u ON i.user_id = u.id;
+            SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname, f.sigla AS funzione_sigla
+            FROM inserted i JOIN users u ON i.user_id = u.id LEFT JOIN funzioni f ON f.id = i.funzione_id;
         `;
-            const insertResult = await client.query(insertUpdateQuery, [reportId, trimmedUpdateText, userId]);
+            const insertResult = await client.query(insertUpdateQuery, [reportId, trimmedUpdateText, userId, funzioneNota]);
             const newUpdate = insertResult.rows[0]; 
             await client.query(`UPDATE reports SET updated_at = NOW() WHERE id = $1;`, [reportId]);
             await client.query('COMMIT');
@@ -744,9 +812,10 @@ export function registraRotteSegnalazioni(app) {
             // FOR UPDATE anche sulla squadra: due operatori che assegnano la stessa
             // squadra a due segnalazioni diverse si mettono in fila, e il secondo
             // trova la prima assegnazione. Ordine dei blocchi: reports, poi squadre.
-            const checkTeam = await client.query('SELECT nome, nome_radio FROM squadre WHERE id = $1 FOR UPDATE', [teamId]);
+            const checkTeam = await client.query('SELECT nome, nome_radio, coc FROM squadre WHERE id = $1 FOR UPDATE', [teamId]);
 
             if (checkTeam.rowCount === 0) throw erroreNonTrovato('Squadra non trovata.');
+            if (checkTeam.rows[0].coc) throw erroreConflitto('La squadra COC è la sala operativa: non va sugli interventi.');
             const teamPrefix = checkTeam.rows[0].nome_radio || `ID ${teamId}`;
             const checkConstraintQuery = `SELECT rta.report_id FROM report_team_assignments rta JOIN reports r ON rta.report_id = r.id WHERE rta.squadra_id = $1 AND r.id != $2 AND r.status = ANY($3::varchar[]) LIMIT 1;`;
             const constraintCheckResult = await client.query(checkConstraintQuery, [teamId, reportId, ACTIVE_REPORT_STATUSES_BACKEND]);
@@ -759,7 +828,15 @@ export function registraRotteSegnalazioni(app) {
             const insertLogQuery = `WITH inserted AS (INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *) SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname FROM inserted i JOIN users u ON i.user_id = u.id;`;
             const logResultAssign = await client.query(insertLogQuery, [reportId, logTextAssign, userId]);
             const newUpdateAssign = logResultAssign.rows[0];
+            // Con una squadra assegnata l'intervento è in corso: una segnalazione
+            // ancora "Nuova" o "Aperta" ci passa da sola, e il diario lo dice.
             let newReportStatus = reportStatus;
+            let newUpdateStato = null;
+            if (['New', 'Open'].includes(reportStatus)) {
+                newReportStatus = 'InProgress';
+                newUpdateStato = (await client.query(insertLogQuery, [reportId,
+                    `Campo 'Stato' modificato da '${ETICHETTA_STATO[reportStatus]}' a '${ETICHETTA_STATO.InProgress}' (squadra assegnata).`, userId])).rows[0];
+            }
             await client.query(
                 `UPDATE reports SET status = $1, updated_at = NOW() WHERE id = $2;`,
                 [newReportStatus, reportId]
@@ -779,9 +856,12 @@ export function registraRotteSegnalazioni(app) {
             wss.clients.forEach(wsClient => {
                 if (wsClient.readyState === 1) {
                     try {
-                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId }));
+                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId, daUtente: req.user.id }));
                         if (newUpdateAssign) {
                              wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateAssign }));
+                        }
+                        if (newUpdateStato) {
+                             wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateStato }));
                         }
                         wsClient.send(JSON.stringify({ action: 'reload_squadre', updatedTeamId: teamId }));
                     } catch (e) { logger.error("WS Send Error Assign Team:", e); }
@@ -823,6 +903,15 @@ export function registraRotteSegnalazioni(app) {
             const insertLogQuery = `WITH inserted AS (INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *) SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname FROM inserted i JOIN users u ON i.user_id = u.id;`;
             const logResultRemove = await client.query(insertLogQuery, [reportId, logTextRemove, userId]);
             const newUpdateRemove = logResultRemove.rows[0];
+            // Tolta l'ultima squadra, un intervento "In corso" torna "Aperta":
+            // aspetta di nuovo qualcuno. Se non serve una squadra resta com'è.
+            let newUpdateStatoRimozione = null;
+            const restano = (await client.query('SELECT 1 FROM report_team_assignments WHERE report_id = $1 LIMIT 1', [reportId])).rowCount > 0;
+            if (!restano && currentReport.status === 'InProgress' && !currentReport.no_team_reason) {
+                await client.query(`UPDATE reports SET status = 'Open' WHERE id = $1`, [reportId]);
+                newUpdateStatoRimozione = (await client.query(insertLogQuery, [reportId,
+                    `Campo 'Stato' modificato da '${ETICHETTA_STATO.InProgress}' a '${ETICHETTA_STATO.Open}' (nessuna squadra assegnata).`, userId])).rows[0];
+            }
             await client.query(`UPDATE reports SET updated_at = NOW() WHERE id = $1;`, [reportId]);
             await client.query('COMMIT');
             res.sendStatus(204);
@@ -835,9 +924,12 @@ export function registraRotteSegnalazioni(app) {
             wss.clients.forEach(wsClient => {
                 if (wsClient.readyState === 1) {
                     try {
-                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId }));
+                        wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId, daUtente: req.user.id }));
                         if (newUpdateRemove) {
                             wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateRemove }));
+                        }
+                        if (newUpdateStatoRimozione) {
+                            wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateStatoRimozione }));
                         }
                         wsClient.send(JSON.stringify({ action: 'reload_squadre', updatedTeamId: squadraId }));
                     } catch (e) { logger.error("WS Send Error Unassign Team:", e); }
@@ -874,12 +966,10 @@ export function registraRotteSegnalazioni(app) {
         async (req, res) => {
           const { id } = req.params;
           const reportId = parseInt(id, 10);
-            // Un esterno carica foto solo sugli interventi della sua squadra.
+            // Un esterno carica foto solo sugli interventi della sua squadra
+            // (o di una sua funzione).
             if (req.user.role === 'esterno') {
-                const suo = await pool.query(
-                    `SELECT 1 FROM report_team_assignments rta JOIN squadra_membri sm ON sm.squadra_id = rta.squadra_id
-                 WHERE rta.report_id = $1 AND sm.username = $2`, [parseInt(req.params.id, 10) || 0, req.user.username]);
-                if (suo.rowCount === 0) {
+                if (await esternoFuoriDallaSuaSquadra(req, parseInt(req.params.id, 10) || 0)) {
                     (req.files || []).forEach(f => fs.unlink(f.path, () => {}));
                     return res.status(403).json({ message: 'Permesso negato per caricare immagini.' });
                 }
@@ -888,6 +978,7 @@ export function registraRotteSegnalazioni(app) {
           if (isNaN(reportId)) return res.status(400).json({ message: 'ID Report non valido.' });
           if (!files || files.length === 0) return res.status(400).json({ message: 'Nessun file immagine inviato.' });
           if (!(await verifyMultipleUploadedImages(req, res, ['image/jpeg', 'image/png', 'image/gif']))) return;
+          await proteggiCaricati(files);
           const userId = req.user.id;
           logger.debug(`[POST /api/reports/${reportId}/images] Ricevute ${files.length} immagini da user ${req.user.id}`);
           const client = await pool.connect();
@@ -938,7 +1029,7 @@ export function registraRotteSegnalazioni(app) {
               wss.clients.forEach(wsClient => {
                        if (wsClient.readyState === 1) {
                            try {
-                                wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId }));
+                                wsClient.send(JSON.stringify({ action: 'reload_reports', updatedReportId: reportId, daUtente: req.user.id }));
                                 if (newUpdateLog) {
                                      wsClient.send(JSON.stringify({ action: 'new_report_update', reportId: reportId, update: newUpdateLog }));
                                 }
@@ -971,16 +1062,30 @@ export function registraRotteSegnalazioni(app) {
             if (isNaN(lat) || isNaN(lon) || isNaN(teamId)) {
                  return res.status(400).json({ error: 'Formato dati invalido nel JSON (ID, Lat, Lon devono essere numerici).' });
             }
-            if (!haRuolo(req, 'segreteria')) {
-                const checkMembership = await pool.query('SELECT 1 FROM squadra_membri WHERE squadra_id = $1 AND username = $2', [teamId, req.user.username]);
-                if (checkMembership.rowCount === 0) {
-                    logger.warn(`[SECURITY] L'utente ${req.user.username} ha tentato di inviare la posizione per la squadra ${teamId} senza farne parte.`);
-                    return res.status(403).json({ error: 'Non sei autorizzato ad aggiornare la posizione di questa squadra.' });
-                }
+            // La squadra COC sta in sala: la sua posizione non va sulla mappa.
+            const squadraCoc = await pool.query('SELECT 1 FROM squadre WHERE id = $1 AND coc', [teamId]);
+            if (squadraCoc.rowCount) return res.status(409).json({ error: 'La squadra COC non manda la posizione.', squadra_coc: true });
+            const membro = (await pool.query(
+                'SELECT caposquadra FROM squadra_membri WHERE squadra_id = $1 AND username = $2', [teamId, req.user.username])).rows[0];
+            if (!membro && !haPermesso(req, 'volontari.anagrafica')) {
+                logger.warn(`[SECURITY] L'utente ${req.user.username} ha tentato di inviare la posizione per la squadra ${teamId} senza farne parte.`);
+                return res.status(403).json({ error: 'Non sei autorizzato ad aggiornare la posizione di questa squadra.' });
             }
+            const caposquadra = membro?.caposquadra === true;
+            // Da quanto il telefono l'ha rilevata (eta_ms): con la rete che va e
+            // viene una posizione può partire in ritardo, e in sala deve
+            // arrivare vecchia com'è. Un'età e non un'ora: l'orologio del
+            // telefono non conta. Al massimo un'ora indietro.
+            const eta = Number(req.body.eta_ms);
+            const etaSecondi = Number.isFinite(eta) && eta > 0 ? Math.min(eta, 3600000) / 1000 : 0;
+            // Con più telefoni nella stessa squadra la posizione la manda uno
+            // solo, altrimenti sulla mappa la squadra salta fra un membro e
+            // l'altro. Vince il caposquadra; senza di lui chi la sta già
+            // mandando. Un altro subentra quando quello tace da più di
+            // MINUTI_SUBENTRO minuti, o non è più nella squadra.
             const upsertQuery = `
-            INSERT INTO posizioni_squadre (squadra_id, latitude, longitude, last_update)
-            VALUES ($1, $2, $3, NOW())
+            INSERT INTO posizioni_squadre (squadra_id, latitude, longitude, last_update, inviata_da)
+            VALUES ($1, $2, $3, NOW() - make_interval(secs => $7::float8), $4)
             ON CONFLICT (squadra_id)
             -- NOW() e basta: la colonna è timestamptz e sa già a che istante si
             -- riferisce. Con "NOW() AT TIME ZONE 'Europe/Rome'" il valore veniva
@@ -990,12 +1095,31 @@ export function registraRotteSegnalazioni(app) {
             -- operativo non vedeva più invecchiare nessuna posizione, perché il
             -- confronto "più vecchia di 5 minuti" dava sempre un numero negativo.
             -- Una squadra con l'app spenta da un'ora restava indicata come viva.
-            DO UPDATE SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, last_update = NOW() 
-            RETURNING squadra_id, latitude, longitude, last_update; 
+            DO UPDATE SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, last_update = EXCLUDED.last_update, inviata_da = EXCLUDED.inviata_da
+            -- Una posizione arrivata in ritardo non copre una più recente.
+            WHERE posizioni_squadre.last_update <= EXCLUDED.last_update AND ($5::boolean
+               OR posizioni_squadre.inviata_da IS NULL
+               OR posizioni_squadre.inviata_da = EXCLUDED.inviata_da
+               OR posizioni_squadre.last_update < NOW() - make_interval(mins => $6::int)
+               OR NOT EXISTS (SELECT 1 FROM squadra_membri m
+                               WHERE m.squadra_id = posizioni_squadre.squadra_id AND m.username = posizioni_squadre.inviata_da))
+            RETURNING squadra_id, latitude, longitude, last_update, inviata_da;
         `;
-            const upsertResult = await pool.query(upsertQuery, [teamId, lat, lon]);
+            const upsertResult = await pool.query(upsertQuery, [teamId, lat, lon, req.user.username, caposquadra, MINUTI_SUBENTRO, etaSecondi]);
             if (upsertResult.rowCount === 0) {
-                throw new Error("Fallito aggiornamento/inserimento posizione squadra.");
+                // La manda un altro: si risponde 200 (non è un errore) e si
+                // dice chi, così l'app lo può mostrare.
+                const chi = (await pool.query(
+                    `SELECT u.username, u.nome, u.cognome, COALESCE(m.caposquadra, false) AS caposquadra
+                       FROM posizioni_squadre ps JOIN users u ON u.username = ps.inviata_da
+                       LEFT JOIN squadra_membri m ON m.squadra_id = ps.squadra_id AND m.username = ps.inviata_da
+                      WHERE ps.squadra_id = $1`, [teamId])).rows[0] || null;
+                // La manda proprio lui, ma ce n'è già una più recente: questa era rimasta indietro.
+                if (chi?.username === req.user.username) {
+                    return res.status(200).json({ message: 'C\'è già una posizione più recente.', accettata: true, superata: true, caposquadra });
+                }
+                if (chi) delete chi.username;
+                return res.status(200).json({ message: 'La posizione della squadra la sta mandando un altro membro.', accettata: false, inviata_da: chi });
             }
             const updatedLocation = upsertResult.rows[0];
             let teamDetails = null;
@@ -1007,12 +1131,13 @@ export function registraRotteSegnalazioni(app) {
             } catch (teamQueryError) {
                  logger.error(`[POST /api/location] Errore recupero dettagli squadra ${teamId}:`, teamQueryError);
             }
-            res.status(200).json({ message: 'Location updated' });
+            res.status(200).json({ message: 'Location updated', accettata: true, caposquadra });
             const wsDataPayload = {
                  squadra_id: updatedLocation.squadra_id,
                  latitude: updatedLocation.latitude,
                  longitude: updatedLocation.longitude,
                  last_update: updatedLocation.last_update,
+                 inviata_da: { username: req.user.username, nome: req.user.nome || null, cognome: req.user.cognome || null, caposquadra },
                  nome_radio: teamDetails?.nome_radio || null,
                  squadra_nome_descrittivo: teamDetails?.nome || null
             };
@@ -1039,7 +1164,11 @@ export function registraRotteSegnalazioni(app) {
                 ps.longitude, 
                 ps.last_update,
                 s.nome_radio,                 
-                s.nome as squadra_nome_descrittivo
+                s.nome as squadra_nome_descrittivo,
+                (SELECT json_build_object('username', u.username, 'nome', u.nome, 'cognome', u.cognome,
+                                          'caposquadra', COALESCE(m.caposquadra, false))
+                   FROM users u LEFT JOIN squadra_membri m ON m.squadra_id = ps.squadra_id AND m.username = u.username
+                  WHERE u.username = ps.inviata_da) AS inviata_da
             FROM posizioni_squadre ps
             LEFT JOIN squadre s ON ps.squadra_id = s.id
             ORDER BY ps.squadra_id;

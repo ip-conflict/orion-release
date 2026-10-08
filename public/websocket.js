@@ -1,6 +1,9 @@
 
 let ws = null;
 let reconnectTimeout = null;
+// Con il server giù non si martella: il primo tentativo è subito, poi
+// sempre più distanziati fino a 10 secondi.
+let attesaRiconnessione = 500;
 
 function connectWebSocket() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
@@ -17,6 +20,7 @@ function connectWebSocket() {
 
     ws.onopen = function () {
         console.log('WebSocket Connesso.');
+        attesaRiconnessione = 500;
     };
 
     ws.onclose = function (event) {
@@ -25,9 +29,10 @@ function connectWebSocket() {
         if (!reconnectTimeout) {
              reconnectTimeout = setTimeout(() => {
                 console.log('Tentativo di riconnessione WebSocket...');
-                connectWebSocket();
                 reconnectTimeout = null;
-             }, 500);
+                connectWebSocket();
+             }, attesaRiconnessione);
+             attesaRiconnessione = Math.min(attesaRiconnessione * 2, 10000);
         }
     };
 

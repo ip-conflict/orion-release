@@ -1,8 +1,8 @@
 // public/js/accesso.js
 //
 // L'accesso degli esterni temporanei: la pagina che si apre inquadrando il QR
-// dato dal centro operativo (o toccando il link arrivato per email o
-// WhatsApp). Il codice è nell'indirizzo; il server lo scambia con una
+// dato dal centro operativo (o toccando il link arrivato per email o copiato
+// e mandato in altro modo). Il codice è nell'indirizzo; il server lo scambia con una
 // sessione da esterno che vale fino alla chiusura dell'emergenza.
 //
 // Sul telefono Android propone l'app: in squadra, è lei che manda la
@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem('userId', String(dati.userId));
         localStorage.setItem('userRole', dati.role);
         localStorage.setItem('userRuoli', JSON.stringify(dati.ruoli || [dati.role]));
+        localStorage.setItem('userPermessi', JSON.stringify(dati.permessi || []));
         localStorage.setItem('username', dati.username);
     } catch { /* senza localStorage alcune pagine chiedono di nuovo l'accesso */ }
 

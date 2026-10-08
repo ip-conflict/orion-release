@@ -59,6 +59,13 @@ async function fetchApi(url, options = {}) {
             if (typeof errorData !== 'undefined') errorToThrow.body = errorData;
             if (errorDetail) errorToThrow.detail = errorDetail;
 
+            // Le condizioni d'uso nuove o mai accettate: si va a leggerle e poi si torna
+            // qui. Una pagina aperta da ore se ne accorge alla prima chiamata.
+            if (response.status === 428 && errorData?.informativa_da_vedere && !location.pathname.startsWith('/informativa.html')) {
+                errorToThrow.informativa = true;
+                location.href = '/informativa.html?redirect=' + encodeURIComponent(location.pathname + location.search);
+            }
+
             // In manutenzione la pagina resta dov'è e lo dice, invece di
             // rimandare a un accesso che in quel momento non funziona.
             if (response.status === 503 && errorData?.manutenzione) {
@@ -293,6 +300,33 @@ function haRuolo(...richiesti) {
     return richiesti.some(r => miei.includes(r));
 }
 
+// I permessi di chi usa il programma (src/permessi.js): dei ruoli e in più.
+// Arrivano con l'accesso e con /api/me/status; decide comunque il server.
+function permessiUtente() {
+    try {
+        const salvati = JSON.parse(localStorage.getItem('userPermessi') || '[]');
+        return Array.isArray(salvati) ? salvati : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+// Basta uno dei permessi indicati. L'amministratore li ha tutti.
+function haPermesso(...codici) {
+    if (haRuolo('admin')) return true;
+    const miei = permessiUtente();
+    return codici.some(c => miei.includes(c));
+}
+
+// Ruoli e permessi dalla risposta dell'accesso o di /api/me/status.
+function salvaRuoliEPermessi(dati) {
+    try {
+        if (dati?.role) localStorage.setItem('userRole', dati.role);
+        if (Array.isArray(dati?.ruoli) && dati.ruoli.length) localStorage.setItem('userRuoli', JSON.stringify(dati.ruoli));
+        if (Array.isArray(dati?.permessi)) localStorage.setItem('userPermessi', JSON.stringify(dati.permessi));
+    } catch (e) { /* senza memoria si rilegge a ogni pagina */ }
+}
+
 // I DPI in carico a una persona: la stessa vista sul profilo e nel fascicolo
 // della segreteria. Conta la scadenza: un elmetto scaduto non protegge.
 function disegnaDpiInDotazione(elenco, dpi) {
@@ -355,25 +389,27 @@ function escapeHTML(str) {
 
 // Avvisi che non fermano il lavoro: compaiono in basso e se ne vanno da soli
 // (gli errori restano un po' di più, e un clic li chiude). Le finestre di
-// conferma restano solo per le azioni che non si possono annullare.
+// conferma restano solo per le azioni che non si possono annullare. Una
+// pagina con una sua colonna di avvisi (data-avvisi, come il centro
+// operativo, in alto sopra la mappa) li riceve lì, insieme ai suoi.
 function notifica(testo, tipo = 'info', durata) {
     if (!testo) return;
-    let contenitore = document.getElementById('avvisi-orion');
-    if (!contenitore) {
-        if (!document.getElementById('stile-avvisi-orion')) {
-            const stile = document.createElement('style');
-            stile.id = 'stile-avvisi-orion';
-            stile.textContent = `
+    if (!document.getElementById('stile-avvisi-orion')) {
+        const stile = document.createElement('style');
+        stile.id = 'stile-avvisi-orion';
+        stile.textContent = `
 #avvisi-orion { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 100000;
   display: flex; flex-direction: column; gap: 8px; width: min(520px, calc(100vw - 32px)); pointer-events: none; }
-#avvisi-orion .avviso-orion { pointer-events: auto; cursor: pointer; padding: 12px 16px; border-radius: 8px;
+.avviso-orion { pointer-events: auto; cursor: pointer; padding: 12px 16px; border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.25); font-size: 0.95rem; line-height: 1.35; white-space: pre-line;
   color: #fff; background: #334155; border-left: 5px solid #94a3b8; }
-#avvisi-orion .avviso-orion.successo { background: #14532d; border-left-color: #22c55e; }
-#avvisi-orion .avviso-orion.errore { background: #7f1d1d; border-left-color: #f87171; }
-#avvisi-orion .avviso-orion.attenzione { background: #78350f; border-left-color: #fbbf24; }`;
-            document.head.appendChild(stile);
-        }
+.avviso-orion.successo { background: #14532d; border-left-color: #22c55e; }
+.avviso-orion.errore { background: #7f1d1d; border-left-color: #f87171; }
+.avviso-orion.attenzione { background: #78350f; border-left-color: #fbbf24; }`;
+        document.head.appendChild(stile);
+    }
+    let contenitore = document.querySelector('[data-avvisi]') || document.getElementById('avvisi-orion');
+    if (!contenitore) {
         contenitore = document.createElement('div');
         contenitore.id = 'avvisi-orion';
         document.body.appendChild(contenitore);
@@ -385,6 +421,7 @@ function notifica(testo, tipo = 'info', durata) {
     const togli = () => avviso.remove();
     avviso.addEventListener('click', togli);
     contenitore.appendChild(avviso);
-    while (contenitore.children.length > 3) contenitore.firstChild.remove();
+    const vecchi = contenitore.querySelectorAll('.avviso-orion');
+    for (let i = 0; i < vecchi.length - 3; i++) vecchi[i].remove();
     setTimeout(togli, durata ?? (tipo === 'errore' ? 8000 : 4500));
 }

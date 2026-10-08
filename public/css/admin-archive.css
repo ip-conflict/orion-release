@@ -74,3 +74,4 @@
 
 /* La stampa di una riga della tabella: un pulsante piccolo come gli altri. */
 #archived-report-table td.action-buttons .button-style { min-height: 30px; padding: 4px 10px; }
+.ar-filtro { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }

@@ -9,13 +9,14 @@ import fs from 'fs';
 import logger from './logger.js';
 import path from 'path';
 import { appDistribuita } from './appMobile.js';
-import { COSTO_BCRYPT, authenticateToken, chiudiSessioni, emettiSessione, ruoliDi, tokenSuperato } from './autenticazione.js';
+import { COSTO_BCRYPT, authenticateToken, chiudiSessioni, emettiSessione, permessiDellaPersona, ruoliDi, tokenSuperato } from './autenticazione.js';
 import { verifyJwtToken } from './authHelper.js';
 import { LOGO2_FILE_PATH, LOGO2_URL_PATH, LOGO_FILE_PATH, LOGO_URL_PATH, inviaFoto } from './caricamenti.js';
 import { domainName } from './config.js';
 import { pool } from './db.js';
 import { sendEmailUtility } from './email.js';
 import { registraAccessoTemporaneo } from './esterniTemporanei.js';
+import { mfaObbligatoria, passoDopoLaPassword, registraRotteMfaPubbliche } from './mfa.js';
 import { apiLimiter, limitePerRete, passwordLimiter } from './middleware/rateLimiters.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { body, validationResult } from 'express-validator';
@@ -72,8 +73,8 @@ async function utenteCollegato(req) {
 const IMPOSTAZIONI_PUBBLICHE = [
     'association_name', 'map_center_lat', 'map_center_lon', 'map_zoom_level',
     'minuti_attesa_critica', 'magazzino_enabled', 'card_district_label',
-    'card_regional_entity_name', 'badge_qr_always_on', 'badge_qr_enabled', 'app_android_enabled',
-    'segreteria_config'
+    'card_regional_entity_name', 'badge_qr_always_on', 'badge_qr_enabled', 'badge_cf_barcode', 'badge_modello', 'app_android_enabled',
+    'segreteria_config', 'funzioni_enabled', 'attivita_enabled'
 ];
 // Della segreteria solo se è accesa e cosa blocca.
 const CAMPI_SEGRETERIA_PUBBLICI = ['enabled', 'block_on_medical', 'block_on_course'];
@@ -126,6 +127,7 @@ export function registraRottePubbliche(app) {
         try {
           const result = await pool.query(
             `SELECT u.id, u.username, u.password, u.role, COALESCE(u.is_active, true) AS is_active,
+                u.temporaneo, u.mfa_attiva,
                 ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
          FROM users u WHERE u.username = $1`,
             [username]
@@ -152,11 +154,18 @@ export function registraRottePubbliche(app) {
             } catch (e) {
               logger.warn(`[Login] Impossibile rafforzare l'hash della password di ${user.username}: ${e.message}`);
             }
+            // La verifica in due passaggi, se c'è o se è obbligatoria: la
+            // sessione la dà /api/accesso/mfa, dopo il codice.
+            const passo = await passoDopoLaPassword({ ...user, ruoli: user.ruoli?.length ? user.ruoli : [user.role] });
+            if (passo) return res.status(401).json(passo);
             const { token, principale, ruoliUtente } = emettiSessione(res, user, user.ruoli);
-            return res.json({ message: 'Login effettuato con successo', userId: user.id, role: principale, ruoli: ruoliUtente, token: token });
+            return res.json({ message: 'Login effettuato con successo', userId: user.id, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(user.id, ruoliUtente), token: token });
           } else { return res.status(401).json({ message: 'Credenziali non valide' }); }
         } catch (err) { logger.error('Errore durante il login:', err); return res.status(500).json({ message: 'Errore interno del server' }); }
     });
+
+    // Il secondo passo, con il codice della verifica in due passaggi.
+    registraRotteMfaPubbliche(app);
 
     // L'accesso degli esterni temporanei con il codice (QR o link).
     registraAccessoTemporaneo(app, {
@@ -175,15 +184,29 @@ export function registraRottePubbliche(app) {
                 SET usato_il = NOW(), scade_il = NOW() + ($2::int * INTERVAL '1 day')
               FROM users u
              WHERE t.impronta = $1 AND t.scade_il > NOW() AND u.id = t.user_id
-         RETURNING u.id, u.username, u.role, COALESCE(u.is_active, true) AS attivo,
+         RETURNING u.id, u.username, u.role, COALESCE(u.is_active, true) AS attivo, u.mfa_attiva, t.mfa AS rinnovo_mfa,
                    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli`,
                 [impronta(rinnovo), GIORNI_RINNOVO]);
             const utente = r.rows[0];
             // Un solo messaggio per inesistente, scaduto e revocato.
             if (!utente) return res.status(401).json({ message: "Accesso con l'impronta non piu' valido: accedi con la password.", rinnovo_non_valido: true });
             if (!utente.attivo) return res.status(403).json({ message: 'Il tuo account è sospeso. Contatta la segreteria.', motivo: 'account_non_attivo' });
-            const { token, principale, ruoliUtente } = emettiSessione(res, utente, utente.ruoli);
-            res.json({ message: 'Accesso effettuato', userId: utente.id, username: utente.username, role: principale, ruoli: ruoliUtente, token });
+            // L'impronta vale da secondo fattore: il token sta solo su quel
+            // telefono e si sblocca con il dito. Se pero' è nato prima della
+            // verifica in due passaggi, il codice si chiede una volta, qui,
+            // e da lì il token vale come quelli nati con la verifica.
+            const ruoli = utente.ruoli?.length ? utente.ruoli : [utente.role];
+            if ((utente.mfa_attiva || mfaObbligatoria(ruoli, await permessiDellaPersona(utente.id, ruoli))) && !utente.rinnovo_mfa) {
+                const passo = await passoDopoLaPassword({ ...utente, ruoli }, { rinnovo: impronta(rinnovo) });
+                if (passo?.mfa === 'codice') {
+                    return res.status(401).json({ ...passo, message: "Una volta sola: il codice della verifica in due passaggi, poi basta l'impronta." });
+                }
+                // La verifica non è ancora attivata: si attiva dal browser, poi si rientra con password e codice.
+                await pool.query('DELETE FROM token_rinnovo WHERE impronta = $1', [impronta(rinnovo)]);
+                return res.status(401).json({ message: 'Serve la verifica in due passaggi: attivala dal browser, poi accedi con la password e il codice.', rinnovo_non_valido: true });
+            }
+            const { token, principale, ruoliUtente } = emettiSessione(res, utente, utente.ruoli, { mfa: utente.rinnovo_mfa });
+            res.json({ message: 'Accesso effettuato', userId: utente.id, username: utente.username, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(utente.id, ruoliUtente), token });
         } catch (error) {
             logger.error('Errore accesso con token di rinnovo:', error);
             res.status(500).json({ message: 'Errore interno del server' });
@@ -196,7 +219,7 @@ export function registraRottePubbliche(app) {
         if (!token || !newPassword || !id) return res.status(400).json({ message: 'Dati mancanti o link non valido.' });
 
         try {
-            const result = await pool.query('SELECT reset_token, reset_token_expires FROM users WHERE id = $1', [id]);
+            const result = await pool.query('SELECT username, reset_token, reset_token_expires FROM users WHERE id = $1', [id]);
             if (result.rowCount === 0) return res.status(400).json({ message: 'Utente non trovato.' });
 
             const user = result.rows[0];
@@ -224,7 +247,8 @@ export function registraRottePubbliche(app) {
             );
             await chiudiSessioni(id);
 
-            res.status(200).json({ message: 'Password aggiornata con successo.' });
+            // Lo username torna alla pagina: il login lo trova già scritto.
+            res.status(200).json({ message: 'Password aggiornata con successo.', username: user.username });
         } catch (error) {
             logger.error('Errore reset password:', error);
             res.status(500).json({ message: 'Errore interno del server.' });
@@ -410,6 +434,7 @@ export function registraRottePubbliche(app) {
             username: req.user.username, 
             role: req.user.role,
             ruoli: ruoliDi(req.user),
+            permessi: req.user.permessi || [],
             token: token
         });
     });

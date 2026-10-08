@@ -11,6 +11,8 @@ import { MINUTI_ATTESA_CRITICA_MAX } from './costanti.js';
 import { pool } from './db.js';
 import { inviaEmailProva } from './email.js';
 import { wss } from './tempoReale.js';
+import { cifraTesto } from './cifratura.js';
+import { ModelloNonValido, validaModelloTesserino } from './modelloTesserino.js';
 
 export function registraRotteImpostazioni(app) {
 
@@ -86,6 +88,10 @@ export function registraRotteImpostazioni(app) {
                 acc[row.setting_key] = row.setting_value;
                 return acc;
             }, {});
+            // La password della posta non torna al browser: si dice solo se
+            // c'è. Un campo lasciato vuoto al salvataggio la lascia com'è.
+            settings.smtp_pass_impostata = !!settings.smtp_pass;
+            delete settings.smtp_pass;
             res.status(200).json(settings);
         } catch (error) {
             logger.error("Errore durante il recupero delle impostazioni complete di branding:", error);
@@ -96,7 +102,8 @@ export function registraRotteImpostazioni(app) {
     // Le chiavi che scrive solo il programma: lo stato degli aggiornamenti porta
     // l'indirizzo del pacchetto e la sua impronta, e si cambia solo dalla pagina
     // Sistema, che li verifica.
-    const CHIAVI_INTERNE = new Set(['aggiornamenti_config', 'aggiornamenti_stato']);
+    const CHIAVI_INTERNE = new Set(['aggiornamenti_config', 'aggiornamenti_stato', 'cifratura_impronta', 'cifratura_recupero_salvata',
+        'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il']);
 
     app.put('/api/branding/settings', checkAdminRole, async (req, res) => {
         const settingsToUpdate = req.body;
@@ -116,7 +123,23 @@ export function registraRotteImpostazioni(app) {
 
             for (const key in settingsToUpdate) {
                 if (Object.hasOwnProperty.call(settingsToUpdate, key)) {
-                    const value = settingsToUpdate[key];
+                    let value = settingsToUpdate[key];
+                    // La password della posta: vuota vuol dire "non cambiarla";
+                    // nel database va cifrata con la chiave dei dati.
+                    if (key === 'smtp_pass') {
+                        if (value == null || String(value).trim() === '') continue;
+                        value = cifraTesto(String(value));
+                    }
+                    // Il modello del tesserino: si salva solo ripulito.
+                    if (key === 'badge_modello') {
+                        try {
+                            value = validaModelloTesserino(value);
+                        } catch (e) {
+                            if (!(e instanceof ModelloNonValido)) throw e;
+                            await client.query('ROLLBACK');
+                            return res.status(400).json({ message: e.message });
+                        }
+                    }
                     // Un valore assurdo spegnerebbe il segnale di ritardo in sala.
                     if (key === 'minuti_attesa_critica' && String(value).trim() !== '') {
                         const minuti = Number(value);

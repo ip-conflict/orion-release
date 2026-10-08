@@ -5,6 +5,7 @@
 import logger from './logger.js';
 import nodemailer from 'nodemailer';
 import { pool } from './db.js';
+import { decifraTesto } from './cifratura.js';
 
 // I nomi finiscono nel corpo HTML dei riepiloghi: un < o > non deve diventare markup.
 export function escapeHtmlForEmail(value) {
@@ -22,6 +23,13 @@ async function leggiConfigSmtp() {
     const res = await pool.query("SELECT setting_key, setting_value FROM branding_settings WHERE setting_key LIKE 'smtp_%'");
     const settings = {};
     res.rows.forEach(r => settings[r.setting_key] = r.setting_value);
+    // Nel database è cifrata con la chiave dei dati.
+    try {
+        if (settings.smtp_pass) settings.smtp_pass = decifraTesto(settings.smtp_pass);
+    } catch (e) {
+        logger.error('[Email] La password della posta non si decifra (chiave dei dati mancante?):', e.message);
+        settings.smtp_pass = '';
+    }
     return settings;
 }
 

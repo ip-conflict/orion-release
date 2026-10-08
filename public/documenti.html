@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Documenti del gruppo</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/documenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body>
+<div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+    <nav class="admin-sidebar">
+        <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+            <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+            <h2 style="margin: 0;">ORION</h2>
+        </div>
+        <ul class="sidebar-menu"></ul>
+    </nav>
+
+    <main class="admin-content">
+        <header class="content-header">
+            <h1>Documenti del gruppo</h1>
+            <p class="sottotitolo" id="sottotitolo">Il piano di protezione civile, le procedure, i libretti delle attrezzature, i moduli e i verbali.</p>
+        </header>
+
+        <div class="barra-documenti">
+            <input type="search" id="cerca-documenti" placeholder="Cerca per titolo, descrizione o nome del file..." aria-label="Cerca nei documenti">
+            <div class="gruppo-azioni solo-gestione" hidden>
+                <button type="button" class="button-style button-secondary" id="btn-nuova-cartella">Nuova cartella</button>
+                <button type="button" class="button-style" id="btn-carica">Carica un documento</button>
+            </div>
+        </div>
+        <p class="nota solo-gestione" id="spazio-occupato" hidden></p>
+
+        <div id="elenco-documenti" aria-live="polite">
+            <p class="nota">Carico l'archivio…</p>
+        </div>
+    </main>
+</div>
+
+<!-- Caricare un documento nuovo o cambiarne i dati. -->
+<div id="modale-documento" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="titolo-modale-documento">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="titolo-modale-documento">Carica un documento</h2>
+        <form id="form-documento">
+            <div class="griglia-campi">
+                <label class="campo-largo">Titolo <span class="obbligatorio">*</span>
+                    <input type="text" id="doc-titolo" maxlength="200" required>
+                </label>
+                <label>Cartella
+                    <select id="doc-cartella"></select>
+                </label>
+                <label id="campo-file">File <span class="obbligatorio">*</span>
+                    <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt">
+                </label>
+                <label class="campo-largo">Descrizione
+                    <textarea id="doc-descrizione" rows="2" maxlength="2000"></textarea>
+                </label>
+            </div>
+
+            <fieldset class="riquadro-scelte">
+                <legend>Chi lo vede</legend>
+                <label class="scelta"><input type="radio" name="visibilita" value="interni" checked> Tutti gli interni</label>
+                <label class="scelta"><input type="radio" name="visibilita" value="ruoli"> Solo alcuni ruoli</label>
+                <div id="scelta-ruoli" class="scelta-ruoli" hidden></div>
+                <p class="nota">Chi tiene l'archivio e l'amministratore li vedono tutti.</p>
+            </fieldset>
+
+            <fieldset class="riquadro-scelte">
+                <legend>In più</legend>
+                <label class="scelta"><input type="checkbox" id="doc-emergenza">
+                    <span><strong>Consultabile in emergenza</strong>: mentre un'emergenza è aperta lo vedono anche gli esterni (il piano comunale, per esempio).</span></label>
+                <label class="scelta"><input type="checkbox" id="doc-sempre">
+                    <span><strong>Sempre con me</strong>: l'app lo tiene sul telefono e si apre anche senza rete.</span></label>
+            </fieldset>
+
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" data-chiudi>Annulla</button>
+                <button type="submit" class="button-style" id="salva-documento">Carica</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- La scheda di un documento: versioni, beni collegati, azioni. -->
+<div id="modale-dettaglio" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="titolo-dettaglio">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="titolo-dettaglio"></h2>
+        <p id="descrizione-dettaglio" class="descrizione-dettaglio"></p>
+        <div id="segni-dettaglio" class="segni"></div>
+
+        <div class="gruppo-azioni azioni-dettaglio">
+            <a class="button-style" id="apri-dettaglio" target="_blank" rel="noopener">Apri l'ultima versione</a>
+            <button type="button" class="button-style button-secondary solo-gestione" id="btn-modifica" hidden>Modifica</button>
+            <button type="button" class="button-style button-secondary solo-gestione" id="btn-versione" hidden>Carica una versione nuova</button>
+            <button type="button" class="button-style btn-pericolo solo-gestione" id="btn-togli" hidden>Togli dall'archivio</button>
+        </div>
+
+        <form id="form-versione" class="riquadro-versione" hidden>
+            <p class="nota">La versione nuova diventa quella che si apre; le vecchie restano nello storico.</p>
+            <div class="griglia-campi">
+                <label>File <span class="obbligatorio">*</span>
+                    <input type="file" id="versione-file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt">
+                </label>
+                <label>Cosa cambia
+                    <input type="text" id="versione-nota" maxlength="500" placeholder="Per esempio: aggiornati i numeri di reperibilità">
+                </label>
+            </div>
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" id="annulla-versione">Annulla</button>
+                <button type="submit" class="button-style">Carica la versione</button>
+            </div>
+        </form>
+
+        <section id="sezione-beni" hidden>
+            <h3>Attrezzature e mezzi collegati</h3>
+            <p class="nota">Dalla scheda del bene, e dal QR della sua etichetta, si apre questo documento.</p>
+            <ul id="beni-dettaglio" class="elenco-semplice"></ul>
+            <div id="collega-bene" class="collega-bene" hidden>
+                <input type="search" id="cerca-bene" placeholder="Cerca il bene da collegare: nome, matricola, targa..." aria-label="Cerca il bene da collegare">
+                <ul id="risultati-bene" class="elenco-semplice risultati"></ul>
+            </div>
+        </section>
+
+        <section>
+            <h3>Versioni</h3>
+            <ul id="versioni-dettaglio" class="elenco-semplice"></ul>
+        </section>
+    </div>
+</div>
+
+<script src="/vendor/js-cookie/js.cookie.min.js"></script>
+<script src="/js/apiHelper.js"></script>
+<script src="/js/menu-laterale.js"></script>
+<script src="/js/documenti.js"></script>
+</body>
+</html>

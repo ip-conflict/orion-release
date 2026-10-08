@@ -111,6 +111,8 @@ rsync -av --progress \
     --exclude 'uploads/' \
     --exclude 'protected_uploads/' \
     --exclude 'logs/' \
+    --exclude 'chiave-dati.key' \
+    --exclude 'PRIMO-ACCESSO.txt' \
     "$SOURCE_DIR/" "$APP_DIR/"
 
 print_success "File sincronizzati."

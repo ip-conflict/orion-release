@@ -178,6 +178,38 @@
                         </div>
 
                         <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                        Modulo Funzioni di supporto
+                                    </h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Le funzioni del COC secondo il metodo Augustus: a ogni segnalazione si affidano incarichi alle funzioni, con il perché e, alla fine, l'esito.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-funzioni" name="funzioni_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="margin: 15px 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Quali funzioni usare, i loro nomi e chi ne fa parte si decidono nella pagina <a href="/admin/funzioni.html">Funzioni</a>, anche prima di accendere il modulo. Spento, in sala non compare niente; riacceso, incarichi e membri tornano come erano.</p>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                        Modulo Attività e calendario
+                                    </h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Esercitazioni, addestramenti, servizi e riunioni con le convocazioni, le risposte dal telefono e le presenze; nel calendario anche le scadenze.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-attivita" name="attivita_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="margin: 15px 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Le attività le organizza chi ha il permesso "Organizzare attività e presenze" (il Coordinatore lo ha già). Spento, il calendario sparisce da web e app; attività e presenze restano. Le presenze delle emergenze si contano comunque.</p>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
                             <div>
                                 <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
                                     Tesserino QR Pubblico
@@ -240,7 +272,8 @@
                             <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
                                 Tesserino di Riconoscimento
                             </h3>
-                            <p style="margin: 0 0 20px 0; font-size: 0.85rem; color: var(--text-muted);">Dati usati per impaginare il tesserino fisico (formato CR80) stampabile dalla scheda del volontario in Segreteria.</p>
+                            <p style="margin: 0 0 14px 0; font-size: 0.85rem; color: var(--text-muted);">Dati usati per impaginare il tesserino fisico (formato CR80) stampabile dalla scheda del volontario in Segreteria.</p>
+                            <a href="/admin/tesserino.html" class="button-style button-secondary" style="display: inline-flex; gap: 8px; align-items: center; text-decoration: none; margin-bottom: 20px;"><i class="fas fa-palette"></i> Personalizza l'aspetto: colori, posizioni, misure</a>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                                 <div>
@@ -252,6 +285,17 @@
                                     <input type="text" id="card-regional-entity-name" name="card_regional_entity_name" placeholder="Es. REGIONE DEL VENETO" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); box-sizing: border-box;">
                                 </div>
                             </div>
+
+                            <label class="option-card" style="cursor: pointer; margin-bottom: 15px;">
+                                <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
+                                    <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Codice fiscale sul tesserino</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Sotto QR e loghi, il codice fiscale del volontario come codice a barre leggibile da qualunque lettore (per esempio per registrare le presenze), con il codice in chiaro. Solo per chi ha il codice fiscale nel fascicolo. Chi trova un tesserino perso legge anche il codice fiscale.</span>
+                                </div>
+                                <div class="modern-toggle">
+                                    <input type="checkbox" id="badge-cf-barcode">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
 
                             <label for="app-logo2" style="color: var(--text-color); font-weight: 600; font-size: 0.9rem;">Logo Ente Sovraordinato (max 5MB)</label>
                             <p style="margin: 4px 0 8px 0; font-size: 0.8rem; color: var(--text-muted);">Es. lo stemma/roundel ufficiale della Regione, usato due volte sul tesserino (logo circolare e accanto al nome dell'ente). Carica un PNG già ritagliato/trasparente per un risultato pulito.</p>
@@ -352,6 +396,71 @@
             </div>
 
             <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+                <div class="settings-panel" id="pannello-privacy" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Condizioni d'uso</h2>
+                    <p style="margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Al primo accesso, e ogni volta che il testo cambia, chi usa ORION (dal browser o dall'app) legge le condizioni d'uso e le accetta prima di continuare. ORION propone un testo già scritto: dice chi risponde dell'installazione e dei dati, che il programma è fornito così com'è, l'impegno alla riservatezza e quali dati restano dopo che una persona viene eliminata. Si può riscrivere per intero.</p>
+                    <div id="privacy-stato" style="margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; line-height: 1.5;"></div>
+                    <details id="privacy-testi" style="margin-bottom: 16px;">
+                        <summary style="cursor: pointer; font-weight: 600;">Riscrivere il testo</summary>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Lasciate vuoto il campo per usare il testo proposto da ORION. Formato: una riga che inizia con «# » è il titolo, con «## » un capitolo, una riga vuota separa i paragrafi.</p>
+                        <textarea id="privacy-testo-condizioni" rows="14" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font: 0.85rem/1.5 ui-monospace, monospace;"></textarea>
+                        <button type="button" class="button-style button-secondary" id="privacy-usa-predefinite" style="margin-top: 6px;">Parti dal testo proposto</button>
+                    </details>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+                        <a href="/informativa.html" target="_blank" rel="noopener" class="button-style button-secondary" style="text-decoration: none;">Vedi come appare</a>
+                        <button type="button" class="button-style" id="privacy-pubblica">Pubblica: tutti le riaccetteranno al prossimo accesso</button>
+                    </div>
+                    <details id="privacy-mancanti" style="margin-top: 16px;" hidden>
+                        <summary style="cursor: pointer; font-weight: 600;"></summary>
+                        <ul id="privacy-elenco-mancanti" style="font-size: 0.9rem; columns: 2; margin: 10px 0 0;"></ul>
+                    </details>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+                <div class="settings-panel" id="pannello-piano" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Livelli del piano sulla mappa</h2>
+                    <p style="margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Zone di pericolosità e aree d'emergenza del piano comunale, sempre visibili nel centro operativo come livelli da accendere e spegnere. Da QGIS: tasto destro sul livello, <em>Esporta › Salva elementi come…</em>, formato <strong>GeoJSON</strong> (o KML) e sistema di riferimento <strong>EPSG:4326 - WGS 84</strong>. Un file per tipo: per esempio tutte le aree a pericolosità idraulica in un file, le aree di attesa in un altro. Si possono anche disegnare a mano dalla mappa del centro operativo.</p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="file" id="piano-file" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml">
+                    </div>
+                    <div id="piano-anteprima" hidden style="margin-top: 14px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-color);">
+                        <p id="piano-letto" style="margin: 0 0 10px; font-weight: 600;"></p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600;">Che cosa sono
+                                <select id="piano-tipo" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);"></select>
+                            </label>
+                            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600;">Campo con il nome
+                                <select id="piano-campo-nome" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);"></select>
+                            </label>
+                            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600;">Campo con il livello (facoltativo)
+                                <select id="piano-campo-livello" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);"></select>
+                            </label>
+                        </div>
+                        <p id="piano-errore" style="color: var(--danger-text); font-size: 0.9rem; margin: 10px 0 0;" hidden></p>
+                        <div style="margin-top: 12px; display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" id="piano-importa" class="button-style">Importa</button>
+                        </div>
+                    </div>
+                    <h3 style="font-size: 1rem; margin: 20px 0 8px;">Già nel piano</h3>
+                    <div id="piano-elenco" style="font-size: 0.9rem;"></div>
+
+                    <h3 style="font-size: 1rem; margin: 28px 0 8px;">Cartografia del territorio, per lavorare senza internet</h3>
+                    <p style="margin: 0 0 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Le mappe stradale e satellite arrivano da internet: se la linea cade, la mappa resta grigia anche se il server si raggiunge. Caricate qui la cartografia del vostro territorio in un file <strong>MBTiles</strong> a tasselli raster (PNG, JPG o WEBP) e le mappe di ORION la useranno come fondo «Territorio (dal server)», passandoci da sole quando internet non risponde. Da QGIS: <em>Processing › Strumenti › Genera tasselli raster XYZ (MBTiles)</em>, sull'estensione del comune, zoom da 10 a 17 (fino a 18 per i centri abitati). Non si scaricano in blocco i tasselli di OpenStreetMap: lo vietano le regole dei loro server.</p>
+                    <div id="carto-stato" style="font-size: 0.9rem; margin-bottom: 10px;"></div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="file" id="carto-file" accept=".mbtiles">
+                        <button type="button" id="carto-togli" class="button-style button-secondary" hidden>Togli la cartografia</button>
+                    </div>
+                    <div id="carto-avanzamento" hidden style="margin-top: 10px;">
+                        <progress id="carto-barra" max="100" value="0" style="width: 100%;"></progress>
+                        <p id="carto-testo" style="margin: 4px 0 0; font-size: 0.85rem; color: var(--text-muted);"></p>
+                    </div>
+                    <p id="carto-errore" style="color: var(--danger-text); font-size: 0.9rem; margin: 10px 0 0;" hidden></p>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
                 <div class="settings-panel" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Registro Operazioni</h2>
                     <p style="margin: 0 0 20px 0; color: var(--text-muted); font-size: 0.9rem;">
@@ -422,7 +531,7 @@
                 <button id="closeMapPickerModal" class="close-modal-btn">&times;</button>
             </div>
             <div class="modal-body" style="padding: 15px;">
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Clicca sulla mappa o trascina il marker per definire il centro di default per tutti gli operatori.</p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Cerca il comune con la lente in alto a destra (o le coordinate), poi clicca sulla mappa o trascina il segnaposto: è il punto da cui partirà la mappa per tutti.</p>
                 <div id="picker-map" style="height: 400px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></div>
             </div>
             <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
@@ -437,6 +546,9 @@
     <script src="/js/apiHelper.js"></script>
     <script src="/js/menu-laterale.js"></script>
     <script src="/js/dashboard-admin.js"></script>
+    <script src="/js/admin-privacy.js" defer></script>
+    <script src="/vendor/togeojson/togeojson.umd.js"></script>
+    <script src="/js/admin-mappa-piano.js" defer></script>
 
 </body>
 </html>

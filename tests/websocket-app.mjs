@@ -12,6 +12,8 @@
 
 import WebSocket from 'ws';
 
+import { accediConFetch } from './accesso-prova.mjs';
+
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const WS = BASE.replace(/^http/, 'ws');
 const VOLONTARIO = process.env.ORION_VOLONTARIO || 'mbianchi';
@@ -23,8 +25,7 @@ const verifica = (descrizione, ok, dettaglio = '') => {
 };
 
 async function accedi(username, password) {
-    const r = await fetch(`${BASE}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-    return (await r.json()).token;
+    return (await accediConFetch(BASE, username, password)).token;
 }
 async function api(token, percorso, opzioni = {}) {
     const r = await fetch(BASE + percorso, {
@@ -72,6 +73,10 @@ await api(admin, `/api/reports/${mia}/updates`, { method: 'POST', body: { update
 await api(volontario, '/api/location', { method: 'POST', body: { squadra_id: squadra, latitude: 46.1, longitude: 12.2 } });
 await api(admin, `/api/reports/${mia}/teams/${squadra}`, { method: 'DELETE' });
 await api(admin, `/api/reports/${mia}/updates`, { method: 'POST', body: { update_text: 'dopo la rimozione' } });
+// Una zona del piano messa e tolta: all'app arriva solo il "rileggi".
+const zona = await api(admin, '/api/mappa/elementi', { method: 'POST', body: { piano: true, tipo: 'pericolo_frana', nome: 'Collaudo WebSocket',
+    geometria: { type: 'Polygon', coordinates: [[[12.1, 46.1], [12.2, 46.1], [12.2, 46.2], [12.1, 46.1]]] } } });
+if (zona.corpo?.id) await api(admin, `/api/mappa/elementi/${zona.corpo.id}`, { method: 'DELETE' });
 await attesa(800);
 
 console.log('\nWebSocket: web e app');
@@ -86,6 +91,7 @@ verifica('l\'app riceve le note dell\'intervento della squadra',
 verifica('l\'app sa anche quando la squadra viene tolta',
     app.ricevuti.some(m => m.action === 'new_report_update' && m.update?.update_text === 'dopo la rimozione'));
 verifica('l\'app riceve i cambi delle squadre', app.ricevuti.some(m => m.action === 'reload_squadre'));
+verifica('l\'app sa quando cambiano strade chiuse e zone', zona.stato === 201 && app.ricevuti.some(m => m.action === 'reload_mappa'));
 
 await api(admin, `/api/squadre/${squadra}`, { method: 'DELETE' });
 web.ws.close();

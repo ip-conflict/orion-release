@@ -101,11 +101,11 @@ async function loadAndApplyBranding() {
                 const sidebarSegreteria = document.getElementById('sidebar-segreteria');
                 // Il magazzino a chi lo usa, se il modulo è acceso.
             const vociMagazzino = document.getElementById('sidebar-magazzino');
-            if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haRuolo('magazziniere')) {
+            if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haPermesso('magazzino.gestione', 'magazzino.consegne')) {
                 vociMagazzino.style.display = 'block';
             }
 
-            if (sidebarSegreteria && sConf.enabled && haRuolo('segreteria')) {
+            if (sidebarSegreteria && sConf.enabled && haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
                     sidebarSegreteria.style.display = 'block';
                 }
             }
@@ -191,7 +191,8 @@ function populateUserSelectList(selectElement, usersArray) {
     usersArray.forEach(user => {
         const option = document.createElement('option');
         option.value = user.username || ''; 
-        option.textContent = `${user.nome || ''} ${user.cognome || ''} (${user.username || ''})`;
+        // Chi è arrivato in sede dopo la chiamata viene per primo.
+        option.textContent = `${user.in_sede ? '● In sede · ' : ''}${user.nome || ''} ${user.cognome || ''} (${user.username || ''})`;
         option.dataset.userId = user.id || '';
         option.dataset.nome = user.nome || '';
         option.dataset.cognome = user.cognome || '';
@@ -209,6 +210,9 @@ const parametriPagina = new URLSearchParams(window.location.search);
 function tornaAlCentroSeRichiesto() {
     if (parametriPagina.get('da') === 'centro') window.location.href = '/centro-operativo.html';
 }
+
+// Il caposquadra scelto nei due moduli (facoltativo): lo username, o null.
+const caposquadraScelto = { create: null, edit: null };
 
 async function loadSquadreAdmin() {
     if (!squadreTableBody) {
@@ -269,9 +273,11 @@ async function loadSquadreAdmin() {
                     <span class="bollino info">
                         <i class="fas fa-users"></i> ${memberCount} Volontari
                     </span>
+                    ${squadra.caposquadra ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fas fa-star" style="color: #d97706;"></i> ${escapeHTML([squadra.caposquadra.nome, squadra.caposquadra.cognome].filter(Boolean).join(' '))}${squadra.caposquadra.telefono ? ' · ' + escapeHTML(squadra.caposquadra.telefono) : ''}</div>` : ''}
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn-icon-action btn-delete-record delete-btn" title="Elimina" data-team-id="${squadra.id}"><i class="fas fa-trash"></i></button>
+                    ${squadra.coc ? '<span class="bollino info" title="Chi lavora in sala: dura quanto l\'emergenza">Sala</span>'
+                        : `<button class="btn-icon-action btn-delete-record delete-btn" title="Elimina" data-team-id="${squadra.id}"><i class="fas fa-trash"></i></button>`}
                 </td>
             `;
 
@@ -320,6 +326,7 @@ async function openCreateModalAdmin() {
     if (!adminCreateModal || !adminCreateForm) return;
     adminCreateForm.reset(); 
     window.currentSelectedMembersCreate = [];
+    caposquadraScelto.create = null;
     adminSelectedList.innerHTML = ''; 
     adminAvailableList.innerHTML = '<li style="padding: 15px; text-align: center;">Caricamento utenti...</li>'; 
     populatePrefixDropdown(adminCreatePrefixSelect, usedPrefixes); 
@@ -423,7 +430,8 @@ async function handleCreateSquadraSubmit(event) {
     const dataToSend = {
         nome_radio: prefisso,
         nome: nomeOpzionale || null, 
-        membri: selectedMembri || null
+        membri: selectedMembri || null,
+        caposquadra: selectedMembri.some(m => m.username === caposquadraScelto.create) ? caposquadraScelto.create : null
     };
 
     console.log("Creazione squadra con dati:", dataToSend);
@@ -464,8 +472,16 @@ async function openEditModalAdmin(squadraDallaLista) {
     adminEditNameInput.value = squadra.nome || '';
     
     window.currentSelectedMembersEdit = [...membriAttuali]; 
+    caposquadraScelto.edit = membriAttuali.find(m => m.caposquadra)?.username || null;
 
     populatePrefixDropdown(adminEditPrefixSelect, usedPrefixes, squadra.nome_radio); 
+    // La squadra COC tiene nome e sigla: si cambiano solo i membri.
+    if (squadra.coc) {
+        adminEditPrefixSelect.appendChild(new Option('COC (sala operativa)', 'COC', true, true));
+        adminEditPrefixSelect.value = 'COC';
+    }
+    adminEditPrefixSelect.disabled = !!squadra.coc;
+    adminEditNameInput.disabled = !!squadra.coc;
     adminEditModal.style.display = 'flex';
 
     renderUserList(adminEditCurrentList, window.currentSelectedMembersEdit, false, 'edit');
@@ -534,7 +550,8 @@ async function handleEditSquadraSubmit(event) {
     const body = {
         nome_radio: prefisso,
         nome: nomeOpzionale || null,
-        membri: membriAttuali || null
+        membri: membriAttuali || null,
+        caposquadra: membriAttuali.some(m => m.username === caposquadraScelto.edit) ? caposquadraScelto.edit : null
     };
 
     console.log(`Salvataggio modifiche per squadra ${teamId}:`, body);
@@ -714,17 +731,30 @@ function renderUserList(ulElement, usersArray, isAvailableList, listType) {
             ? 'button-style button-small'
             : (isAvailableList ? 'button-style button-small' : 'button-style button-small btn-pericolo');
 
+        // Fra i membri scelti, la stella nomina il caposquadra (uno solo,
+        // facoltativo): toccata di nuovo lo toglie.
+        const capo = !isAvailableList && caposquadraScelto[listType] === user.username;
+        const stella = isAvailableList ? '' : `<button type="button" class="stella-caposquadra${capo ? ' scelto' : ''}" aria-pressed="${capo}"
+                title="${capo ? 'Caposquadra: tocca per toglierlo' : 'Nomina caposquadra'}"><i class="${capo ? 'fas' : 'far'} fa-star" aria-hidden="true"></i></button>`;
         li.innerHTML = `
-            <div style="display: flex; flex-direction: column;">
-                <strong style="font-size: 0.9rem; color: var(--text-color);">${escapeHTML(user.nome)} ${escapeHTML(user.cognome)} ${roleBadge}</strong>
-                <span style="font-size: 0.75rem; color: var(--text-muted);">@${escapeHTML(user.username)}</span>
-                ${warningHtml}
+            <div style="display: flex; align-items: center; gap: 8px;">
+                ${stella}
+                <div style="display: flex; flex-direction: column;">
+                    <strong style="font-size: 0.9rem; color: var(--text-color);">${escapeHTML(user.nome)} ${escapeHTML(user.cognome)} ${roleBadge}${capo ? ' <span class="bollino-caposquadra">caposquadra</span>' : ''}</strong>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">@${escapeHTML(user.username)}</span>
+                    ${warningHtml}
+                </div>
             </div>
-            <button type="button" class="${buttonClass}" ${applyBlock ? 'disabled title="Requisiti non soddisfatti"' : ''}>${buttonText}</button>
+            <button type="button" class="${buttonClass} azione-membro" ${applyBlock ? 'disabled title="Requisiti non soddisfatti"' : ''}>${buttonText}</button>
         `;
+        li.querySelector('.stella-caposquadra')?.addEventListener('click', () => {
+            caposquadraScelto[listType] = capo ? null : user.username;
+            renderUserList(ulElement, usersArray, isAvailableList, listType);
+        });
 
         if (!applyBlock) {
-            li.querySelector('button').addEventListener('click', () => {
+            li.querySelector('.azione-membro').addEventListener('click', () => {
+                if (!isAvailableList && caposquadraScelto[listType] === user.username) caposquadraScelto[listType] = null;
                 if (listType === 'create') {
                     if (isAvailableList) {
                         currentAvailableMembersCreate = currentAvailableMembersCreate.filter(u => u.username !== user.username);

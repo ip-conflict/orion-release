@@ -44,6 +44,12 @@
                 <h2 style="margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
                     Seleziona Emergenza
                 </h2>
+                <!-- Le simulazioni stanno a parte: non entrano fra le emergenze. -->
+                <div class="ar-filtro" role="group" aria-label="Cosa mostrare">
+                    <button type="button" class="button-style button-small" data-filtro="emergenze" aria-pressed="true">Emergenze</button>
+                    <button type="button" class="button-style button-small button-secondary" data-filtro="simulazioni" aria-pressed="false">Simulazioni</button>
+                    <button type="button" class="button-style button-small button-secondary" data-filtro="tutte" aria-pressed="false">Tutte</button>
+                </div>
                 <div class="ar-scelta">
                     <select id="closed-emergency-select">
                         <option value="">-- Seleziona un'emergenza archiviata --</option>
@@ -52,7 +58,9 @@
                          relazione) o come file di testo da allegare. -->
                     <div class="ar-azioni" id="ar-azioni" hidden>
                         <a id="print-resoconto-link" class="button-style button-small" href="#" target="_blank" rel="noopener"><i class="fas fa-print"></i> Stampa resoconto</a>
+                        <a id="print-tutto-link" class="button-style button-small button-secondary" href="#" target="_blank" rel="noopener" title="Il resoconto e poi ogni segnalazione per intero, con diario e foto"><i class="fas fa-print"></i> Stampa tutto</a>
                         <a id="download-resoconto-link" class="button-style button-small button-secondary" href="#"><i class="fas fa-download"></i> Scarica .txt</a>
+                        <a id="copione-link" class="button-style button-small button-secondary" href="#" hidden><i class="fas fa-clapperboard"></i> Copione e valutazione</a>
                         <button type="button" id="delete-selected-emergency-btn" class="button-style button-small btn-pericolo">Elimina per sempre</button>
                     </div>
                 </div>

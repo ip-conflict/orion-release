@@ -503,7 +503,8 @@ header h1 {
     overflow: hidden;
 }
 
-#bottom-detail-main { overflow-y: visible; }
+/* La parte alta scorre; il diario resta sempre visibile con un'altezza minima. */
+#bottom-detail-main { overflow-y: auto; overscroll-behavior: contain; }
 #bottom-detail-main p, #bottom-detail-main div { margin-bottom: 8px; }
 #bottom-detail-main strong { display: inline-block; min-width: 110px; font-weight: bold; } /* Etichette */
 
@@ -667,6 +668,11 @@ header h1 {
     background-color: var(--status-assigned-bg); /* <<< USA VARIABILE ROSSA */
     border-color: var(--status-assigned-border);
     color: var(--status-assigned-text);
+}
+.team-status-item.team-coc { /* La sala operativa: chi c'è, non dove */
+    background-color: var(--info-soft-bg);
+    border-color: var(--info-text);
+    color: var(--info-text);
 }
 .team-status-item strong { /* Evidenzia ID target */
     font-weight: bold;
@@ -1491,7 +1497,7 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    max-width: 380px;
+    width: min(380px, calc(100vw - 32px));
     pointer-events: none;
 }
 /* Con la colonna eventi aperta tutto quello che sta in alto a destra trasla
@@ -1878,6 +1884,7 @@ body.eventi-aperti #contenitore-avvisi {
     gap: 2px;
 }
 .ricerca-risultati[hidden] { display: none; }
+#dyn-hazard[hidden] { display: none !important; }
 .ricerca-voce {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -1997,3 +2004,193 @@ body.eventi-aperti #contenitore-avvisi {
     #team-status-panel { max-width: none !important; }
 }
 
+
+/* Le sigle delle funzioni di supporto al lavoro sulla segnalazione. */
+.inbox-funzioni { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
+
+/* Il sigillo dello storico alla chiusura dell'emergenza */
+dialog.sigillo-chiusura {
+    max-width: 560px; width: calc(100% - 32px); border: 1px solid var(--border-color); border-radius: 12px;
+    padding: 22px 24px; background: var(--surface-color, var(--bg-color)); color: var(--text-color);
+}
+dialog.sigillo-chiusura::backdrop { background: rgba(0, 0, 0, 0.45); }
+dialog.chiusura-emergenza .chiusura-elenco { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; margin-bottom: 4px; }
+dialog.chiusura-emergenza .chiusura-elenco label { display: flex; gap: 8px; align-items: center; font-size: 0.92rem; cursor: pointer; }
+dialog.sigillo-chiusura h2 { margin: 0 0 8px; font-size: 1.2rem; }
+dialog.sigillo-chiusura p { margin: 0 0 14px; font-size: 0.92rem; line-height: 1.5; color: var(--text-muted); }
+dialog.sigillo-chiusura code {
+    display: block; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color);
+    background: var(--bg-color); font-size: 0.82rem; line-height: 1.5; overflow-wrap: anywhere; user-select: all;
+}
+dialog.sigillo-chiusura .sigillo-azioni { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+dialog.sigillo-chiusura .sigillo-esito { font-size: 0.85rem; color: var(--success-text); }
+
+/* Il caposquadra: stella, nome e telefono da chiamare se la radio non va. */
+.contatto-caposquadra { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.contatto-caposquadra .fa-star, .membro-squadra.caposquadra .stella-caposquadra { color: #d97706; }
+.contatto-caposquadra a, .membro-squadra a { font-weight: 600; color: var(--link-color); white-space: nowrap; }
+.caposquadra-menu-squadra { padding: 4px 8px 8px; font-size: 0.88rem; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
+.membro-squadra { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
+.membro-squadra.caposquadra .nome-membro { font-weight: 600; }
+.stella-caposquadra { background: none; border: none; padding: 4px; cursor: pointer; font-size: 1.05rem; color: var(--text-muted); line-height: 1; }
+button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color: #d97706; outline: none; }
+.nota-caposquadra { font-size: 0.82rem; color: var(--text-muted); padding: 0 0 8px; }
+#teamMembersModalList .stella-caposquadra { background: none; border: none; box-shadow: none; padding: 4px 6px; min-width: 0; width: auto; color: var(--text-muted); }
+#teamMembersModalList .membro-squadra.caposquadra .stella-caposquadra,
+#teamMembersModalList button.stella-caposquadra:hover,
+#teamMembersModalList button.stella-caposquadra:focus-visible { color: #d97706; background: none; }
+/* Le squadre assegnate a una segnalazione, con il loro caposquadra. */
+.squadra-assegnata { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.squadra-assegnata-capo { font-size: 0.85rem; }
+
+/* Il menu in alto a destra: una voce per riga, sempre (una voce in linea
+   affiancava la successiva e apriva una seconda colonna). */
+#top-menu-content > a { width: 100%; box-sizing: border-box; white-space: nowrap; }
+
+/* ==========================================================================
+   Segnaposto delle segnalazioni: colore per situazione, anello per le novità
+   ========================================================================== */
+:root {
+    --sit-da-assegnare: #dc2626;
+    --sit-con-squadra: #2563eb;
+    --sit-senza-squadra: #7c3aed;
+    --sit-risolta: #16a34a;
+    --sit-chiusa: #6b7280;
+    --novita-anello: #facc15;
+}
+.pin-segnalazione { position: relative; width: 28px; height: 39px; }
+.pin-segnalazione.prio-alta { width: 34px; height: 47px; }
+.pin-segnalazione svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)); }
+.pin-segnalazione path { stroke: #ffffff; stroke-width: 2; }
+.pin-segnalazione.sit-da_assegnare path { fill: var(--sit-da-assegnare); }
+.pin-segnalazione.sit-con_squadra path { fill: var(--sit-con-squadra); }
+.pin-segnalazione.sit-senza_squadra path { fill: var(--sit-senza-squadra); }
+.pin-segnalazione.sit-risolta path { fill: var(--sit-risolta); }
+.pin-segnalazione.sit-chiusa path { fill: var(--sit-chiusa); }
+.pin-segnalazione .marker-id {
+    position: absolute; left: 0; top: 7px; width: 100%;
+    text-align: center; color: #ffffff; font-weight: 700; font-size: 13px; line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); pointer-events: none;
+}
+.pin-segnalazione.prio-alta .marker-id { top: 8px; font-size: 15px; }
+
+/* Novità non viste: prevalgono su tutto. Il segnaposto salta e un anello
+   giallo pulsa attorno alla testa: si vede su ogni colore e su ogni mappa. */
+.anello-novita {
+    display: none; position: absolute; left: 50%; top: 14px;
+    width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%;
+    border: 4px solid var(--novita-anello); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    animation: anelloNovita 1.2s ease-out infinite; pointer-events: none;
+}
+.prio-alta .anello-novita { top: 17px; }
+.con-novita .anello-novita { display: block; }
+.pin-segnalazione.con-novita { animation: saltoNovita 1.2s ease-in-out infinite; z-index: 1000; }
+@keyframes anelloNovita { 0% { transform: scale(0.55); opacity: 1; } 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes saltoNovita { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* Un gruppo di segnaposto vicini: il colore della situazione più urgente. */
+.gruppo-segnalazioni {
+    position: relative; width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid #ffffff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    color: #ffffff; font-weight: 700; font-size: 14px; box-sizing: border-box;
+}
+.gruppo-segnalazioni.sit-da_assegnare { background: var(--sit-da-assegnare); }
+.gruppo-segnalazioni.sit-con_squadra { background: var(--sit-con-squadra); }
+.gruppo-segnalazioni.sit-senza_squadra { background: var(--sit-senza-squadra); }
+.gruppo-segnalazioni.sit-risolta { background: var(--sit-risolta); }
+.gruppo-segnalazioni.sit-chiusa { background: var(--sit-chiusa); }
+.gruppo-segnalazioni .anello-novita { top: 50%; }
+.gruppo-segnalazioni.con-novita { animation: saltoNovita 1.2s ease-in-out infinite; }
+
+/* ==========================================================================
+   Ultima notizia sulla scheda: una riga sola, il resto si tronca
+   ========================================================================== */
+.inbox-ultima {
+    display: flex; align-items: baseline; gap: 6px; min-width: 0;
+    font-size: 0.78rem; color: var(--text-color); line-height: 1.3;
+}
+.inbox-ultima i { font-size: 0.7rem; color: var(--info-text, #1d4ed8); flex-shrink: 0; }
+.inbox-ultima-testo { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox-ultima-meta {
+    flex: 0 0 auto; max-width: 48%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--text-muted); font-size: 0.72rem;
+}
+.inbox-card[hidden] { display: none !important; }
+
+/* ==========================================================================
+   Riepilogo sopra l'elenco: conteggi e filtri, con i colori dei segnaposto
+   ========================================================================== */
+.riepilogo-segnalazioni { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.voce-riepilogo {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);
+    font: inherit; font-size: 0.78rem; line-height: 1.2;
+}
+.voce-riepilogo strong { font-weight: 700; }
+.voce-riepilogo:hover { background: var(--list-item-hover-bg); }
+.voce-riepilogo.attiva { border-color: var(--text-color); box-shadow: inset 0 0 0 1px var(--text-color); }
+.pallino-riepilogo { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.voce-tutte .pallino-riepilogo { display: none; }
+.voce-da_assegnare .pallino-riepilogo { background: var(--sit-da-assegnare); }
+.voce-con_squadra .pallino-riepilogo { background: var(--sit-con-squadra); }
+.voce-senza_squadra .pallino-riepilogo { background: var(--sit-senza-squadra); }
+.voce-risolta .pallino-riepilogo { background: var(--sit-risolta); }
+.voce-novita .pallino-riepilogo { background: var(--novita-anello); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.voce-novita.con-novita { border-color: #ef4444; animation: syncPulse 2s infinite ease-in-out; }
+
+/* Menu di stato e priorità: chiuso ha il tono della voce scelta, aperto
+   ogni voce ha il suo, così si vede subito che cosa si sta scegliendo. */
+.scelta-colorata { border: 1px solid; }
+.scelta-colorata.tono-rosso, .scelta-colorata option.tono-rosso { color: #b91c1c; background-color: #fee2e2; border-color: #fca5a5; }
+.scelta-colorata.tono-ambra, .scelta-colorata option.tono-ambra { color: #92400e; background-color: #fef3c7; border-color: #fde68a; }
+.scelta-colorata.tono-verde, .scelta-colorata option.tono-verde { color: #047857; background-color: #d1fae5; border-color: #6ee7b7; }
+.scelta-colorata.tono-grigio, .scelta-colorata option.tono-grigio { color: #475569; background-color: #f1f5f9; border-color: #cbd5e1; }
+.scelta-colorata option { font-weight: 700; }
+
+/* Gli avvisi restano finché qualcuno li chiude: se sono tanti, la colonna
+   scorre invece di uscire dallo schermo, e in cima c'è "Chiudi tutti". */
+#contenitore-avvisi { max-height: calc(100vh - 160px); overflow-y: auto; overscroll-behavior: contain; }
+.avvisi-chiudi-tutti {
+    pointer-events: auto; align-self: flex-end;
+    padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);
+    font: inherit; font-size: 0.78rem; font-weight: 600;
+    box-shadow: 0 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.2));
+}
+.avvisi-chiudi-tutti:hover { background: var(--list-item-hover-bg); }
+
+/* Con molti pulsanti nell'intestazione, sugli schermi più stretti restano le
+   icone (il nome è nel suggerimento): lo stato dell'emergenza non si schiaccia. */
+@media (max-width: 1440px) {
+    header .etichetta-testata { display: none; }
+}
+
+/* Rete scarsa: la fascia che dice che il server non risponde, cosa si sta
+   guardando e cosa aspetta di partire. */
+#rete-scarsa {
+    position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 99990;
+    width: min(760px, calc(100vw - 24px)); margin-top: 6px; padding: 8px 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.3);
+    font-size: .9rem; line-height: 1.35; color: #fff; background: #334155;
+}
+#rete-scarsa.senza-rete { background: #7f1d1d; }
+#rete-scarsa.in-coda { background: #1e3a8a; }
+#rete-scarsa.non-inviati { background: #78350f; }
+#rete-scarsa > span { flex: 1 1 300px; }
+#rete-scarsa button {
+    background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.4);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: .85rem;
+}
+#rete-scarsa button:hover { background: rgba(255,255,255,.28); }
+#rete-scarsa .rete-elenco { flex-basis: 100%; max-height: 40vh; overflow: auto; }
+#rete-scarsa .rete-elenco h4 { margin: 6px 0 4px; font-size: .85rem; text-transform: uppercase; opacity: .85; }
+#rete-scarsa .rete-elenco ul { list-style: none; margin: 0; padding: 0; }
+#rete-scarsa .rete-elenco li {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    padding: 5px 0; border-top: 1px solid rgba(255,255,255,.15);
+}
+#rete-scarsa .rete-elenco li small { opacity: .8; }
+#rete-scarsa .rete-elenco li button { margin-left: auto; }

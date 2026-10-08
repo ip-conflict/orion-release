@@ -347,3 +347,37 @@
     color: var(--warning-text);
     font-size: 0.92rem;
 }
+
+/* --- Integrità dello storico ------------------------------------------- */
+.pannello .sottotitolo-pannello { margin: 26px 0 0; font-size: 1.02rem; }
+.sigillo-attuale { margin: 12px 0 0; }
+.sigillo-attuale code {
+    display: block; padding: 10px 12px; border-radius: 8px; font-size: 0.82rem; line-height: 1.5;
+    background: var(--bg-color); border: 1px solid var(--border-color); overflow-wrap: anywhere; user-select: all;
+}
+.campo-sigillo { display: block; margin-top: 18px; }
+.campo-sigillo span { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+.campo-sigillo textarea {
+    width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 0.82rem; padding: 8px 10px;
+    border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color); color: var(--text-color); resize: vertical;
+}
+#esito-confronto.ok { color: var(--success-text, #15803d); font-weight: 600; }
+#esito-confronto.ko { color: var(--danger-text); font-weight: 600; }
+.integrita-problema {
+    margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 0.9rem; line-height: 1.5;
+    border: 1px solid var(--danger-text); color: var(--text-color); background: var(--bg-color);
+}
+.integrita-problema strong { color: var(--danger-text); }
+.integrita-cancellazioni { margin-top: 22px; font-size: 0.88rem; }
+.integrita-cancellazioni h3 { font-size: 1.02rem; margin: 0 0 6px; }
+.integrita-cancellazioni ul { margin: 6px 0 0; padding-left: 18px; color: var(--text-muted); line-height: 1.6; }
+
+/* --- Cifratura --------------------------------------------------------- */
+.riquadro-recupero { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--border-color); }
+.riquadro-recupero input[type=password] {
+    width: 100%; max-width: 360px; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);
+}
+#testo-chiave-recupero { font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
+#esito-recupero.ko { color: var(--danger-text); font-weight: 600; }
+#esito-recupero.ok { color: var(--success-text); font-weight: 600; }

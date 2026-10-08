@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/css/componenti.css">
   <link rel="stylesheet" href="/css/centro-operativo.css">
   <link rel="stylesheet" href="/css/login.css">
+  <link rel="stylesheet" href="/css/mfa.css">
 </head>
 <body>
   <div class="login-container">
@@ -26,6 +27,69 @@
         <p id="login-message"></p>
       </form>
 
+      <!-- La verifica in due passaggi: il codice, dopo la password giusta. -->
+      <form id="mfa-form" class="mfa" hidden novalidate>
+        <h2>Verifica in due passaggi</h2>
+        <p class="mfa-spiega">Apri l'app di autenticazione sul telefono e scrivi il codice di sei cifre di ORION.
+          Senza telefono, scrivi uno dei codici di riserva.</p>
+        <label for="mfa-codice">Codice</label>
+        <input type="text" id="mfa-codice" class="mfa-codice" autocomplete="one-time-code"
+               autocapitalize="characters" spellcheck="false" maxlength="11" placeholder="123456" required />
+        <button class="button-style" type="submit">Verifica</button>
+        <a href="#" class="mfa-indietro" data-mfa-indietro>Torna all'accesso</a>
+        <p id="mfa-messaggio" class="mfa-messaggio" role="alert"></p>
+      </form>
+
+      <!-- Un amministratore senza verifica la attiva qui, prima di entrare. -->
+      <form id="mfa-attiva-form" class="mfa" hidden novalidate>
+        <h2>Attiva la verifica in due passaggi</h2>
+        <p class="mfa-spiega">Per gli amministratori è obbligatoria: dopo la password, ORION chiederà un codice che
+          cambia ogni 30 secondi, generato da un'app sul tuo telefono (Google Authenticator, Microsoft
+          Authenticator, FreeOTP, Aegis o un'altra app per i codici a tempo). Installa l'app, aggiungi un account
+          inquadrando questo QR, poi scrivi qui sotto il codice che compare.</p>
+        <div id="mfa-attiva-qr"></div>
+        <label for="mfa-attiva-codice">Codice che vedi nell'app</label>
+        <input type="text" id="mfa-attiva-codice" class="mfa-codice" inputmode="numeric" autocomplete="one-time-code"
+               spellcheck="false" maxlength="6" placeholder="123456" required />
+        <button class="button-style" type="submit">Attiva</button>
+        <a href="#" class="mfa-indietro" data-mfa-indietro>Torna all'accesso</a>
+        <p id="mfa-attiva-messaggio" class="mfa-messaggio" role="alert"></p>
+      </form>
+
+      <!-- I codici di riserva, una volta sola. -->
+      <div id="mfa-codici" class="mfa" hidden>
+        <h2>Codici di riserva</h2>
+        <p class="mfa-spiega">Se perdi il telefono o non l'hai con te, entri con uno di questi codici al posto di
+          quello dell'app. Ognuno vale una volta. Stampali o scrivili e tienili lontano dal telefono:
+          non si vedranno più. Dal profilo puoi crearne di nuovi.</p>
+        <div id="mfa-codici-contenuto"></div>
+        <button class="button-style" type="button" id="mfa-codici-continua">Li ho messi da parte, entra</button>
+      </div>
+
+      <!-- La configurazione iniziale: compare solo finché non c'è un amministratore. -->
+      <form id="primo-accesso-form" class="primo-accesso" hidden novalidate>
+        <h2>Configurazione iniziale</h2>
+        <p class="pa-spiega">ORION è installato. Crea l'amministratore: è la persona che poi aggiunge tutti gli altri.
+          Il codice lo ha mostrato l'installazione; sul server è nel file <code>PRIMO-ACCESSO.txt</code> della cartella di ORION.</p>
+        <label for="pa-codice">Codice di configurazione</label>
+        <input type="text" id="pa-codice" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required />
+        <div class="pa-coppia">
+          <div><label for="pa-nome">Nome</label><input type="text" id="pa-nome" autocomplete="given-name" required /></div>
+          <div><label for="pa-cognome">Cognome</label><input type="text" id="pa-cognome" autocomplete="family-name" required /></div>
+        </div>
+        <label for="pa-username">Username</label>
+        <input type="text" id="pa-username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi" required />
+        <label for="pa-email">Email <span class="pa-facoltativo">(per recuperare la password)</span></label>
+        <input type="email" id="pa-email" autocomplete="email" />
+        <label for="pa-password">Password</label>
+        <input type="password" id="pa-password" autocomplete="new-password" required />
+        <label for="pa-conferma">Ripeti la password</label>
+        <input type="password" id="pa-conferma" autocomplete="new-password" required />
+        <p class="pa-regole">Almeno 12 caratteri, con maiuscole, minuscole, un numero e un simbolo.</p>
+        <button class="button-style" type="submit">Crea l'amministratore</button>
+        <p id="pa-messaggio" role="alert"></p>
+      </form>
+
       <form id="forgot-password-form" style="display: none;">
         <h2>Recupero Password</h2>
         <p style="margin-bottom: 15px; font-size: 0.9em;">Inserisci il tuo username o la tua email. Ti invieremo un link per reimpostare la password.</p>
@@ -37,10 +101,16 @@
         </div>
         <p id="forgot-message" style="margin-top: 15px; font-weight: bold;"></p>
       </form>
+      <p style="margin: 18px 0 0; font-size: 0.82em; text-align: center;">
+        <a href="/informativa.html" style="color: var(--link-color); text-decoration: none;">Condizioni d'uso</a>
+      </p>
     </div>
   </div>
 
+  <script src="/vendor/qrcode/qrcode.min.js"></script>
   <script src="/js/installa-app.js"></script>
+  <script src="/js/mfa-comune.js"></script>
   <script src="/js/login.js"></script>
+  <script src="/js/primo-accesso.js"></script>
 </body>
 </html>

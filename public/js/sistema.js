@@ -512,5 +512,186 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch { /* niente di grave: la pagina funziona lo stesso */ }
         caricaTutto();
         caricaVersione();
+        caricaIntegrita();
+        caricaCifratura();
     })();
+
+    // --- Cifratura ---------------------------------------------------------
+    let modoRecupero = null; // 'mostra' | 'inserisci'
+    async function caricaCifratura() {
+        try {
+            const c = await fetchApi('/api/sistema/cifratura');
+            const STATI = { pronta: ['Attiva', null], mancante: ['Chiave mancante', 'allarme'], diversa: ['Chiave sbagliata', 'allarme'] };
+            const [testo, gravita] = STATI[c.stato] || [c.stato, 'attenzione'];
+            $('stato-cifratura').replaceChildren(
+                voceStato('Cifratura', testo, gravita),
+                voceStato('Chiave di recupero', c.recupero_salvato ? 'Conservata' : 'Da conservare', c.recupero_salvato ? null : 'attenzione'),
+                voceStato('File ancora in chiaro', c.file_in_chiaro === 0 ? 'Nessuno' : `${c.file_in_chiaro} (si cifrano entro un'ora)`, c.file_in_chiaro ? 'attenzione' : null)
+            );
+            $('avviso-recupero').hidden = c.recupero_salvato || c.stato !== 'pronta';
+            $('btn-mostra-recupero').hidden = c.stato !== 'pronta';
+            if (c.stato !== 'pronta') {
+                const p = document.createElement('div');
+                p.className = 'integrita-problema';
+                const t = document.createElement('strong');
+                t.textContent = 'I file e i backup cifrati non si leggono. ';
+                p.append(t, c.stato === 'mancante'
+                    ? `Sul server manca la chiave dei dati (${c.file_chiave}). Inserisci la chiave di recupero che hai conservato.`
+                    : 'La chiave sul server non è quella con cui sono stati cifrati i dati (succede dopo un ripristino da un\'altra installazione). Inserisci la chiave di recupero di quella installazione.');
+                $('stato-cifratura').after(p);
+            }
+        } catch (e) {
+            $('stato-cifratura').replaceChildren(voceStato('Cifratura', e.message, 'allarme'));
+        }
+    }
+
+    function apriRecupero(modo) {
+        modoRecupero = modo;
+        $('riquadro-recupero').hidden = false;
+        $('chiave-mostrata').hidden = true;
+        $('campo-chiave-inserita').hidden = modo !== 'inserisci';
+        $('testo-recupero-istruzioni').textContent = modo === 'mostra'
+            ? 'Per vedere la chiave di recupero serve la tua password. Mostrala solo dove nessuno guarda lo schermo.'
+            : 'Incolla o ricopia la chiave di recupero (52 caratteri a gruppi di quattro) e conferma con la tua password.';
+        $('esito-recupero').textContent = '';
+        $('password-recupero').value = '';
+        $('password-recupero').closest('label').hidden = false;
+        $('btn-conferma-recupero').hidden = false;
+        (modo === 'inserisci' ? $('chiave-inserita') : $('password-recupero')).focus();
+    }
+    function chiudiRecupero() {
+        $('riquadro-recupero').hidden = true;
+        $('testo-chiave-recupero').textContent = '';
+        $('password-recupero').value = '';
+        $('chiave-inserita').value = '';
+    }
+    $('btn-mostra-recupero').addEventListener('click', () => apriRecupero('mostra'));
+    $('btn-inserisci-chiave').addEventListener('click', () => apriRecupero('inserisci'));
+    $('btn-annulla-recupero').addEventListener('click', chiudiRecupero);
+    $('btn-conferma-recupero').addEventListener('click', async () => {
+        const esito = $('esito-recupero');
+        esito.className = 'nota';
+        esito.textContent = '';
+        try {
+            if (modoRecupero === 'mostra') {
+                const r = await fetchApi('/api/sistema/cifratura/recupero', { method: 'POST', body: JSON.stringify({ password: $('password-recupero').value }) });
+                $('testo-chiave-recupero').textContent = r.chiave;
+                $('chiave-mostrata').hidden = false;
+                $('password-recupero').value = '';
+                $('password-recupero').closest('label').hidden = true;
+                $('btn-conferma-recupero').hidden = true;
+                $('testo-recupero-istruzioni').textContent = 'Ecco la chiave di recupero. Stampala o ricopiala adesso: chiudendo il riquadro sparisce dallo schermo.';
+            } else {
+                const r = await fetchApi('/api/sistema/cifratura/chiave', { method: 'POST', body: JSON.stringify({ password: $('password-recupero').value, chiave: $('chiave-inserita').value }) });
+                esito.className = 'nota ok';
+                esito.textContent = r.message;
+                $('chiave-inserita').value = '';
+                $('password-recupero').value = '';
+                caricaCifratura();
+            }
+        } catch (e) {
+            esito.className = 'nota ko';
+            esito.textContent = e.message;
+        }
+    });
+    $('btn-stampa-recupero').addEventListener('click', () => {
+        const finestra = window.open('', '_blank', 'width=700,height=500');
+        if (!finestra) return notifica('Il browser ha bloccato la finestra di stampa: ricopia la chiave a mano.', 'attenzione');
+        const doc = finestra.document;
+        doc.title = 'Chiave di recupero ORION';
+        const h = doc.createElement('h1'); h.textContent = 'ORION - chiave di recupero dei dati';
+        const p = doc.createElement('p'); p.textContent = `Server: ${location.host}. Stampata il ${new Date().toLocaleString('it-IT')}. Senza questa chiave i file e i backup cifrati non si aprono se la chiave sul server va persa. Conservala in cassaforte.`;
+        const k = doc.createElement('pre'); k.textContent = $('testo-chiave-recupero').textContent;
+        k.style.cssText = 'font-size:20px;letter-spacing:2px;white-space:pre-wrap;border:1px solid #000;padding:16px';
+        doc.body.append(h, p, k);
+        finestra.print();
+    });
+    $('btn-recupero-conservato').addEventListener('click', async () => {
+        try {
+            await fetchApi('/api/sistema/cifratura/recupero-salvato', { method: 'POST' });
+            chiudiRecupero();
+            caricaCifratura();
+            notifica('Chiave di recupero segnata come conservata.', 'successo');
+        } catch (e) { notifica(e.message, 'errore'); }
+    });
+
+    // --- Integrità dello storico -------------------------------------------
+    const NOMI_TABELLE = {
+        report_updates: 'note delle segnalazioni', diario_sala: 'diario di sala', audit_log: 'registro delle operazioni',
+        movimenti: 'movimenti del magazzino', emergency_team_log: 'registro delle squadre'
+    };
+    const elencoRighe = (esempi) => esempi.map(e => `${NOMI_TABELLE[e.tabella] || e.tabella} (n. ${e.righe.join(', ')})`).join('; ');
+
+    async function caricaIntegrita() {
+        const box = $('stato-integrita');
+        box.replaceChildren(voceStato('Verifica', 'in corso…'));
+        $('dettagli-integrita').replaceChildren();
+        try {
+            const d = await fetchApi('/api/sistema/integrita');
+            box.replaceChildren(
+                voceStato('Storico', d.integro ? 'Integro' : 'Alterato', d.integro ? null : 'allarme'),
+                voceStato('Voci sigillate', Number(d.anelli).toLocaleString('it-IT')),
+                voceStato('Ultima verifica', new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }))
+            );
+            const problemi = [];
+            if (d.catena_rotta) problemi.push(`la catena è spezzata all'anello n. ${d.catena_rotta.id} (${quandoLeggibile(d.catena_rotta.quando)}): da lì il registro è stato riscritto`);
+            if (d.alterate) problemi.push(`${d.alterate} ${d.alterate === 1 ? 'voce è stata modificata' : 'voci sono state modificate'}: ${elencoRighe(d.esempi_alterate)}`);
+            if (d.mancanti) problemi.push(`${d.mancanti} ${d.mancanti === 1 ? 'voce è stata cancellata' : 'voci sono state cancellate'} fuori da una cancellazione di emergenza: ${elencoRighe(d.esempi_mancanti)}`);
+            if (problemi.length) {
+                const p = document.createElement('div');
+                p.className = 'integrita-problema';
+                const t = document.createElement('strong');
+                t.textContent = 'Lo storico non è più quello registrato. ';
+                p.append(t, `Qualcuno è intervenuto direttamente sul database: ${problemi.join('; ')}. Non toccare niente, scarica il sigillo di adesso e un backup, e avvisa chi gestisce il server.`);
+                $('dettagli-integrita').append(p);
+            }
+            $('sigillo-attuale').textContent = d.sigillo || 'Ancora nessuna voce sigillata.';
+            disegnaCancellazioni(d.cancellazioni || []);
+        } catch (e) {
+            box.replaceChildren(voceStato('Verifica', e.message, 'allarme'));
+        }
+    }
+
+    function disegnaCancellazioni(elenco) {
+        const box = $('cancellazioni-integrita');
+        box.replaceChildren();
+        if (!elenco.length) return;
+        box.className = 'integrita-cancellazioni';
+        const h = document.createElement('h3');
+        h.textContent = 'Emergenze archiviate cancellate';
+        const spiega = document.createElement('p');
+        spiega.className = 'spiegazione';
+        spiega.textContent = 'Cancellarle libera spazio; nella catena resta chi lo ha fatto, quando, e quali voci sono uscite.';
+        const ul = document.createElement('ul');
+        elenco.forEach(c => {
+            const li = document.createElement('li');
+            const em = c.emergenza || {};
+            li.textContent = `${em.codice || '?'}${em.nome ? ` — ${em.nome}` : ''}: cancellata il ${quandoLeggibile(c.quando)}${c.eseguita_da ? ` da ${c.eseguita_da}` : ''}, ${c.righe || 0} voci (anello n. ${c.id})`;
+            ul.append(li);
+        });
+        box.append(h, spiega, ul);
+    }
+
+    $('btn-verifica-integrita').addEventListener('click', caricaIntegrita);
+    $('btn-copia-sigillo').addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText($('sigillo-attuale').textContent);
+            notifica('Sigillo copiato: incollalo dove lo conservi.', 'successo');
+        } catch {
+            notifica('Copia non riuscita: seleziona il testo del sigillo e copialo a mano.', 'attenzione');
+        }
+    });
+    $('btn-confronta-sigillo').addEventListener('click', async () => {
+        const esito = $('esito-confronto');
+        esito.className = 'nota';
+        esito.textContent = 'Confronto…';
+        try {
+            const r = await fetchApi('/api/sistema/integrita/confronta', { method: 'POST', body: JSON.stringify({ sigillo: $('sigillo-da-confrontare').value }) });
+            esito.textContent = r.message;
+            esito.className = `nota ${r.ok ? 'ok' : 'ko'}`;
+        } catch (e) {
+            esito.textContent = e.message;
+            esito.className = 'nota ko';
+        }
+    });
 });

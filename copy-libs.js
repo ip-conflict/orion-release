@@ -43,6 +43,11 @@ const file = [
 
     ['qrcodejs/qrcode.min.js', 'vendor/qrcode/qrcode.min.js'],
 
+    // Disegno sulla mappa (strade chiuse, zone) e lettura dei KML del piano.
+    ['@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.min.js', 'vendor/geoman/leaflet-geoman.min.js'],
+    ['@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css', 'vendor/geoman/leaflet-geoman.css'],
+    ['@tmcw/togeojson/dist/togeojson.umd.js', 'vendor/togeojson/togeojson.umd.js'],
+
     ['@fortawesome/fontawesome-free/css/all.min.css', 'vendor/fontawesome/css/all.min.css'],
     ['line-awesome/dist/font-awesome-line-awesome/css/all.min.css', 'vendor/line-awesome/css/all.min.css']
 ];

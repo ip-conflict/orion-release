@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copione - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/vendor/geoman/leaflet-geoman.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/copione.css">
+</head>
+<body class="pagina-copione">
+    <header class="cp-testa">
+        <a href="/calendario.html" class="cp-indietro" title="Torna al calendario"><i class="fas fa-arrow-left"></i></a>
+        <span class="cp-segno">COPIONE</span>
+        <div class="cp-titolo">
+            <h1 id="cp-titolo">Copione</h1>
+            <span id="cp-sottotitolo"></span>
+        </div>
+        <div class="cp-azioni" id="cp-azioni">
+            <button type="button" class="button-style button-secondary" id="cp-btn-excel"><i class="fas fa-file-excel"></i> Excel</button>
+            <button type="button" class="button-style button-secondary" id="cp-btn-copia"><i class="fas fa-copy"></i> Copia da un'altra</button>
+        </div>
+    </header>
+
+    <div class="cp-lavoro">
+        <aside class="cp-colonna">
+            <nav class="cp-schede" role="tablist">
+                <button type="button" role="tab" id="scheda-copione" aria-selected="true">Copione</button>
+                <button type="button" role="tab" id="scheda-valutazione" aria-selected="false">Valutazione</button>
+            </nav>
+
+            <section id="pannello-copione" class="cp-pannello">
+                <details class="cp-scenario" id="cp-scenario" hidden>
+                    <summary>Scenario e obiettivi</summary>
+                    <p id="cp-scenario-testo"></p>
+                    <p id="cp-obiettivi-testo" class="nota"></p>
+                </details>
+                <div class="cp-nuovo" id="cp-nuovo">
+                    <button type="button" class="button-style cp-btn-nuovo" id="cp-btn-nuovo"><i class="fas fa-plus"></i> Nuovo evento</button>
+                    <div class="cp-scelta-tipo" id="cp-scelta-tipo" hidden></div>
+                </div>
+                <p class="cp-da-posizionare" id="cp-da-posizionare" hidden></p>
+                <ol class="cp-elenco" id="cp-elenco" aria-live="polite"></ol>
+                <p class="nota cp-spiega">Gli eventi con il minuto escono da soli dopo l'avvio dello scenario; quelli "a mano" li fa uscire la regia. La sala vede solo quello che esce: risposta e tempo attesi restano della regia.</p>
+            </section>
+
+            <section id="pannello-valutazione" class="cp-pannello" hidden>
+                <div id="cp-valutazione"></div>
+                <h3>Osservazioni della regia</h3>
+                <ul id="cp-osservazioni" class="cp-osservazioni"></ul>
+                <h3>Debriefing</h3>
+                <form id="cp-debriefing" class="cp-debriefing">
+                    <label>Obiettivi raggiunti <textarea id="db-obiettivi" rows="3"></textarea></label>
+                    <label>Cosa è andato bene <textarea id="db-forza" rows="3"></textarea></label>
+                    <label>Cosa non ha funzionato <textarea id="db-criticita" rows="3"></textarea></label>
+                    <label>Cosa migliorare <textarea id="db-miglioramenti" rows="3"></textarea></label>
+                    <p class="nota" id="db-stato"></p>
+                    <div class="cp-riga-azioni" id="db-azioni">
+                        <button type="submit" class="button-style">Salva</button>
+                        <button type="button" class="button-style button-secondary" id="db-concludi">Concludi il debriefing</button>
+                    </div>
+                </form>
+                <label class="cp-pubblica" id="cp-pubblica-riga"><input type="checkbox" id="cp-pubblica"> Copione e debriefing visibili a chi ha partecipato</label>
+            </section>
+        </aside>
+
+        <div class="cp-mappa-box">
+            <div id="cp-mappa"></div>
+            <div class="cp-guida" id="cp-guida" hidden></div>
+
+            <!-- Il modulo di un evento: sopra la mappa, a destra, come il dettaglio di una segnalazione. -->
+            <form id="cp-modulo" class="cp-modulo" hidden>
+                <div class="cp-modulo-testa">
+                    <span id="cp-mod-icona"></span>
+                    <h2 id="cp-mod-titolo">Evento</h2>
+                    <button type="button" class="cp-chiudi" id="cp-mod-chiudi" aria-label="Chiudi">&times;</button>
+                </div>
+                <div class="cp-modulo-corpo">
+                    <fieldset class="cp-quando">
+                        <legend>Quando esce</legend>
+                        <label><input type="radio" name="cp-quando" value="tempo" checked> Da solo, dopo
+                            <input type="number" id="cp-minuto" min="0" max="10080" step="1" value="0"> minuti dall'avvio</label>
+                        <label><input type="radio" name="cp-quando" value="mano"> Lo faccio uscire io, quando serve</label>
+                    </fieldset>
+                    <label><span>Titolo <span class="obbligatorio">*</span></span>
+                        <input type="text" id="cp-f-titolo" maxlength="200" required>
+                    </label>
+                    <label id="riga-testo">Testo
+                        <textarea id="cp-f-testo" rows="3" maxlength="2000"></textarea>
+                    </label>
+
+                    <div data-per="segnalazione">
+                        <fieldset class="cp-modo">
+                            <legend>Come arriva alla sala</legend>
+                            <label><input type="radio" name="cp-modo" value="da_sola" checked> Entra da sola nel centro operativo</label>
+                            <label><input type="radio" name="cp-modo" value="telefono"> La telefona la regia: la sala la inserisce da sé</label>
+                        </fieldset>
+                        <label>Indirizzo
+                            <span class="cp-con-pulsante"><input type="text" id="cp-f-indirizzo" maxlength="200"><button type="button" class="button-style button-secondary btn-piccolo" id="cp-cerca-indirizzo">Trova</button></span>
+                        </label>
+                        <div class="cp-posizione">
+                            <span id="cp-posizione-testo">Nessun punto sulla mappa</span>
+                            <button type="button" class="button-style button-secondary btn-piccolo" id="cp-metti-punto"><i class="fas fa-location-dot"></i> Metti sulla mappa</button>
+                        </div>
+                        <div class="cp-due">
+                            <label>Priorità
+                                <select id="cp-f-priorita"><option value="High">Alta</option><option value="Medium" selected>Media</option><option value="Low">Bassa</option></select>
+                            </label>
+                            <label>Chi chiama <input type="text" id="cp-f-segnalante" maxlength="120"></label>
+                            <label>Telefono <input type="text" id="cp-f-telefono" maxlength="40"></label>
+                        </div>
+                    </div>
+
+                    <div data-per="aggravamento">
+                        <label>Peggiora la segnalazione
+                            <select id="cp-f-riferimento"></select>
+                        </label>
+                        <label>Nuova priorità
+                            <select id="cp-f-priorita-agg"><option value="">Non cambia</option><option value="High">Alta</option><option value="Medium">Media</option><option value="Low">Bassa</option></select>
+                        </label>
+                    </div>
+
+                    <div data-per="imprevisto">
+                        <label>Squadra che lo riceve sul telefono
+                            <input type="text" id="cp-f-squadra" maxlength="30" list="nomi-radio" placeholder="per esempio Alfa">
+                        </label>
+                        <datalist id="nomi-radio"></datalist>
+                    </div>
+
+                    <div data-per="strada pericolo">
+                        <label><span id="cp-elemento-etichetta">Cosa</span>
+                            <select id="cp-f-elemento"></select>
+                        </label>
+                        <div class="cp-posizione">
+                            <span id="cp-forma-testo">Non ancora disegnata</span>
+                            <button type="button" class="button-style button-secondary btn-piccolo" id="cp-disegna"><i class="fas fa-pen"></i> Disegna sulla mappa</button>
+                        </div>
+                    </div>
+
+                    <details class="cp-attesa">
+                        <summary>Per la valutazione (solo la regia)</summary>
+                        <label>Cosa ci si aspetta dalla sala <textarea id="cp-f-risposta" rows="2" maxlength="2000"></textarea></label>
+                        <label id="riga-minuti-attesi">Entro quanti minuti <input type="number" id="cp-f-minuti-attesi" min="1" max="1440" step="1"></label>
+                    </details>
+                </div>
+                <div class="cp-modulo-piede">
+                    <button type="button" class="button-style btn-pericolo" id="cp-elimina">Togli</button>
+                    <span></span>
+                    <button type="button" class="button-style button-secondary" id="cp-annulla">Annulla</button>
+                    <button type="submit" class="button-style" id="cp-salva">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Excel: il modello, il caricamento, lo scarico del copione. -->
+    <div id="modale-excel" class="cp-velo" hidden>
+        <div class="cp-finestra" role="dialog" aria-modal="true" aria-labelledby="excel-titolo">
+            <div class="cp-modulo-testa"><h2 id="excel-titolo">Copione e Excel</h2><button type="button" class="cp-chiudi" data-chiudi aria-label="Chiudi">&times;</button></div>
+            <div class="cp-modulo-corpo">
+                <ol class="cp-passi">
+                    <li><a class="button-style button-secondary" href="/api/copione/modello.xlsx" download><i class="fas fa-download"></i> Scarica il modello</a>
+                        <span class="nota">Un foglio con le colonne giuste, le tendine, qualche riga d'esempio e le istruzioni.</span></li>
+                    <li>Compilalo: una riga per evento. Le righe che cominciano con ESEMPIO non contano.</li>
+                    <li><label class="button-style" for="excel-file"><i class="fas fa-upload"></i> Carica il foglio compilato</label>
+                        <input type="file" id="excel-file" accept=".xlsx" hidden>
+                        <label class="cp-sostituisci"><input type="checkbox" id="excel-sostituisci"> Sostituisci il copione attuale (altrimenti si aggiunge)</label></li>
+                </ol>
+                <div id="excel-esito"></div>
+                <p><a id="excel-scarica" href="#" class="link-piccolo"><i class="fas fa-file-excel"></i> Scarica il copione attuale in Excel</a> (per correggerlo e ricaricarlo, o tenerlo per l'anno prossimo)</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="modale-copia" class="cp-velo" hidden>
+        <div class="cp-finestra" role="dialog" aria-modal="true" aria-labelledby="copia-titolo">
+            <div class="cp-modulo-testa"><h2 id="copia-titolo">Copia il copione di un'altra attività</h2><button type="button" class="cp-chiudi" data-chiudi aria-label="Chiudi">&times;</button></div>
+            <div class="cp-modulo-corpo">
+                <p class="nota">Gli eventi si aggiungono a quelli che ci sono. Si possono poi cambiare uno per uno.</p>
+                <ul id="copia-elenco" class="cp-copia-elenco"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="/leaflet/leaflet.js"></script>
+    <script src="/vendor/geoman/leaflet-geoman.min.js"></script>
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script type="module" src="/js/copione.js"></script>
+</body>
+</html>

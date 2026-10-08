@@ -120,6 +120,7 @@ body {
 .st-diario time { font-weight: 700; margin-right: 6px; }
 
 .st-piede { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--st-linea); font-size: 8.5pt; color: var(--st-tenue); }
+.st-sigillo { margin-top: 4px; font-size: 7.5pt; color: var(--st-tenue); font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
 
 .st-errore { max-width: 600px; margin: 40px auto; padding: 20px; background: #fff; border-radius: 8px; text-align: center; }
 .st-autore { font-size: 8.5pt; color: var(--st-tenue); }
@@ -130,3 +131,85 @@ body {
 .st-rubrica th:nth-child(2) { width: 18%; }
 .st-rubrica th:nth-child(3) { width: 24%; }
 .st-rubrica td { overflow-wrap: anywhere; }
+
+/* Una funzione di supporto nel punto di situazione. */
+.st-funzione { font-size: 10.5pt; margin: 10px 0 4px; break-after: avoid; }
+.st-funzione .st-conta { font-weight: 400; font-size: 9pt; color: var(--st-tenue); margin-left: 6px; }
+
+/* La stampa completa: ogni segnalazione per intero. Ogni scheda comincia su
+   una riga nuova e il titolo non resta solo in fondo alla pagina. */
+.st-scheda { margin: 0 0 14px; padding: 10px 0 0; border-top: 1.5px solid var(--st-testo); }
+.st-scheda h3 { font-size: 11.5pt; margin: 0 0 6px; break-after: avoid; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.st-scheda h4 { font-size: 9.5pt; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; color: var(--st-tenue); break-after: avoid; }
+.st-campi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 16px; margin: 0; font-size: 9.5pt; break-inside: avoid; }
+.st-campi div { display: flex; gap: 6px; }
+.st-campi dt { color: var(--st-tenue); white-space: nowrap; }
+.st-campi dd { margin: 0; }
+.st-descrizione { font-size: 10pt; margin: 8px 0 0; white-space: pre-line; }
+.st-foto { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.st-foto img { width: 42mm; height: 32mm; object-fit: cover; border: 1px solid var(--st-linea); break-inside: avoid; }
+.st-diario .st-sistema { color: var(--st-tenue); }
+@media (max-width: 700px) { .st-campi { grid-template-columns: 1fr; } }
+
+/* La filigrana: il logo del gruppo, chiaro, al centro di ogni pagina. In
+   stampa un elemento fisso si ripete su tutte le pagine; il contenuto ci sta
+   sopra. */
+.st-filigrana {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 115mm; height: 115mm; object-fit: contain;
+    opacity: 0.08; filter: grayscale(1); pointer-events: none; z-index: 0;
+}
+.st-foglio > :not(.st-filigrana):not(.st-simulazione) { position: relative; z-index: 1; }
+
+/* Il quadro della situazione sul foglio: in testa, prima dei numeri. */
+.st-quadro-testo { margin: 4px 0 8px; font-size: 11pt; line-height: 1.45; white-space: pre-line; }
+.st-popolazione { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.st-popolazione-voce {
+    display: flex; flex-direction: column; align-items: center; min-width: 74px;
+    padding: 5px 10px; border: 1px solid var(--st-linea); border-radius: 6px;
+}
+.st-popolazione-voce strong { font-size: 15pt; line-height: 1.1; }
+.st-popolazione-voce span { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--st-tenue); }
+.st-popolazione-voce.st-allarme strong { color: var(--st-rosso); }
+.st-quadro-riga { margin: 6px 0; }
+.st-quadro-riga h3 { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--st-tenue); margin: 0 0 2px; }
+.st-quadro-riga p { margin: 0; white-space: pre-line; }
+.st-prossimo strong { color: var(--st-blu); }
+.st-quadro-vuoto { border: 1px dashed var(--st-ambra); border-radius: 8px; padding: 8px 12px; color: var(--st-ambra); }
+.st-quadro-vuoto p { margin: 0; }
+
+/* Solo a video: il modulo del quadro e i promemoria. */
+@media print { .st-solo-schermo, .st-modulo { display: none !important; } }
+.st-modulo {
+    max-width: 210mm; margin: 16px auto 0; padding: 16px 18px; background: #fff; border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.15);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px;
+}
+.st-modulo[hidden] { display: none; }
+.st-modulo h2 { grid-column: 1 / -1; margin: 0; font-size: 14pt; }
+.st-modulo .st-largo { grid-column: 1 / -1; }
+.st-modulo label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+.st-modulo input, .st-modulo textarea {
+    font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--st-linea); border-radius: 6px; width: 100%;
+}
+.st-modulo fieldset { border: 1px solid var(--st-linea); border-radius: 8px; padding: 8px 12px 12px; margin: 0; }
+.st-modulo legend { font-weight: 600; font-size: 0.9rem; padding: 0 4px; }
+.st-modulo legend span { font-weight: 400; color: var(--st-tenue); }
+.st-numeri-quadro { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.st-modulo-nota { grid-column: 1 / -1; margin: 0; color: var(--st-tenue); font-size: 0.85rem; line-height: 1.45; }
+.st-modulo-azioni { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.st-modulo-azioni .st-modulo-nota { margin-right: auto; }
+.st-modulo-azioni button { font: 600 0.92rem system-ui, sans-serif; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--st-linea); background: #fff; }
+.st-modulo-azioni .st-primario { background: #2563eb; border-color: #2563eb; color: #fff; }
+@media (max-width: 700px) { .st-modulo { grid-template-columns: 1fr; margin: 0; border-radius: 0; } }
+
+/* Una simulazione si riconosce su ogni pagina: la scritta di traverso e la fascia in alto. */
+.st-simulazione {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 110px; font-weight: 800; letter-spacing: .08em; color: rgba(109, 40, 217, .12);
+    pointer-events: none; z-index: 0; white-space: nowrap;
+}
+.st-fascia-simulazione {
+    margin: 0 0 10px; padding: 6px 10px; border-radius: 4px; text-align: center; font-weight: 800; letter-spacing: .04em;
+    color: #fff; background: #6d28d9; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}

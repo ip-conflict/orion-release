@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Chiamata</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <style>
+        .scheda-chiamata { max-width: 560px; background: var(--surface-color); border: 2px solid var(--danger-text); border-radius: 14px; padding: 20px 22px; }
+        .scheda-chiamata.chiusa { border-color: var(--border-color); }
+        .scheda-chiamata h2 { margin: 0 0 6px; }
+        .scheda-chiamata .messaggio { font-size: 1.1rem; margin: 12px 0; white-space: pre-line; }
+        .scheda-chiamata .stato { padding: 8px 12px; border-radius: 8px; background: var(--secondary-bg-color); margin: 12px 0; font-weight: 600; }
+        .risposte { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .risposte button { padding: 14px 10px; font-size: 1rem; }
+        .risposte .largo { grid-column: 1 / -1; }
+        .segno-simulazione { display: inline-block; background: repeating-linear-gradient(45deg, #6d28d9, #6d28d9 8px, #7c3aed 8px, #7c3aed 16px); color: #fff; font-weight: 800; padding: 3px 10px; border-radius: 6px; letter-spacing: .05em; }
+    </style>
+</head>
+<body>
+<div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+    <nav class="admin-sidebar">
+        <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+            <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+            <h2 style="margin: 0;">ORION</h2>
+        </div>
+        <ul class="sidebar-menu"></ul>
+    </nav>
+
+    <main class="admin-content">
+        <header class="content-header">
+            <h1>Chiamata</h1>
+            <p class="sottotitolo">Rispondi alla sala: così sa chi sta arrivando.</p>
+        </header>
+        <section id="scheda" class="scheda-chiamata" aria-live="polite">
+            <p class="nota">Carico la chiamata…</p>
+        </section>
+    </main>
+</div>
+
+<script src="/vendor/js-cookie/js.cookie.min.js"></script>
+<script src="/js/apiHelper.js"></script>
+<script src="/js/menu-laterale.js"></script>
+<script src="/js/chiamata.js"></script>
+</body>
+</html>

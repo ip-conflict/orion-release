@@ -77,8 +77,15 @@
         }
 
         .firme { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 40px; }
-        .firma { border-top: 1px solid #111; padding-top: 6px; font-size: 0.85rem; }
+        .firma { position: relative; border-top: 1px solid #111; padding-top: 6px; font-size: 0.85rem; }
         .firma small { display: block; color: #555; }
+        /* La firma della conferma elettronica, sopra la riga come una firma a mano. */
+        .firma .segno {
+            position: absolute; left: 0; right: 0; bottom: calc(100% + 4px);
+            font: italic 600 1.35rem/1.1 "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive;
+            color: #1e3a8a;
+        }
+        .firma .elettronica { display: block; margin-top: 4px; font-size: 0.72rem; color: #1e3a8a; overflow-wrap: anywhere; }
         .luogo { margin-top: 28px; font-size: 0.9rem; }
 
         .errore { max-width: 210mm; margin: 40px auto; text-align: center; }
@@ -178,10 +185,14 @@
 
         <div class="conferma" id="conferma" hidden></div>
 
-        <div class="luogo">Luogo e data: ______________________________</div>
+        <div class="luogo" id="luogo-data">Luogo e data: ______________________________</div>
         <div class="firme">
             <div class="firma"><span id="titolo-firma-consegna">Chi consegna</span><small id="firma-consegna"></small></div>
-            <div class="firma"><span id="titolo-firma-riceve">Chi riceve</span><small id="firma-riceve"></small></div>
+            <div class="firma">
+                <div class="segno" id="segno-riceve" hidden></div>
+                <span id="titolo-firma-riceve">Chi riceve</span><small id="firma-riceve"></small>
+                <span class="elettronica" id="firma-elettronica" hidden></span>
+            </div>
         </div>
     </article>
 

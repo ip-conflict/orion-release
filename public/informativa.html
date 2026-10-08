@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Condizioni d'uso - ORION</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/componenti.css">
+  <style>
+    body { background: var(--bg-color); color: var(--text-color); margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pagina { max-width: 860px; margin: 0 auto; padding: 24px 16px 40px; box-sizing: border-box; }
+    .testata { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+    .testata img { width: 52px; height: 52px; object-fit: contain; }
+    .testata h1 { font-size: 1.35rem; margin: 0; }
+    .testata p { margin: 2px 0 0; color: var(--text-muted); font-size: .9rem; }
+    .introduzione { background: var(--surface-color); border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color, #2563eb);
+      border-radius: 10px; padding: 14px 16px; line-height: 1.5; font-size: .95rem; margin-bottom: 18px; }
+    .documento { background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 18px; }
+    .documento > header { padding: 14px 18px; border-bottom: 1px solid var(--border-color); font-weight: 700; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .documento > header small { font-weight: 400; color: var(--text-muted); }
+    .testo { padding: 4px 18px 16px; max-height: 46vh; overflow-y: auto; line-height: 1.6; font-size: .95rem; }
+    .pagina.sola-lettura .testo { max-height: none; }
+    .testo h2 { font-size: 1.15rem; margin: 16px 0 6px; }
+    .testo h3 { font-size: 1rem; margin: 18px 0 4px; }
+    .testo p { margin: 0 0 10px; }
+    .conferme { display: flex; flex-direction: column; gap: 12px; margin: 6px 0 20px; }
+    .conferme label { display: flex; gap: 12px; align-items: flex-start; background: var(--surface-color); border: 1px solid var(--border-color);
+      border-radius: 10px; padding: 12px 14px; cursor: pointer; line-height: 1.45; }
+    .conferme input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; }
+    .azioni { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+    .azioni button, .azioni a { font: inherit; font-weight: 600; padding: 11px 22px; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--surface-color); color: var(--text-color); cursor: pointer; text-decoration: none; }
+    .azioni .principale { background: var(--primary-color, #2563eb); border-color: var(--primary-color, #2563eb); color: #fff; }
+    .azioni .principale:disabled { opacity: .5; cursor: not-allowed; }
+    .avviso { padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; line-height: 1.45; }
+    .avviso.errore { background: var(--danger-soft-bg, #fee2e2); color: var(--danger-text, #991b1b); }
+    .avviso.nota { background: var(--warning-soft-bg, #fef3c7); color: var(--warning-text, #92400e); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="pagina" id="pagina">
+    <div class="testata">
+      <img id="logo" src="/logo.png" alt="">
+      <div>
+        <h1>Condizioni d'uso</h1>
+        <p id="associazione"></p>
+      </div>
+    </div>
+
+    <div class="introduzione" id="introduzione" hidden>
+      Prima di usare ORION leggi le condizioni d'uso: dicono come si usa, chi ne risponde e come vengono trattati i dati.
+      Ti vengono chieste al primo accesso e ogni volta che cambiano. Puoi rileggerle quando vuoi dal tuo profilo.
+    </div>
+    <div class="avviso errore" id="errore" role="alert" hidden></div>
+
+    <section class="documento">
+      <header><span id="titolo-condizioni">Condizioni d'uso</span><small id="versione"></small></header>
+      <div class="testo" id="testo-condizioni" tabindex="0"></div>
+    </section>
+
+    <form id="presa-visione" hidden>
+      <div class="conferme">
+        <label><input type="checkbox" id="accetto-condizioni" required>
+          <span>Ho letto e accetto le condizioni d'uso, in particolare l'impegno alla riservatezza sui dati che vedo in ORION.</span></label>
+      </div>
+      <div class="azioni">
+        <button type="button" id="esci">Esci</button>
+        <button type="submit" class="principale" id="continua" disabled>Continua</button>
+      </div>
+    </form>
+
+    <div class="azioni" id="solo-lettura" hidden>
+      <span id="gia-vista" style="margin-right: auto; align-self: center; color: var(--text-muted);"></span>
+      <a href="/" id="torna">Torna indietro</a>
+    </div>
+  </main>
+  <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+  <script src="/js/apiHelper.js"></script>
+  <script src="/js/informativa.js"></script>
+</body>
+</html>

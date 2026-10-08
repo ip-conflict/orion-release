@@ -1,0 +1,43 @@
+/* La verifica in due passaggi: accesso e profilo. */
+.mfa { text-align: left; }
+.mfa h2 { text-align: center; margin: 0 0 0.75rem; font-size: 1.5em; font-weight: 600; }
+.mfa .mfa-spiega { font-size: 0.9em; color: var(--text-muted, #6c757d); margin: 0 0 1rem; line-height: 1.45; }
+.mfa label { display: block; font-size: 0.85em; font-weight: 600; margin: 0 0 0.3rem; }
+.mfa input.mfa-codice {
+    width: 100%; box-sizing: border-box; padding: 0.7rem 0.8rem; margin-bottom: 0.9rem;
+    border: 1px solid var(--border-color, #ced4da); border-radius: 6px;
+    background: var(--form-input-bg, var(--bg-color, #fff)); color: var(--text-color, #212529);
+    font-family: ui-monospace, monospace; font-size: 1.3em; letter-spacing: 0.15em; text-align: center; text-transform: uppercase;
+}
+.mfa input.mfa-codice:focus { outline: 2px solid var(--primary-color, #0d6efd); outline-offset: 1px; }
+.mfa button.button-style { width: 100%; }
+.mfa .mfa-messaggio { margin: 0.9rem 0 0; font-size: 0.9em; text-align: center; min-height: 1em; }
+.mfa .mfa-messaggio.errore { color: var(--danger-color, #dc3545); }
+.mfa .mfa-indietro { display: block; text-align: center; margin-top: 0.9rem; font-size: 0.9em; color: var(--link-color); text-decoration: none; }
+.mfa-qr { display: flex; justify-content: center; margin: 0.5rem auto 0.75rem; padding: 12px; background: #fff; border-radius: 8px; width: max-content; }
+.mfa-qr img, .mfa-qr canvas { display: block; }
+.mfa-chiave { font-size: 0.85em; color: var(--text-muted, #6c757d); line-height: 1.45; margin: 0 0 1rem; overflow-wrap: anywhere; }
+.mfa-chiave code { font-size: 1.05em; color: var(--text-color, #212529); user-select: all; }
+.mfa-codici-elenco {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1.5rem; margin: 0.5rem 0 1rem; padding-left: 1.6rem;
+    font-family: ui-monospace, monospace; font-size: 1.05em; letter-spacing: 0.04em;
+}
+.mfa-codici-azioni { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.mfa .mfa-codici-azioni button, .mfa-codici-azioni button { width: auto; flex: 1 1 8rem; }
+@media (max-width: 380px) { .mfa-codici-elenco { grid-template-columns: 1fr; } }
+/* Nel profilo: una scheda come quella della password. */
+.mfa-scheda {
+    margin-top: 25px; background: var(--surface-color); padding: 25px; border-radius: 12px;
+    border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);
+}
+.mfa-scheda h2 { text-align: left; font-size: 1.3em; margin: 0 0 0.6rem; }
+.mfa-scheda .mfa-messaggio { text-align: left; }
+.mfa-scheda .mfa-qr { margin-left: 0; }
+.mfa-azioni { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.mfa .mfa-azioni button.button-style { width: auto; }
+.mfa input.mfa-password {
+    width: 100%; box-sizing: border-box; padding: 0.6rem 0.8rem; margin-bottom: 0.9rem;
+    border: 1px solid var(--border-color, #ced4da); border-radius: 6px;
+    background: var(--form-input-bg, var(--bg-color, #fff)); color: var(--text-color, #212529); font-size: 1em;
+}
+.mfa-scheda input.mfa-codice { max-width: 14rem; }

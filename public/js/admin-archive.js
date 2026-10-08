@@ -45,11 +45,11 @@ async function loadAndApplyBranding() {
                 const sidebarSegreteria = document.getElementById('sidebar-segreteria');
                 // Il magazzino a chi lo usa, se il modulo è acceso.
             const vociMagazzino = document.getElementById('sidebar-magazzino');
-            if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haRuolo('magazziniere')) {
+            if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haPermesso('magazzino.gestione', 'magazzino.consegne')) {
                 vociMagazzino.style.display = 'block';
             }
 
-            if (sidebarSegreteria && sConf.enabled && haRuolo('segreteria')) {
+            if (sidebarSegreteria && sConf.enabled && haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
                     sidebarSegreteria.style.display = 'block';
                 }
             }
@@ -60,8 +60,8 @@ async function loadAndApplyBranding() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!haRuolo('admin')) {
-        notifica('Accesso negato. Questa sezione è riservata agli amministratori.', 'errore');
+    if (!haPermesso('emergenze.archivio')) {
+        notifica('Accesso negato: ti serve il permesso "Consultare le emergenze passate".', 'errore');
         window.location.href = '/centro-operativo.html';
         return;
     }
@@ -85,9 +85,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const deleteSelectedEmergencyBtn = document.getElementById('delete-selected-emergency-btn');
     const downloadResocontoLink = document.getElementById('download-resoconto-link');
     const printResocontoLink = document.getElementById('print-resoconto-link');
+    const printTuttoLink = document.getElementById('print-tutto-link');
     const azioniEmergenza = document.getElementById('ar-azioni');
 
     let selectedArchivedEmergency = null;
+    let tutteLeChiuse = [];
+    let filtro = 'emergenze';
 
 let brandingSettings = {
     association_name: 'Archivio Emergenze'
@@ -118,29 +121,47 @@ let brandingSettings = {
         reportsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Seleziona un\'emergenza.</td></tr>';
 
         try {
-            const closedEmergencies = await fetchApi('/api/admin/emergencies/closed');
-            emergencySelect.innerHTML = '<option value="">-- Seleziona un\'emergenza archiviata --</option>';
-
-            if (closedEmergencies && closedEmergencies.length > 0) {
-                closedEmergencies.forEach(em => {
-                    const option = document.createElement('option');
-                    option.value = em.id;
-                    const endDate = em.end_time ? `Chiusa: ${formatDate(em.end_time)}` : 'Data chiusura non disp.';
-                    option.textContent = `${em.code} ${em.name ? '- ' + em.name : ''} (${endDate})`;
-                    option.dataset.code = em.code;
-                    option.dataset.name = em.name || '';
-                    option.dataset.inizio = em.start_time || '';
-                    option.dataset.fine = em.end_time || '';
-                    emergencySelect.appendChild(option);
-                });
-            } else {
-                 emergencySelect.innerHTML = '<option value="">Nessuna emergenza archiviata trovata.</option>';
-            }
+            tutteLeChiuse = await fetchApi('/api/admin/emergencies/closed') || [];
+            riempiScelta();
         } catch (error) {
             console.error("Errore caricamento emergenze archiviate:", error);
              emergencySelect.innerHTML = '<option value="">Errore caricamento</option>';
         }
     }
+
+    // L'elenco secondo il filtro: le simulazioni stanno a parte, con il loro segno.
+    function riempiScelta() {
+        const elenco = tutteLeChiuse.filter(e => filtro === 'tutte' || (filtro === 'simulazioni') === !!e.simulazione);
+        const nome = filtro === 'simulazioni' ? 'una simulazione' : "un'emergenza";
+        emergencySelect.innerHTML = '';
+        emergencySelect.appendChild(new Option(elenco.length ? `-- Seleziona ${nome} archiviata --` : (filtro === 'simulazioni' ? 'Nessuna simulazione archiviata.' : 'Nessuna emergenza archiviata trovata.'), ''));
+        for (const em of elenco) {
+            const option = document.createElement('option');
+            option.value = em.id;
+            const endDate = em.end_time ? `Chiusa: ${formatDate(em.end_time)}` : 'Data chiusura non disp.';
+            const segno = em.simulazione ? (em.interrotta_il ? '[SIMULAZIONE INTERROTTA] ' : '[SIMULAZIONE] ') : '';
+            option.textContent = `${segno}${em.code} ${em.name ? '- ' + em.name : ''} (${endDate})`;
+            option.dataset.code = em.code;
+            option.dataset.name = em.name || '';
+            option.dataset.inizio = em.start_time || '';
+            option.dataset.fine = em.end_time || '';
+            option.dataset.simulazione = em.simulazione ? '1' : '';
+            option.dataset.attivita = em.attivita_id || '';
+            option.dataset.interrotta = em.interrotta_da_codice || (em.interrotta_il ? '?' : '');
+            emergencySelect.appendChild(option);
+        }
+    }
+    document.querySelectorAll('.ar-filtro [data-filtro]').forEach(b => b.addEventListener('click', () => {
+        filtro = b.dataset.filtro;
+        document.querySelectorAll('.ar-filtro [data-filtro]').forEach(x => {
+            const su = x === b;
+            x.setAttribute('aria-pressed', String(su));
+            x.classList.toggle('button-secondary', !su);
+        });
+        emergencySelect.value = '';
+        emergencySelect.dispatchEvent(new Event('change'));
+        riempiScelta();
+    }));
 
     // NUOVA Funzione per caricare i documenti
     async function loadArchivedDocuments(emergencyId) {
@@ -289,7 +310,15 @@ let brandingSettings = {
                 code: selectedOption.dataset.code,
                 name: selectedOption.dataset.name
             };
-            emergencyDetailsDisplay.textContent = descriviPeriodo(selectedOption.dataset.inizio, selectedOption.dataset.fine);
+            const sim = selectedOption.dataset.simulazione === '1';
+            const interrotta = selectedOption.dataset.interrotta;
+            emergencyDetailsDisplay.textContent = (sim ? `Simulazione${interrotta ? `, interrotta${interrotta !== '?' ? ` dall'emergenza ${interrotta}` : ''}` : ''}. ` : '')
+                + descriviPeriodo(selectedOption.dataset.inizio, selectedOption.dataset.fine);
+            const copione = document.getElementById('copione-link');
+            if (copione) {
+                copione.hidden = !(sim && selectedOption.dataset.attivita);
+                copione.href = `/copione.html?attivita=${encodeURIComponent(selectedOption.dataset.attivita)}#valutazione`;
+            }
             console.log("[Select Change] Emergenza selezionata:", selectedArchivedEmergency);
             loadArchivedReports(selectedArchivedEmergency.id);
             loadArchivedDocuments(selectedArchivedEmergency.id);
@@ -300,6 +329,7 @@ let brandingSettings = {
                 downloadResocontoLink.title = `Il resoconto di ${selectedArchivedEmergency.code} come file di testo, da allegare`;
             }
             if (printResocontoLink) printResocontoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}`;
+            if (printTuttoLink) printTuttoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}&completo=1`;
             if (azioniEmergenza) azioniEmergenza.hidden = false;
         } else {
             // Se l'utente ha selezionato "-- Seleziona --"

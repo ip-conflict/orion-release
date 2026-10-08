@@ -57,17 +57,12 @@ else
     read -p "Inserisci un indirizzo email (per notifiche SSL da Let's Encrypt): " ADMIN_EMAIL
 fi
 
-print_info "Ora configura il primo utente amministratore dell'applicazione web."
-read -p "Inserisci lo username per l'admin (es. admin): " APP_ADMIN_USER
-read -s -p "Inserisci la password per l'admin: " APP_ADMIN_PASSWORD
-echo
-read -p "Inserisci il nome dell'admin (es. Mario): " APP_ADMIN_NOME
-read -p "Inserisci il cognome dell'admin (es. Rossi): " APP_ADMIN_COGNOME
-read -p "Inserisci l'email dell'admin (opzionale): " APP_ADMIN_EMAIL
+# Il primo amministratore non si chiede qui: lo si crea dal browser, alla
+# prima apertura di ORION, con il codice che questo script mostra alla fine.
 
 # Validazione input
-if [ -z "$DOMAIN_NAME" ] || [ -z "$APP_ADMIN_USER" ] || [ -z "$APP_ADMIN_PASSWORD" ]; then
-    print_error "Dominio e credenziali admin base sono obbligatori. Riavvia lo script."
+if [ -z "$DOMAIN_NAME" ]; then
+    print_error "Il dominio è obbligatorio. Riavvia lo script."
     exit 1
 fi
 
@@ -268,29 +263,9 @@ else
     print_warning "Nessuno script 'migrate' trovato. Salto la creazione delle tabelle."
 fi
 
-print_info "Creazione del primo utente amministratore..."
-
-# Crea un file temporaneo sicuro per le variabili d'ambiente admin
-ADMIN_ENV_FILE="$APP_DIR/.env.admin"
-cat > $ADMIN_ENV_FILE << EOF
-ADMIN_USERNAME=${APP_ADMIN_USER}
-ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}
-ADMIN_NOME=${APP_ADMIN_NOME}
-ADMIN_COGNOME=${APP_ADMIN_COGNOME}
-ADMIN_EMAIL=${APP_ADMIN_EMAIL}
-EOF
-
-# Imposta permessi restrittivi in modo che solo orion_app possa leggerlo
-chmod 600 $ADMIN_ENV_FILE
-chown $APP_USER:$APP_USER $ADMIN_ENV_FILE
-
-# Esegui lo script dicendo a Node di caricare anche il file .env.admin
-sudo -u $APP_USER bash -c "cd $APP_DIR && node --env-file=$ADMIN_ENV_FILE create-admin.js"
-
-# Pulisci il file temporaneo distruggendolo
-rm -f $ADMIN_ENV_FILE
-
-print_success "Processo di creazione utente admin completato in modo sicuro."
+# Il primo amministratore si crea dal browser: ORION, avviato senza
+# amministratori, scrive il codice di configurazione in PRIMO-ACCESSO.txt
+# (vedi src/primoAccesso.js). Il codice si mostra alla fine dello script.
 
 # ==============================================================================
 # 8. CONFIGURAZIONE DI NGINX E SSL
@@ -477,6 +452,33 @@ print_success "      CONFIGURAZIONE COMPLETATA CON SUCCESSO!   "
 print_success "================================================"
 echo
 echo "L'applicazione è ora in esecuzione e accessibile su: https://$DOMAIN_NAME"
+
+# Il codice per creare il primo amministratore: ORION lo scrive all'avvio,
+# se nel database non c'è ancora un amministratore.
+FILE_PRIMO_ACCESSO="$APP_DIR/PRIMO-ACCESSO.txt"
+for i in $(seq 1 30); do
+    [ -f "$FILE_PRIMO_ACCESSO" ] && break
+    sleep 1
+done
+if [ -f "$FILE_PRIMO_ACCESSO" ]; then
+    CODICE_PRIMO_ACCESSO=$(grep -o 'CODICE: [A-Z0-9-]*' "$FILE_PRIMO_ACCESSO" | cut -d' ' -f2)
+    echo
+    print_warning "================================================"
+    print_warning " ULTIMO PASSO: crea l'amministratore dal browser"
+    print_warning "================================================"
+    echo "Apri https://$DOMAIN_NAME : la pagina chiede il codice di configurazione"
+    echo
+    echo "        $CODICE_PRIMO_ACCESSO"
+    echo
+    echo "poi nome, cognome, username e password del primo amministratore."
+    echo "Fallo subito: finché l'amministratore non c'è, la pagina resta in attesa del codice."
+    echo "Il codice si ritrova con: sudo cat $FILE_PRIMO_ACCESSO"
+    echo
+    echo "Poi, da amministratore, pagina Sistema, riquadro Cifratura: stampa la chiave di recupero"
+    echo "e conservala fuori dal server. Senza, se la chiave si perde, file e backup cifrati non si aprono."
+else
+    print_info "Nel database c'è già un amministratore: accedi con le sue credenziali."
+fi
 echo "I file del progetto si trovano in: $APP_DIR"
 echo
 echo "Stato dei processi PM2:"

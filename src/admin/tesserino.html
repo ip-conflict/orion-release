@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aspetto del tesserino - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <style>
+        .tz-nota { color: var(--text-muted); font-size: 0.9rem; max-width: 900px; margin: 0 0 18px; line-height: 1.5; }
+        .tz-griglia { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+        @media (max-width: 1100px) { .tz-griglia { grid-template-columns: 1fr; } }
+        .tz-riquadro { background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 18px; }
+        .tz-riquadro + .tz-riquadro { margin-top: 16px; }
+        .tz-riquadro h2 { font-size: 1rem; margin: 0 0 10px; }
+        .tz-strumenti { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 12px; font-size: 0.9rem; }
+        .tz-strumenti label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+        .tz-strumenti strong { margin-right: 4px; }
+        .tz-tela { background: repeating-conic-gradient(var(--secondary-bg-color, #e5e7eb) 0% 25%, transparent 0% 50%) 50% / 18px 18px;
+            border-radius: 10px; padding: 18px; }
+        #tz-svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; max-width: 980px; margin: 0 auto; }
+        #tz-svg .tz-scelta { fill: transparent; stroke: transparent; stroke-width: 0.6; cursor: move; }
+        #tz-svg .tz-scelta:hover { stroke: #2563eb; stroke-dasharray: 2 1.5; }
+        #tz-svg .tz-scelta.scelto { stroke: #2563eb; stroke-width: 0.8; stroke-dasharray: none; }
+        #tz-svg .tz-maniglia { fill: #ffffff; stroke: #2563eb; stroke-width: 0.6; }
+        .tz-stato { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 0.9rem; }
+        .tz-avvisi { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .tz-avvisi li { padding: 8px 12px; border-radius: 8px; background: var(--warning-soft-bg, #fef3c7); color: var(--warning-text, #92400e); font-size: 0.88rem; line-height: 1.4; }
+        .tz-campi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tz-campi label, .tz-colonna label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; font-weight: 600; }
+        .tz-campi input, .tz-colonna input[type=text] { padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font: inherit; font-weight: 400; margin: 0; width: 100%; box-sizing: border-box; }
+        .tz-colonna { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        .tz-riga { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.88rem; }
+        .tz-riga input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: none; cursor: pointer; }
+        .tz-riga label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-weight: 400; flex-direction: row; }
+        .tz-elenco { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
+        .tz-elenco button { text-align: left; border: 0; background: transparent; color: var(--text-color); padding: 6px 8px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 0.88rem; flex: 1; }
+        .tz-elenco button:hover { background: var(--secondary-bg-color); }
+        .tz-elenco .attivo button { background: rgba(37, 99, 235, 0.12); font-weight: 600; }
+        .tz-elenco .tz-voce { display: flex; align-items: center; gap: 6px; }
+        .tz-elenco .nascosto button { color: var(--text-muted); text-decoration: line-through; }
+        .tz-pulsanti { display: flex; flex-direction: column; gap: 8px; }
+        .tz-vuoto { color: var(--text-muted); font-size: 0.88rem; margin: 0; }
+        .tz-modificato { color: var(--warning-text, #b45309); font-weight: 600; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body style="margin: 0; background: var(--bg-color);">
+    <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+        <nav class="admin-sidebar">
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
+            </div>
+            <ul class="sidebar-menu"></ul>
+        </nav>
+
+        <main class="admin-content">
+            <header class="content-header" style="margin-bottom: 14px;">
+                <h1 style="margin: 0; font-size: 2rem;">Aspetto del tesserino</h1>
+                <p style="margin: 5px 0 0 0; color: var(--text-muted);"><a href="/admin/dashboard-admin.html">Impostazioni</a> › Tesserino di riconoscimento</p>
+            </header>
+            <p class="tz-nota">Trascina gli elementi per spostarli e i quadratini agli angoli per cambiarne la misura; le misure precise si scrivono a destra, in millimetri. Il QR e il codice a barre non scendono sotto la misura che serve per leggerli, e stanno sempre su bianco. Finché non sposti niente gli elementi si dispongono da soli e si adattano a ogni volontario: senza QR o senza codice fiscale lo spazio si ridistribuisce. Spostandone uno restano dove li metti. I colori si cambiano senza perdere la disposizione automatica.</p>
+
+            <div class="tz-griglia">
+                <section>
+                    <div class="tz-riquadro">
+                        <div class="tz-strumenti">
+                            <strong>Anteprima</strong>
+                            <label><input type="checkbox" id="tz-con-qr"> con QR</label>
+                            <label><input type="checkbox" id="tz-con-cf"> con codice fiscale</label>
+                            <label><input type="checkbox" id="tz-con-ente"> con l'ente sovraordinato</label>
+                            <label style="margin-left: auto;"><input type="checkbox" id="tz-griglia" checked> griglia di 1 mm</label>
+                        </div>
+                        <div class="tz-tela"><svg id="tz-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anteprima del tesserino"></svg></div>
+                        <div class="tz-stato">
+                            <span id="tz-disposizione"></span>
+                            <button type="button" class="button-style button-secondary" id="tz-automatiche" hidden>Torna alla disposizione automatica</button>
+                        </div>
+                        <ul class="tz-avvisi" id="tz-avvisi"></ul>
+                    </div>
+                </section>
+
+                <aside>
+                    <div class="tz-riquadro">
+                        <h2 id="tz-scelto-nome">Nessun elemento scelto</h2>
+                        <p class="tz-vuoto" id="tz-scelto-vuoto">Tocca un elemento sul tesserino, o sceglilo dall'elenco qui sotto.</p>
+                        <div id="tz-scelto" hidden>
+                            <div class="tz-campi">
+                                <label>Da sinistra (mm)<input type="number" id="tz-x" step="0.5" min="0"></label>
+                                <label>Dall'alto (mm)<input type="number" id="tz-y" step="0.5" min="0"></label>
+                                <label>Larghezza (mm)<input type="number" id="tz-w" step="0.5" min="1"></label>
+                                <label>Altezza (mm)<input type="number" id="tz-h" step="0.5" min="1"></label>
+                            </div>
+                            <div class="tz-colonna" id="tz-scelto-extra"></div>
+                        </div>
+                    </div>
+
+                    <div class="tz-riquadro">
+                        <h2>Colori</h2>
+                        <div class="tz-colonna" id="tz-colori"></div>
+                        <button type="button" class="button-style button-secondary" id="tz-colori-predefiniti" style="margin-top: 12px; width: 100%;">Colori predefiniti</button>
+                    </div>
+
+                    <div class="tz-riquadro">
+                        <h2>Elementi</h2>
+                        <div class="tz-elenco" id="tz-elenco"></div>
+                    </div>
+
+                    <div class="tz-riquadro tz-pulsanti">
+                        <span id="tz-salvato" class="tz-vuoto">Nessuna modifica.</span>
+                        <button type="button" class="button-style" id="tz-salva" disabled>Salva: i prossimi tesserini usciranno così</button>
+                        <button type="button" class="button-style button-secondary" id="tz-prova">Stampa di prova (PDF)</button>
+                        <button type="button" class="button-style button-secondary" id="tz-annulla" disabled>Annulla le modifiche</button>
+                        <button type="button" class="button-style button-secondary" id="tz-predefinito">Torna al tesserino predefinito</button>
+                    </div>
+                </aside>
+            </div>
+            <div id="tz-qr-tela" hidden></div>
+        </main>
+    </div>
+
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/menu-laterale.js"></script>
+    <script src="/vendor/qrcode/qrcode.min.js"></script>
+    <script src="/vendor/pdfmake/pdfmake.min.js"></script>
+    <script src="/vendor/pdfmake/vfs_fonts.js"></script>
+    <script src="/js/codice-barre.js"></script>
+    <script src="/js/tesserino.js"></script>
+    <script src="/js/admin-tesserino.js" defer></script>
+</body>
+</html>

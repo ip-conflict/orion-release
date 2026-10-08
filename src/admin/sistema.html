@@ -107,6 +107,86 @@
                 </div>
             </section>
 
+            <!-- Cifratura dei dati -->
+            <section class="pannello" id="pannello-cifratura">
+                <h2>Cifratura</h2>
+                <p class="spiegazione">
+                    Certificati medici, documenti, foto, verbali firmati, resoconti e backup del database sono cifrati
+                    con una chiave che sta solo su questo server, fuori dal database e fuori dai backup: una copia
+                    portata via non si legge.
+                </p>
+                <div id="stato-cifratura" class="griglia-stato" aria-live="polite"></div>
+                <p class="avvertenza" id="avviso-recupero" hidden>
+                    <strong>Conserva la chiave di recupero.</strong> Se il server si rompe o la chiave si perde, senza
+                    la chiave di recupero i file e i backup cifrati non si aprono più, nemmeno dai backup. Mostrala,
+                    stampala o ricopiala, e mettila in un posto sicuro fuori dal server (una cassaforte, non una email).
+                </p>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-mostra-recupero" class="button-style button-secondary">Mostra la chiave di recupero</button>
+                    <button type="button" id="btn-inserisci-chiave" class="button-style button-secondary">Inserisci una chiave di recupero</button>
+                </div>
+                <div id="riquadro-recupero" class="riquadro-recupero" hidden>
+                    <p class="spiegazione" id="testo-recupero-istruzioni"></p>
+                    <label class="campo campo-sigillo" id="campo-chiave-inserita" hidden>
+                        <span>Chiave di recupero</span>
+                        <textarea id="chiave-inserita" rows="2" spellcheck="false" autocomplete="off" placeholder="XXXX-XXXX-XXXX-…"></textarea>
+                    </label>
+                    <label class="campo campo-sigillo">
+                        <span>La tua password</span>
+                        <input type="password" id="password-recupero" autocomplete="current-password">
+                    </label>
+                    <div class="gruppo-azioni">
+                        <button type="button" id="btn-conferma-recupero" class="button-style">Continua</button>
+                        <button type="button" id="btn-annulla-recupero" class="button-style button-secondary">Annulla</button>
+                        <span id="esito-recupero" class="nota" role="status"></span>
+                    </div>
+                    <div id="chiave-mostrata" hidden>
+                        <p class="sigillo-attuale"><code id="testo-chiave-recupero"></code></p>
+                        <div class="gruppo-azioni">
+                            <button type="button" id="btn-stampa-recupero" class="button-style button-secondary">Stampa</button>
+                            <button type="button" id="btn-recupero-conservato" class="button-style">L'ho conservata</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Integrità dello storico -->
+            <section class="pannello" id="pannello-integrita">
+                <h2>Integrità dello storico</h2>
+                <p class="spiegazione">
+                    Note delle segnalazioni, diario di sala, registro delle operazioni, movimenti del magazzino
+                    e registro delle squadre non si modificano: ogni voce ha un'impronta legata a quella prima,
+                    come gli anelli di una catena. Se qualcuno cambiasse o togliesse una voce, anche dal database,
+                    la verifica lo mostrerebbe.
+                </p>
+                <div id="stato-integrita" class="griglia-stato" aria-live="polite"></div>
+                <div id="dettagli-integrita"></div>
+
+                <h3 class="sottotitolo-pannello">Il sigillo</h3>
+                <p class="spiegazione">
+                    Il sigillo è l'ultima impronta della catena. Conservalo fuori dal server: alla chiusura di ogni
+                    emergenza ORION lo mostra, lo manda per email agli amministratori ed è stampato nel resoconto. Con un
+                    sigillo di allora si dimostra che lo storico fino a quel giorno non è stato riscritto, nemmeno da chi
+                    ha in mano il server.
+                </p>
+                <p class="sigillo-attuale"><code id="sigillo-attuale">…</code></p>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-verifica-integrita" class="button-style button-secondary">Verifica adesso</button>
+                    <a class="button-style button-secondary" id="btn-scarica-sigillo" href="/api/sistema/integrita/sigillo" download>Scarica il sigillo</a>
+                    <button type="button" id="btn-copia-sigillo" class="button-style button-secondary">Copia</button>
+                </div>
+                <label class="campo campo-sigillo" for="sigillo-da-confrontare">
+                    <span>Confronta un sigillo conservato</span>
+                    <textarea id="sigillo-da-confrontare" rows="3" spellcheck="false" placeholder="ORION sigillo n. 12345 del 2026-10-05 07:00 UTC: 3f9a…"></textarea>
+                </label>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-confronta-sigillo" class="button-style">Confronta</button>
+                    <span id="esito-confronto" class="nota" role="status"></span>
+                </div>
+
+                <div id="cancellazioni-integrita"></div>
+            </section>
+
             <!-- Backup -->
             <section class="pannello">
                 <h2>Backup</h2>
