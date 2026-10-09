@@ -10,6 +10,7 @@
     "postinstall": "node copy-libs.js",
     "test": "node tests/controllo-resa-html.mjs && node tests/limiti.mjs && node tests/smoke.mjs",
     "test:limiti": "node tests/limiti.mjs",
+    "test:allerta": "node tests/allerta.mjs",
     "test:resa": "node tests/controllo-resa-html.mjs",
     "test:websocket": "node tests/websocket-app.mjs",
     "test:integrita": "node tests/integrita.mjs",
@@ -34,7 +35,8 @@
     "test:simulazione": "node tests/simulazione.mjs",
     "test:copione": "node tests/copione.mjs",
     "test:rete": "node tests/rete.mjs",
-    "test:cartografia": "node tests/cartografia.mjs"
+    "test:cartografia": "node tests/cartografia.mjs",
+    "test:scenari": "node tests/scenari.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^6.7.2",

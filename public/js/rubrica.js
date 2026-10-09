@@ -1,5 +1,3 @@
-// public/js/rubrica.js
-//
 // La rubrica d'emergenza. Rubrica.apri() mostra la finestra del centro
 // operativo: si cerca, si chiama (sul telefono il numero è un link), si
 // aggiunge e si corregge. Rubrica.disegnaFoglio(contenitore) la scrive come
@@ -225,11 +223,13 @@
             return;
         }
         gruppi.forEach((voci, categoria) => {
+            // Sul telefono il numero si tocca per chiamare; sulla carta è testo.
+            const numero = (n, classe) => n ? el('a', { href: `tel:${String(n).replace(/[^\d+]/g, '')}`, class: classe, testo: n }) : null;
             const corpo = el('tbody', {}, voci.map(c => el('tr', {},
                 el('td', {}, el('strong', { testo: c.nome }), descrizione(c) ? el('span', { class: 'st-piccolo', testo: descrizione(c) }) : null),
-                el('td', { class: 'st-stretta' }, c.telefono || '', c.telefono_alt ? el('span', { class: 'st-piccolo', testo: c.telefono_alt }) : null),
-                el('td', { testo: c.email || '' }),
-                el('td', { testo: c.note || '' }))));
+                el('td', { class: 'st-stretta', 'data-etichetta': 'Telefono' }, numero(c.telefono, 'st-numero'), c.telefono_alt ? numero(c.telefono_alt, 'st-piccolo st-numero') : null),
+                el('td', { 'data-etichetta': 'Email', testo: c.email || '' }),
+                el('td', { 'data-etichetta': 'Note', testo: c.note || '' }))));
             contenitore.append(el('section', { class: 'st-sezione' },
                 el('h2', {}, CATEGORIE[categoria] || categoria, ' ', el('span', { class: 'st-conta', testo: `(${voci.length})` })),
                 el('table', { class: 'st-tabella st-rubrica' },

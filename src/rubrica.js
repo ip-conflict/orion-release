@@ -1,5 +1,3 @@
-// src/rubrica.js
-//
 // La rubrica d'emergenza: i numeri che in sala servono subito, per chi lavora
 // al centro operativo. La tengono aggiornata tutti gli operatori interni,
 // come le squadre: è un lavoro di sala, e ogni modifica finisce nel registro.
@@ -8,7 +6,6 @@ export const CATEGORIE_RUBRICA = ['istituzioni', 'soccorso', 'reperibili', 'ditt
 
 const LIMITI = { nome: 150, ruolo: 150, ente: 150, telefono: 40, telefono_alt: 40, email: 150, note: 2000 };
 
-// I campi della richiesta, ripuliti e controllati; { errore } se qualcosa non va.
 function leggiContatto(corpo) {
     const c = {};
     for (const [campo, massimo] of Object.entries(LIMITI)) {

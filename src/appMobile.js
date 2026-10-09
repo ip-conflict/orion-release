@@ -1,5 +1,3 @@
-// src/appMobile.js
-//
 // Quello che serve solo all'app Android: il contesto (chi sono, cosa posso
 // fare) e la coda di notifiche per persona. Per il resto l'app usa le rotte del web.
 
@@ -30,6 +28,7 @@ const CATEGORIA_DEL_TIPO = {
     chiamata: 'emergenza',
     imprevisto: 'emergenza',
     regia_telefona: 'emergenza',
+    allerta_meteo: 'personale',
     dpi_da_confermare: 'personale',
     scadenza: 'personale',
     segreteria_riepilogo: 'segreteria',

@@ -1,5 +1,3 @@
-// public/js/magazzino-etichette.js
-//
 // Foglio di etichette QR da stampare su carta adesiva.
 //
 // Una riga dell'inventario = un'etichetta. Per i DPI questo vuol dire già una

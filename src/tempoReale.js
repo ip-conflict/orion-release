@@ -1,5 +1,3 @@
-// src/tempoReale.js
-//
 // Il WebSocket: dal server ai client, mai il contrario. Il web riceve tutto,
 // l'app solo quello che riguarda la persona e la sua squadra.
 

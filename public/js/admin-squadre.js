@@ -1,4 +1,3 @@
-// /public/js/admin-squadre.js
 
 // Gli id con "prefisso" sono il nome radio (nome_radio nell'API).
 const newTeamBtn = document.getElementById('admin-new-team-btn');
@@ -273,7 +272,7 @@ async function loadSquadreAdmin() {
                     <span class="bollino info">
                         <i class="fas fa-users"></i> ${memberCount} Volontari
                     </span>
-                    ${squadra.caposquadra ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fas fa-star" style="color: #d97706;"></i> ${escapeHTML([squadra.caposquadra.nome, squadra.caposquadra.cognome].filter(Boolean).join(' '))}${squadra.caposquadra.telefono ? ' · ' + escapeHTML(squadra.caposquadra.telefono) : ''}</div>` : ''}
+                    ${squadra.caposquadra ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"><i class="fas fa-star" style="color: #d97706;"></i> ${escapeHTML([squadra.caposquadra.nome, squadra.caposquadra.cognome].filter(Boolean).join(' '))}${squadra.caposquadra.telefono ? ` · <span style="white-space: nowrap;">${escapeHTML(squadra.caposquadra.telefono)}</span>` : ''}</div>` : ''}
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
                     ${squadra.coc ? '<span class="bollino info" title="Chi lavora in sala: dura quanto l\'emergenza">Sala</span>'

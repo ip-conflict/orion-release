@@ -2,8 +2,8 @@
 
 Questo manuale è per chi installa, mantiene e sviluppa ORION: il tecnico
 dell'associazione che cura il server e lo sviluppatore che mette mano al
-codice. Chi usa ORION trova quello che gli serve nel manuale d'uso
-(`manuale-uso.md`). Le ragioni delle scelte più delicate stanno nei documenti
+codice. Chi usa ORION trova quello che gli serve nei manuali d'uso
+(`manuale-web.md` per il browser, `manuale-app.md` per il telefono). Le ragioni delle scelte più delicate stanno nei documenti
 vicini: ruoli e magazzino in `architettura-ruoli-e-magazzino.md`, backup e
 aggiornamenti in `manutenzione-backup-e-aggiornamenti.md`, sicurezza in
 `sicurezza.md`, le rotte dell'app in `app-android.md`.
@@ -119,13 +119,19 @@ delle squadre (router.project-osrm.org). Sono gli unici indirizzi esterni
 ammessi dalla Content-Security-Policy in `src/server.js`. Senza rete la mappa
 resta vuota e il percorso diventa linea d'aria; tutto il resto funziona.
 
+Il bollettino di allerta, se acceso nelle Impostazioni, è l'unica cosa che
+il server stesso scarica da internet: ogni quarto d'ora chiede
+`raw.githubusercontent.com` (vedi "Il bollettino di allerta" più avanti).
+Se la rete dell'ente blocca le uscite del server, quell'indirizzo va lasciato
+passare. `ORION_ALLERTA_URL` sostituisce l'indirizzo, per le prove.
+
 Tutto il resto si configura dall'applicazione, nelle Impostazioni, e sta nel
 database: la posta in uscita (SMTP), il logo e il nome dell'associazione, i
 moduli Segreteria e Magazzino, il tesserino, la disponibilità dell'app
 Android, il controllo degli aggiornamenti. La posta è facoltativa: senza,
 ORION funziona lo stesso e mostra all'amministratore i link di attivazione
 invece di spedirli.
-Il manuale d'uso spiega come usare un account Gmail gratuito; dalle
+Il manuale del web spiega come usare un account Gmail gratuito; dalle
 Impostazioni "Manda una prova" (`POST /api/admin/email-prova`) prova i dati
 scritti nel modulo, anche non ancora salvati, e restituisce il motivo
 dell'errore insieme alla risposta grezza del server di posta.
@@ -138,7 +144,10 @@ emergenze, segnalazioni con il loro diario, squadre, fascicoli, magazzino,
 verbali, notifiche, registro delle operazioni.
 
 I file caricati stanno sul disco, in due cartelle. `uploads/photos` tiene le
-foto profilo. `protected_uploads` tiene tutto il resto, che si legge solo
+foto profilo. Sul web la foto passa prima da `public/js/ritaglio-foto.js`
+(`window.ritagliaFoto(file)`, usato dal profilo e dalla segreteria), che la
+inquadra in una cornice 5 x 6 e carica un JPEG di 500 x 600; l'app fa lo
+stesso con `RitaglioFoto.kt`. Il server la tratta come prima. `protected_uploads` tiene tutto il resto, che si legge solo
 attraverso il server con i permessi giusti: certificati e attestati, immagini
 e documenti delle segnalazioni, file del magazzino (verbali firmati,
 fatture), l'archivio dei documenti del gruppo (`documenti-gruppo`), resoconti
@@ -239,6 +248,9 @@ materiale in carico.
 Ogni 15 secondi, con una simulazione aperta e lo scenario avviato, fa
 uscire gli eventi a tempo del copione (`controllaUscite()` in
 `src/copione.js`).
+
+Ogni quindici minuti, se nelle Impostazioni è scelta una Regione, guarda se
+c'è un bollettino di allerta nuovo (`src/allerta.js`).
 
 Ogni minuto sigilla le righe nuove dei registri (note delle segnalazioni,
 diario di sala, registro delle operazioni, movimenti, registro delle squadre)
@@ -356,6 +368,13 @@ di sessione, verifica che non sia stato revocato, che l'account sia attivo e
 rilegge i ruoli. Per questo sospendere un utente o togliergli un ruolo ha
 effetto alla richiesta successiva, non alla scadenza del token.
 
+Una pagina riservata aperta senza sessione rimanda a
+`/login.html?redirect=<pagina chiesta>`. Entrati, `public/js/login.js` torna
+lì solo se l'indirizzo è un percorso dello stesso server (comincia con una
+sola `/`, ha la stessa origine e non è la pagina d'accesso); altrimenti va
+alla prima pagina di sempre. Così il QR di un'etichetta
+(`/magazzino.html?e=<codice>`) apre il bene anche a chi non era entrato.
+
 Sopra quel controllo, le rotte chiedono un permesso, non un ruolo
 (`src/permessi.js`): `richiedePermesso(...)` davanti alla rotta,
 `haPermesso(req, ...)` dentro, basta uno dei permessi indicati. I permessi
@@ -440,7 +459,7 @@ per gli interni nella cartella dei libretti, quella il cui nome comincia per
 "Libretti" o una nuova "Libretti d'uso e manutenzione", con il titolo
 "Libretto" e il nome del bene, e lo collega in una transazione; risponde con
 il documento e `collegati`. Nell'app la scheda del bene e quella del
-materiale in carico in Io leggono `GET /api/documenti?bene=ID`. In `GET
+materiale in carico nella schermata I miei dati leggono `GET /api/documenti?bene=ID`. In `GET
 /api/documenti` ogni documento porta anche `in_carico`: è collegato a un bene
 che chi chiede ha adesso in carico, a sé o a una squadra di cui è membro
 (`beniDi()`: i pezzi singoli da `beni_situazione`, gli sfusi dal saldo di
@@ -553,6 +572,16 @@ risposte, posti, annullamento, chiusura con il corso, attestato, calendario,
 modulo spento e, in emergenza, la squadra COC e le presenze dal registro
 (apre e chiude un'emergenza sua se non ce n'è una in corso).
 
+Gli allegati di un'attività stanno in `attivita_allegati` e i file in
+`protected_uploads/attivita`, cifrati come gli altri caricati; formati e
+tetto (25 MB) sono quelli dell'archivio dei documenti, con il controllo del
+contenuto, e al massimo 20 per attività. `POST /api/attivita/:id/allegati`
+(campo `file`) li carica chi gestisce l'attività,
+`GET /api/attivita/:id/allegati/:allegato` li apre chi la vede (PDF e
+immagini nel browser, il resto si scarica), `DELETE` li toglie chi la
+gestisce; `GET /api/attivita/:id` li elenca in `allegati`. Eliminando
+l'attività si cancellano anche i file.
+
 ### Chiamata, simulazione e copione
 
 Tre moduli del livello 4, con tre migrazioni.
@@ -620,13 +649,47 @@ un'attività del primo tipo attivo della natura chiesta, da adesso per le ore
 indicate (da 1 a 24), con convocazione `scelti` senza nessuno, niente avvisi,
 chi la apre come responsabile e `creato_da`, e se richiesto il copione di
 un'altra attività (`copiaCopione()`, solo fra quelle di `GET
-/api/simulazioni/copioni`, cioè di cui la persona fa la regia); poi apre la
+/api/simulazioni/copioni`, cioè di cui la persona fa la regia) oppure, con
+`copia_scenario`, quello di uno scenario della biblioteca (`GET
+/api/simulazioni/scenari`, stessi permessi); le due cose insieme danno 400.
+Da uno scenario, natura, durata (al massimo 24 ore), titolo, scenario,
+obiettivi ed enti non scritti nella richiesta vengono dallo scenario, e
+l'attività prende `scenario_id`. Poi apre la
 sala con `apriEmergenza()`. Se la sala non si apre, l'attività appena creata
 si cancella. Il contesto dell'app porta `emergenza.simulazione`,
 `emergenza.attivita_id` e, a chi conduce, la capacità `regia`.
 
+La biblioteca degli scenari (`src/scenari.js`, migrazione `scenari`,
+pagina `simulazioni.html`) è per chi ha `gruppo.attivita`, con il modulo
+Attività acceso. La tabella `scenari` tiene titolo, natura (`addestramento` o
+`esercitazione`), `durata_ore` da 1 a 72, scenario, obiettivi, enti, chi l'ha
+creato e quando. Gli eventi del copione di uno scenario stanno nella stessa
+`copione_eventi`, con `scenario_id` al posto di `attivita_id`: il vincolo
+`copione_eventi_un_contenitore` vuole esattamente uno dei due, e togliendo lo
+scenario i suoi eventi se ne vanno in cascata. Le rotte del copione
+(`copione.xlsx`, `copione/eventi`, `copione/importa`, `copione/copia`)
+rispondono anche sotto `/api/scenari/:id/`, con la colonna scelta da
+`contenitoreDi(req)` e i permessi da `serveScenario()`; `PUT` e `DELETE
+/api/copione/eventi/:id` guardano `scenario_id` dell'evento. `GET
+/api/scenari/:id/copione` ha la forma di quello di un'attività mai andata in
+sala (eventi `atteso`, niente sala, osservazioni e debriefing), più
+`scenario`. `copione/copia` accetta `{ da }` (un'attività) o `{ da_scenario }`,
+sotto entrambe le radici. `inserisciEvento()`, `eventiDi()` e `copiaCopione()`
+prendono la colonna del contenitore, controllata contro un elenco chiuso. `GET
+/api/scenari` dà gli scenari con `eventi`, `usi` (attività non annullate con
+quello `scenario_id`), `ultimo_uso` e `prossimo_uso`, più `programmate` e
+`svolte`, le attività con simulazione. `POST /api/scenari/:id/duplica` copia
+dati e copione in una transazione. Pianificare è `POST /api/attivita` con
+`scenario_id`: lo scenario deve esistere e l'attività avere la simulazione;
+il copione si copia nella stessa transazione e `attivita.scenario_id` resta
+(`ON DELETE SET NULL`), così le attività sopravvivono allo scenario con la
+loro copia. Il calendario lo fa da `calendario.html?scenario=N`, che riempie
+il modulo con `riempiDaScenario()`; il copione dello scenario si scrive da
+`copione.html?scenario=N`, la stessa pagina con la radice delle rotte
+cambiata, senza valutazione né pubblicazione.
+
 Il copione (`src/copione.js`, migrazione `copione-regia`) sta in
-`copione_eventi`: attività, ordine, `minuto` (NULL vuol dire a mano), `tipo`
+`copione_eventi`: attività (o scenario), ordine, `minuto` (NULL vuol dire a mano), `tipo`
 (`segnalazione`, `aggravamento`, `comunicazione`, `imprevisto`, `strada`),
 titolo, testo, `modo` (`da_sola` o `telefono`), indirizzo e punto, priorità,
 segnalante e telefono, `riferimento_id` per l'aggravamento, `squadra` (nome
@@ -922,6 +985,56 @@ copione e ci passa dopo quattro tasselli da internet falliti di fila.
 con un MBTiles costruito al momento (non tocca una cartografia già
 caricata).
 
+### Il bollettino di allerta
+
+La fonte è il bollettino di criticità nazionale che il Dipartimento della
+Protezione Civile pubblica ogni giorno (di norma entro le 16, con eventuali
+aggiornamenti) nel repository
+`pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica`, con licenza
+CC-BY 4.0. È la sintesi delle valutazioni dei Centri Funzionali Decentrati,
+quindi per il Veneto riporta quelle del CFD regionale. Il server scarica
+l'archivio dell'ultimo bollettino, `files/all/latest_all.zip`, con
+`If-None-Match`: finché non cambia, la risposta è un 304 senza contenuto.
+
+`src/bollettinoDpc.js` legge l'archivio senza dipendenze: lo zip, i due file
+DBF degli attributi (`*_today.dbf` e `*_tomorrow.dbf`, con il codice della
+zona in `Zona_all` e i tre rischi in testo, in latin1), l'ora di emissione dal
+messaggio CAP e il PDF. `src/allerta.js` tiene una riga per versione in
+`bollettini_allerta` (chiave: data e ora del file più il tipo, `first` o
+`update`), con i livelli delle sole zone della Regione scelta, e il PDF in
+`protected_uploads/bollettini/`, cifrato. Dei PDF restano gli ultimi tre; le
+copie allegate alle emergenze stanno a parte, fra i loro documenti.
+
+La zona viene dal comune scelto (`allerta_comune`) o, se vuoto, dal centro
+della mappa (`map_center_lat`, `map_center_lon`), cercato nei confini delle
+zone. Il catalogo delle zone di una Regione (codice, nome, comuni, confine
+semplificato) sta in `src/dati/zone-allerta/<regione>.json` e si genera con
+
+```
+node scripts/zone-allerta.mjs veneto
+```
+
+dagli stessi dati aperti. Va rigenerato se la Regione ridisegna le zone (il
+Veneto è passato da 8 a 25 zone). Per aggiungere una Regione basta una voce
+in `REGIONI` di `src/allertaRegioni.js` (nome, prefisso dei codici, per
+esempio `Lomb-`, ente e pagina ufficiale) e il suo catalogo generato con lo
+script: il resto non cambia.
+
+Con un'emergenza vera aperta, ogni versione nuova e quella in vigore
+all'apertura entrano in `emergency_documents` (con `bollettino_id`, una volta
+sola per emergenza, `uploader_user_id` vuoto: l'autore mostrato è "ORION") e
+nel diario di sala, che è sigillato. Le simulazioni no. Chi ha
+`emergenze.apertura` riceve la notifica `allerta_meteo` quando la zona arriva
+al livello di `allerta_avvisa_da` (arancione se non scelto, `mai` la spegne):
+sul telefono va nel canale degli avvisi personali, non in quello degli
+interventi, e il tocco apre l'elenco delle notifiche.
+
+Le rotte: `GET /api/allerta` (zona, giorni ancora validi, versioni degli
+ultimi tre giorni o dall'apertura dell'emergenza), `GET
+/api/allerta/bollettini/:id/pdf`, e per l'amministratore `GET
+/api/allerta/regioni` e `POST /api/allerta/controlla`. Il WebSocket manda
+`allerta_aggiornata` a ogni versione nuova.
+
 ### La squadra COC
 
 `squadre.coc` segna la squadra della sala. L'apertura di un'emergenza la crea
@@ -1045,7 +1158,9 @@ ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD='...' npm test
 ```
 
 `npm test` controlla che le pagine non scrivano in HTML testo non ripulito,
-che i limiti di frequenza funzionino e poi percorre l'applicazione da capo a
+che i limiti di frequenza funzionino (il limite dell'accesso conta solo i
+tentativi sbagliati, `skipSuccessfulRequests`, e tutti i limiti rispondono in
+JSON con `message`, che il web e l'app mostrano) e poi percorre l'applicazione da capo a
 fondo: accesso, ruoli, emergenze, segnalazioni, squadre, esterni temporanei,
 segreteria, magazzino, notifiche. Crea i suoi dati di prova e li toglie alla
 fine. `npm run test:websocket` prova cosa arriva all'app sul WebSocket, e
@@ -1061,7 +1176,16 @@ delle condizioni d'uso (ripubblica il testo com'era, quindi la versione sale),
 `npm run test:documenti` l'archivio dei documenti (apre e chiude
 un'emergenza sua se non ce n'è una in corso), `npm run test:attivita`
 attività, calendario, presenze e squadra COC (anche lei con un'emergenza
-sua). `npm run test:tesserino` il controllo del modello del tesserino (lo rimette com'era). Chi
+sua). `npm run test:tesserino` il controllo del modello del tesserino (lo rimette com'era).
+`npm run test:allerta` il bollettino di allerta: serve da sé un bollettino di
+prova su `127.0.0.1:3099` (`tests/bollettino-finto.mjs`), quindi il server va
+avviato con `ORION_ALLERTA_URL=http://127.0.0.1:3099/latest_all.zip`; apre e
+chiude un'emergenza sua e rimette le impostazioni com'erano.
+Il resoconto dell'ultima verifica generale (matrice delle rotte per ruolo,
+caricamenti truccati, pulsanti del web, simulazione d'uso) è in
+`docs/verifica-generale.md`. `npm run test:scenari` la biblioteca degli scenari: copione, Excel, copia,
+duplicazione, pianificazione e apertura al volo (apre e chiude una
+simulazione sua, quindi vuole un'istanza senza emergenze in corso). Chi
 entra nelle prove accetta le condizioni d'uso come farebbe una persona:
 `accediConFetch` lo fa da sé, e il client dello smoke risponde al 428. Le prove
 entrano come amministratore, quindi con il codice: la prima volta attivano da

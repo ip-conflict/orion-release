@@ -1,5 +1,3 @@
-// src/pubbliche.js
-//
 // Le rotte che rispondono senza sessione: accesso, recupero password,
 // tesserino pubblico, marchio dell'associazione, APK.
 

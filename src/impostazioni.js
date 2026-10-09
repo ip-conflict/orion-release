@@ -1,5 +1,3 @@
-// src/impostazioni.js
-//
 // Loghi, impostazioni dell'associazione e registro delle operazioni.
 
 import fs from 'fs';
@@ -13,6 +11,7 @@ import { inviaEmailProva } from './email.js';
 import { wss } from './tempoReale.js';
 import { cifraTesto } from './cifratura.js';
 import { ModelloNonValido, validaModelloTesserino } from './modelloTesserino.js';
+import { controlla as controllaAllerta, controllaImpostazioniAllerta } from './allerta.js';
 
 export function registraRotteImpostazioni(app) {
 
@@ -115,8 +114,12 @@ export function registraRotteImpostazioni(app) {
         if (chiaviRifiutate.length > 0) {
             return res.status(400).json({ message: `Impostazioni non modificabili da qui: ${chiaviRifiutate.join(', ')}.` });
         }
+        const regioneSalvata = (await pool.query(
+            "SELECT setting_value FROM branding_settings WHERE setting_key = 'allerta_regione'").catch(() => ({ rows: [] }))).rows[0]?.setting_value || '';
+        const erroreAllerta = controllaImpostazioniAllerta(settingsToUpdate, regioneSalvata);
+        if (erroreAllerta) return res.status(400).json({ message: erroreAllerta });
         const client = await pool.connect();
-        
+
         try {
             await client.query('BEGIN');
 
@@ -166,6 +169,8 @@ export function registraRotteImpostazioni(app) {
             res.status(200).json({ message: 'Impostazioni aggiornate con successo.' });
             // Non registriamo i valori: fra le impostazioni ci sono le credenziali SMTP.
             registraAudit(req, 'impostazioni.modificate', { tipo: 'impostazioni', dettagli: { chiavi: Object.keys(settingsToUpdate) } });
+            // Regione nuova: il bollettino si legge subito (dentro ci sono le sue zone).
+            if (settingsToUpdate.allerta_regione && settingsToUpdate.allerta_regione !== regioneSalvata) controllaAllerta({ forza: true });
 
         } catch (error) {
             await client.query('ROLLBACK');

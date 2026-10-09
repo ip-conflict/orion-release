@@ -1,5 +1,3 @@
-// src/autenticazione.js
-//
 // Sessioni, ruoli e i controlli che le rotte mettono davanti a sé.
 
 import './config.js';
@@ -73,7 +71,7 @@ export async function authenticateToken(req, res, next) {
             logger.warn(`[Auth] Sessione rifiutata per ${user.username}: account ${attivo === null ? 'eliminato' : 'sospeso'}.`);
             res.clearCookie('__Secure-token', { path: '/' });
             res.clearCookie('username', { path: '/' });
-            const messaggio = 'Il tuo account non è più attivo. Contatta la segreteria.';
+            const messaggio = 'Il tuo accesso a ORION non è più attivo. Chiedi alla segreteria.';
             // sessione_terminata distingue questo 403 da quelli che negano una
             // sola operazione: il client riporta all'accesso. motivo è un codice,
             // così il client sa cosa dire.

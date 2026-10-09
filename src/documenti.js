@@ -1,5 +1,3 @@
-// src/documenti.js
-//
 // L'archivio dei documenti del gruppo: il piano di protezione civile, le
 // procedure, i libretti d'uso e manutenzione, i moduli, i verbali.
 //
@@ -39,7 +37,7 @@ const RUOLI_RISERVABILI = ['admin', 'coordinatore', 'segreteria', 'magazziniere'
 
 // I formati ammessi, per estensione, con il tipo che ci si aspetta di
 // riconoscere dal contenuto (null: testo semplice, senza firma).
-const FORMATI = {
+export const FORMATI = {
     '.pdf': ['application/pdf'], '.jpg': ['image/jpeg'], '.jpeg': ['image/jpeg'], '.png': ['image/png'], '.webp': ['image/webp'],
     '.doc': ['application/x-cfb'], '.xls': ['application/x-cfb'], '.ppt': ['application/x-cfb'],
     '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
@@ -50,7 +48,7 @@ const FORMATI = {
     '.odp': ['application/vnd.oasis.opendocument.presentation', 'application/zip'],
     '.txt': null
 };
-const TIPO_DA_ESTENSIONE = {
+export const TIPO_DA_ESTENSIONE = {
     '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
     '.doc': 'application/msword', '.xls': 'application/vnd.ms-excel', '.ppt': 'application/vnd.ms-powerpoint',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -89,7 +87,7 @@ function togliFile(nome) {
 }
 
 // Il contenuto deve essere quello che l'estensione dice.
-async function contenutoValido(file) {
+export async function contenutoValido(file) {
     const attesi = FORMATI[path.extname(file.originalname).toLowerCase()];
     const trovato = await fileTypeFromFile(file.path).catch(() => null);
     if (attesi === null) return !trovato;

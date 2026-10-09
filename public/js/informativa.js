@@ -1,5 +1,3 @@
-// public/js/informativa.js
-//
 // L'accettazione delle condizioni d'uso. Si arriva qui dal controllo
 // d'accesso (al primo accesso e quando il testo cambia), con ?redirect= la
 // pagina da cui si veniva; oppure dal profilo e dalla pagina di accesso, solo

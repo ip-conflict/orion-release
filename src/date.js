@@ -1,8 +1,5 @@
-// src/date.js
-//
 // Le date senza ora arrivano da PostgreSQL come "AAAA-MM-GG" (vedi db.js) e si
 // scrivono all'italiana senza passare da new Date(), che dipende dal fuso orario.
-
 
 // Letto a ogni chiamata: .env si carica dopo gli import.
 const fuso = () => process.env.TZ || 'Europe/Rome';
@@ -31,7 +28,6 @@ export function dataOraItaliana(valore) {
     return d.toLocaleString('it-IT', { timeZone: fuso(), day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/** Solo l'ora, "20:30". */
 export function oraItaliana(valore) {
     if (!valore) return '';
     const d = valore instanceof Date ? valore : new Date(String(valore).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));

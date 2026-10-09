@@ -15,14 +15,14 @@
 <body class="pagina-copione">
     <header class="cp-testa">
         <a href="/calendario.html" class="cp-indietro" title="Torna al calendario"><i class="fas fa-arrow-left"></i></a>
-        <span class="cp-segno">COPIONE</span>
+        <span class="cp-segno" id="cp-segno">COPIONE</span>
         <div class="cp-titolo">
             <h1 id="cp-titolo">Copione</h1>
             <span id="cp-sottotitolo"></span>
         </div>
-        <div class="cp-azioni" id="cp-azioni">
+        <div class="cp-azioni" id="cp-azioni" hidden>
             <button type="button" class="button-style button-secondary" id="cp-btn-excel"><i class="fas fa-file-excel"></i> Excel</button>
-            <button type="button" class="button-style button-secondary" id="cp-btn-copia"><i class="fas fa-copy"></i> Copia da un'altra</button>
+            <button type="button" class="button-style button-secondary" id="cp-btn-copia"><i class="fas fa-copy"></i> Copia da…</button>
         </div>
     </header>
 
@@ -178,7 +178,7 @@
 
     <div id="modale-copia" class="cp-velo" hidden>
         <div class="cp-finestra" role="dialog" aria-modal="true" aria-labelledby="copia-titolo">
-            <div class="cp-modulo-testa"><h2 id="copia-titolo">Copia il copione di un'altra attività</h2><button type="button" class="cp-chiudi" data-chiudi aria-label="Chiudi">&times;</button></div>
+            <div class="cp-modulo-testa"><h2 id="copia-titolo">Copia il copione di uno scenario o di un'altra attività</h2><button type="button" class="cp-chiudi" data-chiudi aria-label="Chiudi">&times;</button></div>
             <div class="cp-modulo-corpo">
                 <p class="nota">Gli eventi si aggiungono a quelli che ci sono. Si possono poi cambiare uno per uno.</p>
                 <ul id="copia-elenco" class="cp-copia-elenco"></ul>

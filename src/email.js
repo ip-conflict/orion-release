@@ -1,5 +1,3 @@
-// src/email.js
-//
 // La posta in uscita, con le impostazioni SMTP prese dal database.
 
 import logger from './logger.js';

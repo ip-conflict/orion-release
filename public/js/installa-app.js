@@ -1,5 +1,3 @@
-// public/js/installa-app.js
-//
 // Come si installa Orion Mobile: un APK dal sito dell'associazione, non dal
 // Play Store, quindi Android fa qualche domanda in più. I passi dicono le
 // scritte esatte che compaiono sul telefono (Android 8 e successivi, Chrome).

@@ -1,5 +1,3 @@
-// src/magazzino.js
-//
 // Magazzino: DPI, attrezzature e veicoli, cioè un'anagrafica dei beni e un
 // registro dei movimenti. Giacenze e detentori non si scrivono: si calcolano
 // dal registro nelle viste della migrazione update-19 (movimenti_effetti,
@@ -1706,7 +1704,7 @@ export function registraRotteMagazzino(app, ctx) {
                 const mancante = Math.round((uscito - rientrata) * 100) / 100;
                 if (mancante > 0 && bene.gestione === 'quantita') {
                     const resto = riga.resto;
-                    const quanto = `${mancante} ${bene.unita_misura}`;
+                    const quanto = `${mancante} ${mancante === 1 && bene.unita_misura === 'pezzi' ? 'pezzo' : bene.unita_misura}`;
                     if (!DESTINI_RESTO.includes(resto)) {
                         throw erroreRichiesta(`Di "${bene.denominazione}" ne tornano ${rientrata} su ${uscito}: ` +
                             `indica se i restanti ${quanto} restano in carico, sono stati usati sul posto o sono persi.`);

@@ -33,9 +33,7 @@
     padding-bottom: 12px;
 }
 
-/* Linguette di solo testo. Erano riquadri con un'icona grande sopra la
- * parola: occupavano il triplo dello spazio per dire la stessa cosa, e
- * un'icona accanto a "Rientro" non aggiunge niente a "Rientro". */
+/* Linguette di solo testo: un'icona accanto alla parola non aggiunge niente. */
 .schede-magazzino .scheda {
     position: relative;
     padding: 10px 16px;
@@ -134,9 +132,8 @@
 /* --- Elenchi di beni --- */
 .elenco-beni {
     display: grid;
-    /* 340 e non 280: una riga può contenere spunta, testo, etichetta e campo
-       della quantità, e in 280 pixel la colonna del testo si schiacciava fino
-       ad andare a capo una parola per volta. */
+    /* 340 e non 280: una riga può contenere spunta, testo, etichetta e
+       quantità, e più stretta la colonna del testo va a capo a ogni parola. */
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: 10px;
     margin-top: 12px;
@@ -233,10 +230,8 @@
     font-size: 0.92rem;
 }
 
-/* Il bottone che chiude l'operazione. Il colore se lo dà da solo: la classe
- * "primary" arriva dal foglio dell'amministrazione, dove vale solo dentro le
- * tabelle, e qui restava un bottone grigio in fondo a tre passi numerati -
- * cioè l'unica cosa da premere, resa invisibile. */
+/* Il bottone che chiude l'operazione si dà il colore da solo: la classe
+   "primary" del foglio dell'amministrazione vale solo dentro le tabelle. */
 .bottone-grande {
     width: 100%;
     padding: 14px;
@@ -451,8 +446,8 @@
 }
 
 /* Etichetta sopra, campo sotto, ma l'etichetta resta una riga di testo: con
- * flex-direction: column l'asterisco degli obbligatori diventava un elemento a
- * sé e finiva su una riga tutta sua, sotto la parola. */
+   flex-direction: column l'asterisco degli obbligatori finirebbe su una riga
+   sua. */
 .griglia-campi label,
 .griglia-scadenze label {
     display: block;
@@ -515,12 +510,12 @@
     border-bottom: 1px solid var(--border-color);
 }
 
-/* Sul telefono le schede diventano una fila che scorre e i passi si
- * allargano: è lo schermo su cui il magazzino si usa di più. */
+/* Sul telefono le schede vanno a capo (una fila che scorre di lato nasconde
+ * le ultime a chi non sa di doverla scorrere) e i passi si allargano: è lo
+ * schermo su cui il magazzino si usa di più. */
 @media (max-width: 700px) {
     .schede-magazzino {
-        flex-wrap: nowrap;
-        overflow-x: auto;
+        gap: 6px;
         padding-bottom: 10px;
     }
     .schede-magazzino .scheda {
@@ -604,9 +599,8 @@
 .azioni-modale button[type="submit"]:hover { filter: brightness(1.08); }
 
 /* --- Pulsante "Nuovo bene" ---
- * È l'unica azione che crea qualcosa in questa schermata: deve leggersi come
- * tale. Prima ereditava un bordo grigio dal foglio dell'amministrazione e
- * spariva accanto alla casella di ricerca. */
+   L'unica azione che crea qualcosa in questa schermata: deve leggersi come
+   tale. */
 .bottone-nuovo {
     display: inline-flex;
     align-items: center;
@@ -614,21 +608,16 @@
     padding: 12px 20px;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    color: #fff;
+    /* Lo stesso colore di ogni altro pulsante principale, chiaro e scuro. */
+    background: var(--button-bg);
+    color: var(--button-text);
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
-    transition: transform 0.12s, box-shadow 0.12s;
+    transition: background-color 0.15s;
 }
 
-.bottone-nuovo:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.38);
-}
-
-.bottone-nuovo:active { transform: translateY(0); }
+.bottone-nuovo:hover { background: var(--button-hover-bg); }
 
 .bottone-nuovo i { font-size: 0.9rem; }
 
@@ -1006,6 +995,21 @@ a.riga-bene { color: inherit; text-decoration: none; }
     opacity: 0.7;
 }
 
+.riquadro-app {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-color);
+}
+.riquadro-app[hidden] { display: none; }
+.riquadro-app a { text-decoration: none; }
+
 .riquadro-documenti-qr {
     padding: 10px 14px;
     border: 1px solid var(--border-color);
@@ -1022,3 +1026,61 @@ a.riga-bene { color: inherit; text-decoration: none; }
 .scelta-simili { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
 .scelta-simili input { width: auto; margin: 0; }
 .azioni-documenti-bene select { padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 8px; font: inherit; font-size: .92rem; background: var(--form-input-bg, var(--surface-color)); color: var(--text-color); }
+
+/* --- Consegna e rientro: tutto a portata di mano ---
+ * Il passo che chiude (riepilogo, verbale, pulsante) resta attaccato al
+ * fondo dello schermo mentre si scorre l'elenco: con cento oggetti il
+ * pulsante "Registra" non finisce più in fondo alla pagina. */
+.passo.passo-fisso {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-bottom: 0;
+    background: var(--surface-color);
+    box-shadow: 0 -6px 18px var(--shadow-color-medium, rgba(0, 0, 0, 0.15));
+}
+.passo-fisso .riepilogo {
+    margin: 0 0 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.passo-fisso .riga-opzione { margin: 0 0 10px; }
+@media (max-width: 700px) {
+    .passo.passo-fisso { padding: 10px 12px; border-radius: 12px 12px 0 0; }
+    .passo-fisso h2 { display: none; }
+    .passo-fisso .riga-opzione { font-size: 0.85rem; }
+    .passo-fisso .nota { font-size: 0.8rem; margin: 0 0 8px; }
+}
+
+/* La quantità si chiede solo per quello che si è scelto: venti caselle con
+ * "1" accanto a oggetti non spuntati sono solo rumore. */
+.riga-bene:not(.scelta) > input[type="number"] { display: none; }
+
+/* Sul telefono le scadenze vanno su due righe (la data sotto il nome) e i
+ * filtri dell'inventario stanno dentro lo schermo, uno per riga. */
+@media (max-width: 700px) {
+    .riga-avviso { flex-wrap: wrap; gap: 4px 14px; }
+    .riga-avviso .quando { margin-left: 0; white-space: normal; flex-basis: 100%; }
+    .barra-inventario > * { flex: 1 1 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .barra-inventario .bottone-nuovo, .barra-inventario .bottone-contorno { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Titoli delle finestre lunghi (un nome senza spazi) vanno a capo. */
+.contenuto-modale h2 { overflow-wrap: anywhere; }
+
+/* "clip" e non "overflow: auto": taglia ciò che sborda senza diventare il
+   contenitore della barra fissa, che resta attaccata allo schermo. */
+.admin-content { overflow: clip; }
+
+/* "Consegna questo": l'azione più comune su un bene, nel colore principale. */
+.azione-consegna {
+    display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px;
+    border: 1px solid transparent; border-radius: 10px; cursor: pointer;
+    background: var(--button-bg); color: var(--button-text);
+    font-size: 0.9rem; font-weight: 700;
+}
+.azione-consegna:hover { background: var(--button-hover-bg); }
+.azione-consegna[hidden] { display: none; }
+button.azione-avviso { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-weight: 700; }

@@ -1,5 +1,3 @@
-// src/cifratura.js
-//
 // La cifratura dei dati che escono più facilmente dal server: i file caricati
 // (certificati medici, documenti, foto, verbali firmati, resoconti), i backup
 // del database e la password della posta.

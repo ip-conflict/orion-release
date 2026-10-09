@@ -1,5 +1,3 @@
-// public/js/mappa-elementi.js
-//
 // Strade chiuse, zone interdette, zone di pericolosità e aree del piano sulla
 // mappa del centro operativo. Ogni tipo è un livello che si accende e si
 // spegne dal controllo dei livelli, con il suo colore come legenda.
@@ -108,8 +106,8 @@ const STILE = `
 .lm-popup .lm-azioni { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .lm-popup .lm-azioni button { font: inherit; font-size: .78rem; font-weight: 600; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border-color, #cbd5e1); background: var(--bg-color, #fff); color: var(--text-color, #0f172a); cursor: pointer; }
 .lm-popup .lm-azioni button.lm-pericolo { color: var(--danger-text, #b91c1c); }
-/* Col tema scuro i colori dei tipi (blu, marrone, viola) sul fondo blu notte
-   si leggevano male: più chiari. */
+// Col tema scuro i colori dei tipi sono più chiari, per leggerli sul fondo blu
+// notte.
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lm-popup .lm-tipo, :root:not([data-theme="light"]) .lm-campione-testo { filter: brightness(1.9) saturate(1.1); } }
 :root[data-theme="dark"] .lm-popup .lm-tipo { filter: brightness(1.9) saturate(1.1); }
 .lm-velo { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 5000; display: flex; align-items: flex-start; justify-content: center; padding: 60px 12px; overflow-y: auto; }
@@ -460,8 +458,8 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
     // Le zone sotto i marcatori, le strade sopra le zone.
     map.createPane('lm-zone').style.zIndex = 380;
     map.createPane('lm-strade').style.zIndex = 420;
-    // I divieti ai capi delle strade chiuse sopra la linea rossa: nello stesso
-    // riquadro un segnaposto più a nord finiva sotto la linea e spariva.
+    // I divieti ai capi delle strade chiuse sopra la linea rossa, altrimenti un
+    // segnaposto più a nord finisce sotto la linea.
     map.createPane('lm-divieti').style.zIndex = 425;
     // Le etichette delle aree sotto i segnaposti delle segnalazioni e delle squadre.
     const etichettePane = map.createPane('lm-etichette');
@@ -482,9 +480,8 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         controlloLivelli?.addOverlay(livelli[tipo], `${campione}${ETICHETTE[tipo]}`);
     });
     GRUPPI.forEach(g => controlloLivelli?.gruppo?.(g.chiave, g.titolo, g.tipi.map(t => livelli[t])));
-    // Lo sfondo attenuato, spento di base (i colori pieni si leggono meglio): il
-    // browser ricorda la scelta. La chiave è nuova, così chi l'aveva acceso di
-    // base riparte con i colori pieni.
+    // Lo sfondo attenuato, spento di base (i colori pieni si leggono meglio):
+    // il browser ricorda la scelta.
     const sfondo = L.layerGroup();
     sfondo.on('add', () => { map.getContainer().classList.add('lm-sfondo-attenuato'); ricorda('1'); });
     sfondo.on('remove', () => { map.getContainer().classList.remove('lm-sfondo-attenuato'); ricorda('0'); });
@@ -784,7 +781,7 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
     function togliGuida() { guida?.remove(); guida = null; }
 
     // Mentre si disegna, le forme che ci sono già non prendono i tocchi: una
-    // zona disegnata dentro un'altra apriva il riquadro di quella sotto.
+    // zona disegnata dentro un'altra aprirebbe il riquadro di quella sotto.
     function inDisegno(si) {
         if (si) map.closePopup();
         map.getContainer().classList.toggle('lm-disegnando', si);

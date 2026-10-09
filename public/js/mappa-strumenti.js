@@ -1,5 +1,3 @@
-// public/js/mappa-strumenti.js
-//
 // La ricerca sulla mappa e il percorso stradale delle squadre, per il centro
 // operativo.
 //

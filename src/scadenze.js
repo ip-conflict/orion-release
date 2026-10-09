@@ -1,5 +1,3 @@
-// src/scadenze.js
-//
 // Il giro quotidiano: avvisi di scadenza, report mensile, riepiloghi per
 // segreteria e magazzino, pulizia dei token revocati.
 

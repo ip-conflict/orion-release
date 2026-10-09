@@ -1,5 +1,3 @@
-// public/js/chiamata-co.js
-//
 // La chiamata dei volontari nel centro operativo (src/chiamate.js):
 //   - il pulsante "Volontari" dell'intestazione, con quanti arrivano e un
 //     segno rosso se c'è qualcuno da chiamare a voce;
@@ -500,7 +498,7 @@
             } catch (e) { notifica(e.message, 'errore'); }
         };
         az.append(
-            bottone('Arrivo', 'primario', () => rispondi('arrivo')),
+            bottone('Arrivo subito', 'primario', () => rispondi('arrivo')),
             bottone('Fra 30 minuti', '', () => rispondi('ritardo', 30)),
             bottone("Fra un'ora", '', () => rispondi('ritardo', 60)),
             bottone('Non posso', '', () => rispondi('no')),

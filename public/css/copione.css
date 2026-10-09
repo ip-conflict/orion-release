@@ -81,6 +81,7 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
 .cp-titolo h1 { margin: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cp-titolo span { font-size: .82rem; color: var(--text-muted); }
 .cp-azioni { display: flex; gap: 8px; }
+.cp-azioni[hidden] { display: none; }
 .cp-lavoro { flex: 1; display: flex; min-height: 0; }
 .cp-colonna { width: 400px; min-width: 320px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--surface-color); border-right: 1px solid var(--border-color); z-index: 20; }
 .cp-schede { display: flex; border-bottom: 1px solid var(--border-color); }
@@ -161,6 +162,7 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
 .cp-errori ul { margin: 6px 0 0; padding-left: 18px; }
 .cp-copia-elenco { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cp-copia-elenco button { width: 100%; text-align: left; }
+.cp-copia-gruppo { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-top: 6px; }
 
 /* --- La valutazione --- */
 .cp-val { border: 1px solid var(--border-color); border-left: 5px solid var(--colore-tipo); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: .86rem; }
@@ -182,5 +184,12 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
     .cp-colonna { width: auto; min-width: 0; height: 50%; border-right: 0; border-bottom: 1px solid var(--border-color); }
     .cp-modulo { position: fixed; inset: 70px 8px 8px 8px; width: auto; }
     .cp-azioni .button-style { padding: 6px 8px; font-size: .8rem; }
+}
+/* Telefono: il titolo sulla sua riga, i comandi sotto. */
+@media (max-width: 600px) {
+    .cp-testa { height: auto; flex-wrap: wrap; padding: 8px 12px; gap: 8px 10px; }
+    .cp-titolo { flex: 1 1 calc(100% - 140px); }
+    .cp-titolo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cp-azioni { flex-basis: 100%; justify-content: flex-end; }
 }
 .pagina-copione textarea, .pagina-copione input, .pagina-copione select, .pagina-copione button { font-family: inherit; }

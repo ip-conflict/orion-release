@@ -1,5 +1,3 @@
-// public/js/accesso.js
-//
 // L'accesso degli esterni temporanei: la pagina che si apre inquadrando il QR
 // dato dal centro operativo (o toccando il link arrivato per email o copiato
 // e mandato in altro modo). Il codice è nell'indirizzo; il server lo scambia con una

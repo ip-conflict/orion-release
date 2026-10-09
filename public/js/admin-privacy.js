@@ -1,5 +1,3 @@
-// public/js/admin-privacy.js
-//
 // Impostazioni › Condizioni d'uso: il testo (vuoto = quello proposto da
 // ORION) e chi non ha ancora accettato la versione in vigore. "Pubblica" crea
 // una versione nuova, che tutti accettano di nuovo.

@@ -1,5 +1,3 @@
-// public/js/esterni-temporanei.js
-//
 // "Accesso esterno": chi si presenta al COC durante un'emergenza (la Croce
 // Rossa con un'ambulanza, un tecnico del Comune) entra in ORION con un nome e
 // un QR, senza passare dalla segreteria. Finisce da solo con l'emergenza.

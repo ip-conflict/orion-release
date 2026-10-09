@@ -61,6 +61,12 @@
         </nav>
 
         <div id="avviso-magazzino" class="avviso" hidden></div>
+        <!-- Etichetta inquadrata con la fotocamera di un telefono Android: la
+             si può aprire in Orion Mobile, che ha già la consegna sotto mano. -->
+        <p id="apri-in-app" class="riquadro-app" hidden>
+            <span>Hai Orion Mobile su questo telefono?</span>
+            <a id="link-apri-in-app" class="azione-consegna">Apri nell'app</a>
+        </p>
         <!-- Dal QR di un'etichetta, per chi non tiene l'inventario: i libretti del bene. -->
         <ul id="documenti-qr" class="elenco-documenti-bene riquadro-documenti-qr" hidden></ul>
 
@@ -90,7 +96,9 @@
                 <div id="elenco-consegnabili" class="elenco-beni"></div>
             </div>
 
-            <div class="passo" id="passo-conferma-consegna">
+            <!-- Il passo che chiude resta in fondo allo schermo mentre si
+                 scorre l'elenco: il pulsante è sempre a portata di mano. -->
+            <div class="passo passo-fisso" id="passo-conferma-consegna">
                 <h2><span class="numero-passo">3</span> Fatto</h2>
                 <label class="riga-opzione" id="riga-verbale" hidden>
                     <input type="checkbox" id="genera-verbale" checked>
@@ -120,6 +128,12 @@
                     sul posto o è perso. Senza questa scelta il rientro non si registra.
                 </p>
                 <div id="elenco-rientro" class="elenco-beni"></div>
+            </div>
+            <!-- Il passo che chiude resta in fondo allo schermo mentre si
+                 scorre l'elenco: il pulsante è sempre a portata di mano. -->
+            <div class="passo passo-fisso" id="passo-conferma-rientro">
+                <h2><span class="numero-passo">3</span> Fatto</h2>
+                <div id="riepilogo-rientro" class="riepilogo">Nessun oggetto scelto.</div>
                 <label class="riga-opzione" id="riga-verbale-rientro" hidden>
                     <input type="checkbox" id="genera-verbale-rientro" checked>
                     <span id="testo-verbale-rientro">Preparare il verbale di rientro da far firmare a chi restituisce</span>
@@ -466,12 +480,14 @@
             </div>
         </form>
 
-        <!-- Tutto quello che si può fare a un bene esistente. Prima queste
-             operazioni avevano l'API ma nessun pulsante: il magazziniere non
-             aveva modo di buttare un DPI scaduto se non dal database. -->
+        <!-- Tutto quello che si può fare a un bene esistente. -->
         <div id="azioni-bene" hidden>
             <h3>Cosa vuoi farne</h3>
             <div class="pulsanti-movimento">
+                <!-- Dal QR sul ripiano alla consegna: il bene entra già scelto. -->
+                <button type="button" class="azione-consegna" id="btn-consegna-bene" hidden>
+                    Consegna questo
+                </button>
                 <button type="button" class="azione-movimento" data-movimento="carico">
                     Carica
                 </button>

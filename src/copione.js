@@ -1,5 +1,3 @@
-// src/copione.js
-//
 // Il copione della simulazione e la regia.
 //
 // Prima: la regia (il responsabile dell'attività, i registi scelti e chi
@@ -162,18 +160,23 @@ function leggiEvento(corpo, rifValidi = null) {
 const COLONNE_EVENTO = ['minuto', 'tipo', 'titolo', 'testo', 'modo', 'indirizzo', 'lat', 'lng', 'priorita', 'segnalante', 'telefono',
     'riferimento_id', 'squadra', 'elemento_tipo', 'geometria', 'risposta_attesa', 'minuti_attesi'];
 
-async function inserisciEvento(client, attivitaId, e, ordine) {
+// Il copione sta in un'attività o in uno scenario (src/scenari.js): la
+// colonna dice quale. Di serie è un'attività.
+const COLONNE_CONTENITORE = new Set(['attivita_id', 'scenario_id']);
+const colonna = (c) => { if (!COLONNE_CONTENITORE.has(c)) throw new Error('Contenitore del copione non valido'); return c; };
+
+export async function inserisciEvento(client, attivitaId, e, ordine, contenitore = 'attivita_id') {
     const valori = COLONNE_EVENTO.map(k => k === 'geometria' ? (e.geometria ? JSON.stringify(e.geometria) : null) : e[k]);
     const r = await client.query(
-        `INSERT INTO copione_eventi (attivita_id, ordine, ${COLONNE_EVENTO.join(', ')})
+        `INSERT INTO copione_eventi (${colonna(contenitore)}, ordine, ${COLONNE_EVENTO.join(', ')})
          VALUES ($1, $2, ${COLONNE_EVENTO.map((_, i) => `$${i + 3}`).join(', ')}) RETURNING *`,
         [attivitaId, ordine, ...valori]);
     return r.rows[0];
 }
 
-async function eventiDi(attivitaId, esecutore = pool) {
+export async function eventiDi(attivitaId, esecutore = pool, contenitore = 'attivita_id') {
     const r = await esecutore.query(
-        `SELECT * FROM copione_eventi WHERE attivita_id = $1 ORDER BY minuto NULLS LAST, ordine, id`, [attivitaId]);
+        `SELECT * FROM copione_eventi WHERE ${colonna(contenitore)} = $1 ORDER BY minuto NULLS LAST, ordine, id`, [attivitaId]);
     return r.rows;
 }
 
@@ -588,14 +591,15 @@ async function leggiExcel(buffer) {
 
 // Il copione di un'attività in coda a quello di un'altra, con gli aggravamenti
 // legati alle segnalazioni copiate. Dentro la transazione di chi chiama.
-export async function copiaCopione(client, daId, attivitaId) {
-    const eventi = await eventiDi(daId);
-    let ordine = (await client.query('SELECT COALESCE(MAX(ordine), 0) AS m FROM copione_eventi WHERE attivita_id = $1', [attivitaId])).rows[0].m;
+// Da e verso uno scenario: { da: 'scenario_id' } o { verso: 'scenario_id' }.
+export async function copiaCopione(client, daId, attivitaId, { da = 'attivita_id', verso = 'attivita_id' } = {}) {
+    const eventi = await eventiDi(daId, client, da);
+    let ordine = (await client.query(`SELECT COALESCE(MAX(ordine), 0) AS m FROM copione_eventi WHERE ${colonna(verso)} = $1`, [attivitaId])).rows[0].m;
     const nuovi = new Map();
     for (const e of [...eventi].sort((x, y) => (x.tipo === 'aggravamento') - (y.tipo === 'aggravamento'))) {
         const copia = { ...e, riferimento_id: e.riferimento_id ? nuovi.get(e.riferimento_id) ?? null : null };
         if (copia.tipo === 'aggravamento' && !copia.riferimento_id) continue;
-        const creato = await inserisciEvento(client, attivitaId, copia, ++ordine);
+        const creato = await inserisciEvento(client, attivitaId, copia, ++ordine, verso);
         nuovi.set(e.id, creato.id);
     }
     return nuovi.size;
@@ -628,6 +632,22 @@ export function registraRotteCopione(app) {
         if (!a.conduce) { res.status(403).json({ message: 'Il copione lo vede e lo scrive solo la regia.' }); return null; }
         return a;
     }
+
+    // Lo scenario della biblioteca (src/scenari.js): lo prepara e lo tocca chi
+    // organizza le attività. Ha la stessa forma di quello che torna serveRegia.
+    async function serveScenario(req, res, scenarioId) {
+        if (!haPermesso(req, 'gruppo.attivita')) { res.status(403).json({ message: 'Gli scenari li prepara chi organizza le attività.' }); return null; }
+        const s = (await pool.query('SELECT * FROM scenari WHERE id = $1', [scenarioId])).rows[0];
+        if (!s) { res.status(404).json({ message: 'Scenario non trovato.' }); return null; }
+        return { ...s, conduce: true, scenario_libro: true };
+    }
+
+    // Lo stesso copione, in un'attività o in uno scenario: lo dice l'indirizzo.
+    const diScenario = (req) => req.path.startsWith('/api/scenari/');
+    const contenitoreDi = (req) => diScenario(req) ? 'scenario_id' : 'attivita_id';
+    const serveContenitore = (req, res, contId) => diScenario(req) ? serveScenario(req, res, contId) : serveRegia(req, res, contId);
+    // Le modifiche a uno scenario non toccano nessuna sala aperta.
+    const cambiato = (req) => { if (!diScenario(req)) regiaCambiata(); };
 
     // La sala più recente dell'attività.
     const salaDi = async (attivitaId) => (await pool.query(
@@ -680,15 +700,15 @@ export function registraRotteCopione(app) {
     });
 
     // Il copione in Excel, nello stesso formato del modello: si corregge e si ricarica.
-    app.get('/api/attivita/:id/copione.xlsx', soloInterni, async (req, res) => {
+    app.get(['/api/attivita/:id/copione.xlsx', '/api/scenari/:id/copione.xlsx'], soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
         try {
-            const a = await serveRegia(req, res, attivitaId);
+            const a = await serveContenitore(req, res, attivitaId);
             if (!a) return;
-            const buffer = await modelloExcel(await eventiDi(attivitaId));
+            const buffer = await modelloExcel(await eventiDi(attivitaId, pool, contenitoreDi(req)));
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename="copione-${attivitaId}.xlsx"`);
+            res.setHeader('Content-Disposition', `attachment; filename="copione-${diScenario(req) ? 'scenario-' : ''}${attivitaId}.xlsx"`);
             res.send(Buffer.from(buffer));
         } catch (e) {
             logger.error('Errore GET /api/attivita/:id/copione.xlsx:', e);
@@ -696,20 +716,21 @@ export function registraRotteCopione(app) {
         }
     });
 
-    app.post('/api/attivita/:id/copione/eventi', soloInterni, async (req, res) => {
+    app.post(['/api/attivita/:id/copione/eventi', '/api/scenari/:id/copione/eventi'], soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
         try {
-            const a = await serveRegia(req, res, attivitaId);
+            const a = await serveContenitore(req, res, attivitaId);
             if (!a) return;
-            const presenti = await eventiDi(attivitaId);
+            const contenitore = contenitoreDi(req);
+            const presenti = await eventiDi(attivitaId, pool, contenitore);
             if (presenti.length >= MAX_EVENTI) return res.status(409).json({ message: `Al massimo ${MAX_EVENTI} eventi.` });
             const { evento, errore } = leggiEvento(req.body, new Set(presenti.filter(e => e.tipo === 'segnalazione').map(e => e.id)));
             if (errore) return res.status(400).json({ message: errore });
             const ordine = presenti.reduce((m, e) => Math.max(m, e.ordine), 0) + 1;
-            const creato = await inserisciEvento(pool, attivitaId, evento, ordine);
-            registraAudit(req, 'copione.evento_aggiunto', { tipo: 'attivita', id: attivitaId, dettagli: { evento: creato.id, tipo: creato.tipo, titolo: creato.titolo } });
-            regiaCambiata();
+            const creato = await inserisciEvento(pool, attivitaId, evento, ordine, contenitore);
+            registraAudit(req, 'copione.evento_aggiunto', { tipo: diScenario(req) ? 'scenario' : 'attivita', id: attivitaId, dettagli: { evento: creato.id, tipo: creato.tipo, titolo: creato.titolo } });
+            cambiato(req);
             res.status(201).json(creato);
         } catch (e) {
             logger.error('Errore POST /api/attivita/:id/copione/eventi:', e);
@@ -723,17 +744,18 @@ export function registraRotteCopione(app) {
         try {
             const prima = (await pool.query('SELECT * FROM copione_eventi WHERE id = $1', [eventoId])).rows[0];
             if (!prima) return res.status(404).json({ message: 'Evento non trovato.' });
-            const a = await serveRegia(req, res, prima.attivita_id);
+            const [contenitore, contId] = prima.scenario_id ? ['scenario_id', prima.scenario_id] : ['attivita_id', prima.attivita_id];
+            const a = prima.scenario_id ? await serveScenario(req, res, contId) : await serveRegia(req, res, contId);
             if (!a) return;
-            const presenti = await eventiDi(prima.attivita_id);
+            const presenti = await eventiDi(contId, pool, contenitore);
             const { evento, errore } = leggiEvento(req.body, new Set(presenti.filter(e => e.tipo === 'segnalazione' && e.id !== eventoId).map(e => e.id)));
             if (errore) return res.status(400).json({ message: errore });
             const r = await pool.query(
                 `UPDATE copione_eventi SET ${COLONNE_EVENTO.map((k, i) => `${k} = $${i + 2}`).join(', ')}, aggiornato_il = NOW()
                   WHERE id = $1 RETURNING *`,
                 [eventoId, ...COLONNE_EVENTO.map(k => k === 'geometria' ? (evento.geometria ? JSON.stringify(evento.geometria) : null) : evento[k])]);
-            registraAudit(req, 'copione.evento_modificato', { tipo: 'attivita', id: prima.attivita_id, dettagli: { evento: eventoId, titolo: evento.titolo } });
-            regiaCambiata();
+            registraAudit(req, 'copione.evento_modificato', { tipo: prima.scenario_id ? 'scenario' : 'attivita', id: contId, dettagli: { evento: eventoId, titolo: evento.titolo } });
+            if (!prima.scenario_id) regiaCambiata();
             res.json(r.rows[0]);
         } catch (e) {
             logger.error('Errore PUT /api/copione/eventi/:id:', e);
@@ -747,13 +769,13 @@ export function registraRotteCopione(app) {
         try {
             const prima = (await pool.query('SELECT * FROM copione_eventi WHERE id = $1', [eventoId])).rows[0];
             if (!prima) return res.status(404).json({ message: 'Evento non trovato.' });
-            const a = await serveRegia(req, res, prima.attivita_id);
+            const a = prima.scenario_id ? await serveScenario(req, res, prima.scenario_id) : await serveRegia(req, res, prima.attivita_id);
             if (!a) return;
             const uscito = await pool.query("SELECT 1 FROM copione_esiti WHERE evento_id = $1 AND stato = 'uscito'", [eventoId]);
             if (uscito.rowCount) return res.status(409).json({ message: 'Un evento già uscito in sala resta: serve alla valutazione.' });
             await pool.query('DELETE FROM copione_eventi WHERE id = $1', [eventoId]);
-            registraAudit(req, 'copione.evento_tolto', { tipo: 'attivita', id: prima.attivita_id, dettagli: { evento: eventoId, titolo: prima.titolo } });
-            regiaCambiata();
+            registraAudit(req, 'copione.evento_tolto', { tipo: prima.scenario_id ? 'scenario' : 'attivita', id: prima.scenario_id || prima.attivita_id, dettagli: { evento: eventoId, titolo: prima.titolo } });
+            if (!prima.scenario_id) regiaCambiata();
             res.status(204).end();
         } catch (e) {
             logger.error('Errore DELETE /api/copione/eventi/:id:', e);
@@ -763,7 +785,7 @@ export function registraRotteCopione(app) {
 
     // Caricare il copione dal foglio Excel: si aggiunge a quello che c'è, o lo
     // sostituisce (modo=sostituisci). Tutto o niente: con un errore non si carica nulla.
-    app.post('/api/attivita/:id/copione/importa', soloInterni, (req, res, next) => {
+    app.post(['/api/attivita/:id/copione/importa', '/api/scenari/:id/copione/importa'], soloInterni, (req, res, next) => {
         caricaFoglio.single('file')(req, res, (err) => {
             if (err) return res.status(400).json({ message: err.code === 'LIMIT_FILE_SIZE' ? 'Il file supera i 2 MB.' : 'File non valido.' });
             next();
@@ -773,8 +795,9 @@ export function registraRotteCopione(app) {
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
         if (!req.file) return res.status(400).json({ message: 'Scegli il file Excel (.xlsx) compilato sul modello.' });
         try {
-            const a = await serveRegia(req, res, attivitaId);
+            const a = await serveContenitore(req, res, attivitaId);
             if (!a) return;
+            const contenitore = contenitoreDi(req);
             const { righe, errori } = await leggiExcel(req.file.buffer);
             if (errori.length) return res.status(400).json({ message: 'Nel foglio ci sono righe da correggere: non ho caricato niente.', errori });
             const sostituisci = req.body?.modo === 'sostituisci';
@@ -784,21 +807,21 @@ export function registraRotteCopione(app) {
                 await client.query('BEGIN');
                 if (sostituisci) {
                     const usciti = await client.query(
-                        "SELECT 1 FROM copione_esiti x JOIN copione_eventi e ON e.id = x.evento_id WHERE e.attivita_id = $1 AND x.stato = 'uscito' LIMIT 1", [attivitaId]);
+                        `SELECT 1 FROM copione_esiti x JOIN copione_eventi e ON e.id = x.evento_id WHERE e.${contenitore} = $1 AND x.stato = 'uscito' LIMIT 1`, [attivitaId]);
                     if (usciti.rowCount) {
                         await client.query('ROLLBACK');
                         return res.status(409).json({ message: 'Il copione è già stato usato in sala: si può solo aggiungere.' });
                     }
-                    await client.query('DELETE FROM copione_eventi WHERE attivita_id = $1', [attivitaId]);
+                    await client.query(`DELETE FROM copione_eventi WHERE ${contenitore} = $1`, [attivitaId]);
                 }
-                let ordine = (await client.query('SELECT COALESCE(MAX(ordine), 0) AS m FROM copione_eventi WHERE attivita_id = $1', [attivitaId])).rows[0].m;
+                let ordine = (await client.query(`SELECT COALESCE(MAX(ordine), 0) AS m FROM copione_eventi WHERE ${contenitore} = $1`, [attivitaId])).rows[0].m;
                 const idPerRiga = new Map();
                 // Prima le segnalazioni, così gli aggravamenti trovano a chi riferirsi.
                 const ordinate = [...righe].sort((x, y) => (x.corpo.tipo === 'aggravamento') - (y.corpo.tipo === 'aggravamento') || x.n - y.n);
                 for (const r of ordinate) {
                     if (r.corpo.tipo === 'aggravamento') r.corpo.riferimento_id = idPerRiga.get(r.rif);
                     const { evento } = leggiEvento(r.corpo);
-                    const creato = await inserisciEvento(client, attivitaId, evento, ++ordine);
+                    const creato = await inserisciEvento(client, attivitaId, evento, ++ordine, contenitore);
                     idPerRiga.set(r.n, creato.id);
                     caricati++;
                     if ((evento.tipo === 'segnalazione' && evento.lat === null) || (ELEMENTI_DI[evento.tipo] && !evento.geometria)) daPosizionare++;
@@ -810,8 +833,8 @@ export function registraRotteCopione(app) {
             } finally {
                 client.release();
             }
-            registraAudit(req, 'copione.importato', { tipo: 'attivita', id: attivitaId, dettagli: { eventi: caricati, sostituito: sostituisci } });
-            regiaCambiata();
+            registraAudit(req, 'copione.importato', { tipo: diScenario(req) ? 'scenario' : 'attivita', id: attivitaId, dettagli: { eventi: caricati, sostituito: sostituisci } });
+            cambiato(req);
             res.status(201).json({ caricati, da_posizionare: daPosizionare });
         } catch (e) {
             logger.error('Errore POST /api/attivita/:id/copione/importa:', e);
@@ -819,23 +842,31 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Copiare il copione di un'altra attività (lo scenario dell'anno scorso).
-    app.post('/api/attivita/:id/copione/copia', soloInterni, async (req, res) => {
-        const attivitaId = id(req.params.id), daId = id(req.body?.da);
-        if (!attivitaId || !daId || attivitaId === daId) return res.status(400).json({ message: "Scegli l'attività da cui copiare." });
+    // Copiare il copione di un'altra attività (lo scenario dell'anno scorso) o
+    // di uno scenario della biblioteca ({ da } o { da_scenario }), in coda.
+    app.post(['/api/attivita/:id/copione/copia', '/api/scenari/:id/copione/copia'], soloInterni, async (req, res) => {
+        const attivitaId = id(req.params.id);
+        const verso = contenitoreDi(req);
+        const [da, daId] = req.body?.da_scenario ? ['scenario_id', id(req.body.da_scenario)] : ['attivita_id', id(req.body?.da)];
+        if (!attivitaId || !daId || (da === verso && attivitaId === daId)) return res.status(400).json({ message: "Scegli l'attività o lo scenario da cui copiare." });
         try {
-            const a = await serveRegia(req, res, attivitaId);
+            const a = await serveContenitore(req, res, attivitaId);
             if (!a) return;
-            const origine = await regia(req, daId);
-            if (!origine?.conduce && !haPermesso(req, 'gruppo.attivita')) return res.status(403).json({ message: 'Si copia il copione di un\'attività di cui si fa la regia.' });
-            const eventi = await eventiDi(daId);
-            if (!eventi.length) return res.status(409).json({ message: "L'altra attività non ha copione." });
+            if (da === 'attivita_id') {
+                const origine = await regia(req, daId);
+                if (!origine?.conduce && !haPermesso(req, 'gruppo.attivita')) return res.status(403).json({ message: 'Si copia il copione di un\'attività di cui si fa la regia.' });
+            } else if (!(await pool.query('SELECT 1 FROM scenari WHERE id = $1', [daId])).rowCount) {
+                return res.status(404).json({ message: 'Scenario non trovato.' });
+            }
+            const eventi = await eventiDi(daId, pool, da);
+            if (!eventi.length) return res.status(409).json({ message: da === 'scenario_id' ? 'Lo scenario non ha copione.' : "L'altra attività non ha copione." });
             const client = await pool.connect();
             try {
                 await client.query('BEGIN');
-                const copiati = await copiaCopione(client, daId, attivitaId);
+                const copiati = await copiaCopione(client, daId, attivitaId, { da, verso });
                 await client.query('COMMIT');
-                registraAudit(req, 'copione.copiato', { tipo: 'attivita', id: attivitaId, dettagli: { da: daId, eventi: copiati } });
+                registraAudit(req, 'copione.copiato', { tipo: verso === 'scenario_id' ? 'scenario' : 'attivita', id: attivitaId, dettagli: { [da === 'scenario_id' ? 'da_scenario' : 'da']: daId, eventi: copiati } });
+                cambiato(req);
                 res.status(201).json({ copiati });
             } catch (e) {
                 await client.query('ROLLBACK').catch(() => {});
@@ -844,8 +875,32 @@ export function registraRotteCopione(app) {
                 client.release();
             }
         } catch (e) {
-            logger.error('Errore POST /api/attivita/:id/copione/copia:', e);
+            logger.error('Errore POST copione/copia:', e);
             res.status(500).json({ message: 'Errore nel copiare il copione.' });
+        }
+    });
+
+    // Il copione di uno scenario: come quello di un'attività mai andata in sala.
+    app.get('/api/scenari/:id/copione', soloInterni, async (req, res) => {
+        const scenarioId = id(req.params.id);
+        if (!scenarioId) return res.status(400).json({ message: 'Scenario non valido.' });
+        try {
+            const s = await serveScenario(req, res, scenarioId);
+            if (!s) return;
+            const eventi = await eventiDi(scenarioId, pool, 'scenario_id');
+            res.json({
+                scenario: { id: s.id, titolo: s.titolo, natura: s.natura, durata_ore: s.durata_ore, scenario: s.scenario, obiettivi: s.obiettivi, enti: s.enti },
+                attivita: { id: null, titolo: s.titolo, tipo: s.natura === 'esercitazione' ? 'Esercitazione' : 'Addestramento', scenario: s.scenario, obiettivi: s.obiettivi, simulazione: 'sala', stato: 'programmata' },
+                puo_modificare: true,
+                pubblicato: false,
+                sala: null,
+                eventi: eventi.map(e => ({ ...e, stato: 'atteso', previsto: e.minuto })),
+                osservazioni: [],
+                debriefing: null
+            });
+        } catch (e) {
+            logger.error('Errore GET /api/scenari/:id/copione:', e);
+            res.status(500).json({ message: 'Errore nel leggere il copione.' });
         }
     });
 

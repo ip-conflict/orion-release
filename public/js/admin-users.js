@@ -1,4 +1,3 @@
-// /public/js/admin-users.js
 let brandingSettings = {
     association_name: ''
 };
@@ -370,7 +369,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         elenco.forEach(user => userTableBody.appendChild(rigaUtente(user)));
+        // Sul telefono ogni riga diventa una scheda: ogni cella si porta il nome
+        // della sua colonna.
+        const titoli = [...document.querySelectorAll('#user-table-head th')].map(th => th.textContent.replace(/[↑↓]/g, '').trim());
+        userTableBody.querySelectorAll('tr').forEach(tr => [...tr.cells].forEach((td, i) => {
+            if (titoli[i]) td.dataset.etichetta = titoli[i];
+        }));
     }
+
+    // Il nome breve dei pulsanti, scritto accanto all'icona sul telefono, dove
+    // il suggerimento al passaggio del mouse non c'è.
+    const BREVI = {
+        'edit-user-btn': 'Modifica', 'suspend-btn': 'Sospendi', 'reactivate-btn': 'Riattiva',
+        'reset-pwd-btn': 'Password', 'reset-mfa-btn': 'Verifica', 'delete-user-btn': 'Elimina'
+    };
 
     function bottone(classe, icona, titolo, azione) {
         const b = document.createElement('button');
@@ -378,6 +390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         b.innerHTML = `<i class="fas ${icona}"></i>`;
         b.title = titolo;
         b.setAttribute('aria-label', titolo);
+        if (BREVI[classe]) b.dataset.breve = BREVI[classe];
         if (azione) b.addEventListener('click', azione); else b.disabled = true;
         return b;
     }
@@ -444,7 +457,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     user.is_active ? `Sospendi ${user.username}` : `Riattiva ${user.username}`,
                     () => handleToggleStatus(user.id, user.username, user.is_active)));
             actionTd.appendChild(isMe
-                ? bottone('reset-pwd-btn', 'fa-key', "Usa il 'Mio Profilo' per cambiare la tua password")
+                ? bottone('reset-pwd-btn', 'fa-key', "La tua password si cambia da Il mio profilo")
                 : bottone('reset-pwd-btn', 'fa-key', `Azzera la password di ${user.username}`, () => handleResetPassword(user.id, user.username)));
             // Telefono perso e codici di riserva finiti: la verifica si toglie, e
             // la persona la riattiva.
@@ -781,7 +794,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const codeContainer = passSpan.parentElement;
         const labelElement = codeContainer.previousElementSibling;
         if (labelElement && labelElement.tagName === 'P') {
-            labelElement.innerHTML = `<strong>${magicLink ? 'Link Attivazione:' : 'Password Iniziale:'}</strong>`;
+            labelElement.innerHTML = `<strong>${magicLink ? 'Collegamento per scegliere la password:' : 'Password iniziale:'}</strong>`;
         }
         
         // Se c'è un magic link lo mostra, altrimenti avvisa che si usa la password di default
@@ -789,7 +802,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         passSpan.style.wordBreak = 'break-all';
         passSpan.style.fontSize = '0.9em';
         
-        document.getElementById('credentials-modal-title').textContent = isReset ? 'Password Resettata' : 'Utente Creato';
+        document.getElementById('credentials-modal-title').textContent = isReset ? 'Nuova password da scegliere' : 'Volontario iscritto';
         
         const modalDesc = document.querySelector('#credentials-modal p');
         if (modalDesc) {

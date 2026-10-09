@@ -117,6 +117,13 @@
 .giorno-agenda h3 { margin: 0 0 8px; font-size: 0.95rem; text-transform: capitalize; }
 .giorno-agenda.oggi { border-color: var(--primary-color); }
 .giorno-agenda .voce { font-size: 0.9rem; padding: 7px 10px; margin-bottom: 6px; white-space: normal; }
+.giorni-passati { margin-bottom: 10px; }
+.giorni-passati > summary {
+    cursor: pointer; padding: 10px 12px; border-radius: 10px;
+    border: 1px dashed var(--border-color); color: var(--text-muted); font-weight: 600;
+}
+.giorni-passati[open] > summary { margin-bottom: 10px; }
+.giorni-passati .giorno-agenda { opacity: 0.8; }
 
 @media (max-width: 760px) {
     .griglia-mese { display: none; }
@@ -251,3 +258,27 @@
 .chip-regia li .btn-icona { width: 26px; height: 26px; padding: 0; font-size: .85rem; }
 .chip-regia li.vuota { background: none; padding-left: 0; color: var(--text-muted, #6b7280); font-style: italic; }
 .nota-conduci { padding: 8px 12px; border-left: 3px solid var(--primary-color, #1e4f8c); background: rgba(30, 79, 140, .06); border-radius: 4px; }
+
+/* Gli allegati di un'attività: nella scheda si aprono, nel modulo si aggiungono e si tolgono. */
+.allegati-attivita h3 { font-size: 0.95rem; margin: 14px 0 6px; }
+.elenco-allegati { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.elenco-allegati:empty { display: none; }
+.elenco-allegati li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color); }
+.elenco-allegati li > i { color: var(--text-muted); width: 18px; text-align: center; }
+.elenco-allegati a { color: var(--link-color); font-weight: 600; word-break: break-word; }
+.elenco-allegati .nome-allegato { flex: 1; min-width: 0; word-break: break-word; }
+.elenco-allegati small { color: var(--text-muted); white-space: nowrap; }
+.elenco-allegati li.in-attesa { border-style: dashed; }
+.elenco-allegati button { margin-left: auto; }
+.campo-allegati .etichetta-campo { display: block; font-weight: 600; margin-bottom: 6px; }
+.campo-allegati .etichetta-campo .nota { font-weight: 400; }
+.griglia-campi .campo-allegati label.pulsante-allegato { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; width: auto; cursor: pointer; }
+
+/* Un giorno del mese si tocca per una nuova attività in quel giorno. */
+.giorno.cliccabile { cursor: pointer; }
+.giorno.cliccabile:hover { background: var(--list-item-hover-bg); }
+.giorno.cliccabile .numero-giorno::after { content: '+'; margin-left: 6px; opacity: 0; color: var(--primary-color); font-weight: 700; transition: opacity .15s; }
+.giorno.cliccabile:hover .numero-giorno::after { opacity: 1; }
+
+.altre-voci { align-self: flex-start; border: 0; background: none; padding: 2px 4px; font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--link-color); cursor: pointer; }
+.altre-voci:hover { text-decoration: underline; }

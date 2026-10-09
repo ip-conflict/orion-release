@@ -1,5 +1,3 @@
-// src/emergenze.js
-//
 // Apertura e chiusura delle emergenze, archivio, documenti ed eventi.
 
 import fs from 'fs';
@@ -24,6 +22,7 @@ import { fileURLToPath } from 'url';
 import { inviaFile, leggiFile, proteggiCaricati } from './cifratura.js';
 import { sigillaChiusura } from './integrita.js';
 import { copiaCopione, copioniDisponibili } from './copione.js';
+import { allegaBollettinoInVigore } from './allerta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -198,6 +197,7 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
         dettagli: { codice: nuova.code, nome: nuova.name, simulazione, attivita: attivitaId, squadre_sciolte: squadreSciolte, volontari_ereditati: membriEreditati.length }
     });
     annunciaStatoEmergenza();
+    if (!simulazione) allegaBollettinoInVigore();
     return {
         emergency: activeEmergency,
         squadre_sciolte: squadreSciolte,
@@ -443,7 +443,8 @@ export function registraRotteEmergenze(app) {
 
     // La simulazione al volo, dal centro operativo: un'attività che comincia
     // adesso (addestramento o esercitazione, con chi la apre come responsabile
-    // e regia), il copione di una vecchia se si vuole, e la sala aperta subito.
+    // e regia), il copione di una vecchia o di uno scenario della biblioteca
+    // (src/scenari.js) se si vuole, e la sala aperta subito.
     // Niente convocazioni: chi serve si chiama con la chiamata dei volontari.
     const apreAlVolo = (req) => haPermesso(req, 'emergenze.apertura', 'gruppo.attivita');
 
@@ -460,13 +461,27 @@ export function registraRotteEmergenze(app) {
     app.post('/api/simulazioni/al-volo', nonEsterni, async (req, res) => {
         if (!apreAlVolo(req)) return res.status(403).json({ message: 'Una simulazione la apre chi apre le emergenze o organizza le attività.' });
         const corpo = req.body || {};
-        const natura = corpo.natura === 'esercitazione' ? 'esercitazione' : 'addestramento';
-        const ore = Number(corpo.ore ?? 3);
-        if (!Number.isInteger(ore) || ore < 1 || ore > 24) return res.status(400).json({ message: 'La durata va da 1 a 24 ore.' });
-        const titolo = typeof corpo.titolo === 'string' ? corpo.titolo.trim().slice(0, 200) : '';
-        const scenario = typeof corpo.scenario === 'string' && corpo.scenario.trim() ? corpo.scenario.trim().slice(0, 4000) : null;
-        const copiaDa = corpo.copia_da === undefined || corpo.copia_da === null || corpo.copia_da === '' ? null : Number(corpo.copia_da);
+        const vuoto = (v) => v === undefined || v === null || v === '';
+        const copiaDa = vuoto(corpo.copia_da) ? null : Number(corpo.copia_da);
         if (copiaDa !== null && !Number.isInteger(copiaDa)) return res.status(400).json({ message: 'Copione non valido.' });
+        const scenarioId = vuoto(corpo.copia_scenario) ? null : Number(corpo.copia_scenario);
+        if (scenarioId !== null && (!Number.isInteger(scenarioId) || copiaDa !== null)) return res.status(400).json({ message: "Si parte dal copione di un'attività o da uno scenario, non da tutti e due." });
+        // Da uno scenario: quello che non si scrive lo dice lo scenario.
+        let dalloScenario = null;
+        if (scenarioId !== null) {
+            try {
+                dalloScenario = (await pool.query('SELECT * FROM scenari WHERE id = $1', [scenarioId])).rows[0];
+            } catch (e) {
+                logger.error('Errore POST /api/simulazioni/al-volo (scenario):', e);
+                return res.status(500).json({ message: 'Errore nel leggere lo scenario.' });
+            }
+            if (!dalloScenario) return res.status(404).json({ message: 'Scenario non trovato.' });
+        }
+        const natura = (corpo.natura || dalloScenario?.natura) === 'esercitazione' ? 'esercitazione' : 'addestramento';
+        const ore = Number(corpo.ore ?? Math.min(dalloScenario?.durata_ore ?? 3, 24));
+        if (!Number.isInteger(ore) || ore < 1 || ore > 24) return res.status(400).json({ message: 'La durata va da 1 a 24 ore.' });
+        const titolo = (typeof corpo.titolo === 'string' ? corpo.titolo.trim().slice(0, 200) : '') || dalloScenario?.titolo || '';
+        const scenario = (typeof corpo.scenario === 'string' && corpo.scenario.trim() ? corpo.scenario.trim().slice(0, 4000) : null) ?? dalloScenario?.scenario ?? null;
         if (activeEmergency) {
             return res.status(409).json({ message: activeEmergency.simulazione ? `È già aperta la simulazione ${activeEmergency.code}.` : "C'è un'emergenza vera aperta: la simulazione aspetta." });
         }
@@ -482,17 +497,20 @@ export function registraRotteEmergenze(app) {
             const quando = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', timeZone: process.env.TZ || 'Europe/Rome' }).format(new Date());
             await client.query('BEGIN');
             attivitaId = (await client.query(
-                `INSERT INTO attivita (tipo_id, titolo, inizio, fine, convocazione, avviso_app, avviso_email, responsabile_id, creato_da, simulazione, scenario)
-                 VALUES ($1, $2, NOW(), NOW() + ($3::int * INTERVAL '1 hour'), 'scelti', false, false, $4, $4, 'sala', $5) RETURNING id`,
-                [tipo.id, titolo || `${tipo.nome} del ${quando}`, ore, req.user.id, scenario])).rows[0].id;
-            const copiati = copiaDa !== null ? await copiaCopione(client, copiaDa, attivitaId) : 0;
+                `INSERT INTO attivita (tipo_id, titolo, inizio, fine, convocazione, avviso_app, avviso_email, responsabile_id, creato_da, simulazione, scenario,
+                                       obiettivi, enti, scenario_id)
+                 VALUES ($1, $2, NOW(), NOW() + ($3::int * INTERVAL '1 hour'), 'scelti', false, false, $4, $4, 'sala', $5, $6, $7, $8) RETURNING id`,
+                [tipo.id, titolo || `${tipo.nome} del ${quando}`, ore, req.user.id, scenario,
+                 dalloScenario?.obiettivi ?? null, dalloScenario?.enti ?? null, scenarioId])).rows[0].id;
+            const copiati = copiaDa !== null ? await copiaCopione(client, copiaDa, attivitaId)
+                : scenarioId !== null ? await copiaCopione(client, scenarioId, attivitaId, { da: 'scenario_id' }) : 0;
             await client.query('COMMIT');
             const giorno = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.TZ || 'Europe/Rome' }).format(new Date()).replace(/-/g, '');
             const esito = await apriEmergenza(req, {
                 codice: `SIM-${giorno}-${attivitaId}`, nome: titolo || `${tipo.nome} del ${quando}`,
                 azzeraSquadre: corpo.azzera_squadre === true, simulazione: true, attivitaId
             });
-            registraAudit(req, 'simulazione.aperta', { tipo: 'attivita', id: attivitaId, dettagli: { emergenza: esito.emergency.id, codice: esito.emergency.code, al_volo: true, copiati } });
+            registraAudit(req, 'simulazione.aperta', { tipo: 'attivita', id: attivitaId, dettagli: { emergenza: esito.emergency.id, codice: esito.emergency.code, al_volo: true, copiati, scenario: scenarioId } });
             res.status(201).json({ ...esito, attivita_id: attivitaId, copiati });
         } catch (e) {
             await client.query('ROLLBACK').catch(() => {});
@@ -725,7 +743,7 @@ export function registraRotteEmergenze(app) {
                   res.status(403).json({ message: err.message });
              }
              else {
-                 res.status(500).json({ message: err.message || 'Errore interno durante l\'eliminazione dell\'emergenza.' });
+                 res.status(500).json({ message: 'Errore interno durante l\'eliminazione dell\'emergenza.' });
              }
         } finally {
             client.release();
@@ -753,9 +771,9 @@ export function registraRotteEmergenze(app) {
                 d.file_path, 
                 d.file_mime_type,
                 d.uploaded_at, 
-                CONCAT(u.nome, ' ', u.cognome) as uploader_fullname
+                COALESCE(NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), ''), 'ORION') as uploader_fullname
             FROM emergency_documents d
-            JOIN users u ON d.uploader_user_id = u.id
+            LEFT JOIN users u ON d.uploader_user_id = u.id
             WHERE d.emergency_id = $1
             ORDER BY d.uploaded_at DESC;
         `;
@@ -800,7 +818,7 @@ export function registraRotteEmergenze(app) {
             UNION ALL
             (
                 SELECT d.uploaded_at AS quando, 'documento' AS tipo,
-                       CONCAT(u.nome, ' ', u.cognome) AS chi,
+                       COALESCE(NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), ''), 'ORION') AS chi,
                        d.original_filename AS testo, NULL::integer AS report_id, NULL::integer AS numero,
                        NULL::varchar AS priorita
                 FROM emergency_documents d LEFT JOIN users u ON d.uploader_user_id = u.id

@@ -1,5 +1,3 @@
-// src/caricamenti.js
-//
 // Caricamento dei file: cartelle, limiti, e il controllo che il contenuto
 // sia davvero quello che dichiara di essere.
 
@@ -41,7 +39,7 @@ const fileFilter = (req, file, cb) => {
     if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('Formato file non supportato. Carica solo PDF, JPG, PNG o WEBP.'), false);
+        cb(Object.assign(new Error('Formato non ammesso: carica un PDF o una foto (JPG, PNG o WEBP).'), { status: 400 }), false);
     }
 };
 
@@ -123,7 +121,7 @@ export const uploadPhoto = multer({
     limits: { fileSize: 5 * 1024 * 1024 }, // Max 5MB
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) cb(null, true);
-        else cb(new Error('Solo i file immagine sono consentiti!'), false);
+        else cb(Object.assign(new Error('Per la foto serve un\'immagine: JPG, PNG o WEBP.'), { status: 400 }), false);
     }
 });
 

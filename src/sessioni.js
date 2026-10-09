@@ -1,6 +1,3 @@
-// src/sessioni.js
-//
-// Uscita e token di rinnovo dell'app.
 
 import crypto from 'crypto';
 import logger from './logger.js';

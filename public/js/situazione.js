@@ -1,5 +1,3 @@
-// public/js/situazione.js
-//
 // Il punto di situazione su un foglio A4: /situazione.html per l'emergenza in
 // corso, /situazione.html?emergenza=ID per una chiusa (il resoconto, dall'archivio).
 // Con &completo=1 segue ogni segnalazione per intero: dati, diario e foto, per
@@ -304,8 +302,11 @@
             const logo = marchio?.logoUrl ? `${marchio.logoUrl}?v=${marchio.logoVersion}` : null;
             disegna(dati, logo);
             ultimiDati = dati;
+            document.getElementById('st-stampa').hidden = false;
             document.getElementById('st-quadro-apri').hidden = dati.chiusa;
         } catch (err) {
+            // Senza dati non c'è niente da stampare: resta solo "Aggiorna".
+            document.getElementById('st-stampa').hidden = true;
             foglio.innerHTML = `<div class="st-errore"><p><strong>Il punto di situazione non si è potuto preparare.</strong></p><p>${e(err.message)}</p></div>`;
         }
     }

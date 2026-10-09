@@ -6,12 +6,6 @@
    pagina, così i CSS specifici (dashboard-admin.css, centro-operativo.css,
    admin-styles.css, login.css, ecc.) ereditano sempre gli stessi valori
    invece di ridefinirli ciascuno a modo suo.
-
-   Prima di questo file esistevano due insiemi di variabili paralleli
-   (dashboard-admin.css e centro-operativo.css) con nomi identici ma valori
-   diversi (es. --bg-color, --link-color): a seconda di quali due file una
-   pagina caricava - e in che ordine - il tema cambiava leggermente da una
-   pagina all'altra. Questo file unifica tutto in un solo set di token.
    ========================================================================== */
 
 :root {
@@ -155,10 +149,8 @@
         --success-color: #a5d6a7;
         --danger-color: #f48fb1;
         --warning-color: #ffe082;
-        /* Priorità nel tema scuro: restano nella famiglia tenue del tema, ma
-           l'alta vira al rosso e la media all'arancio. Il rosa e il giallo
-           pallido di prima si somigliavano troppo per un segnale che deve dire
-           "questa prima delle altre" con un'occhiata sola. */
+        /* Priorità nel tema scuro: tinte tenue, ma l'alta vira al rosso e la
+           media all'arancio, perché si distinguano con un'occhiata. */
         --priority-high-border: #ff8a80;
         --priority-medium-border: #ffcc80;
         --priority-low-border: #a5d6a7;

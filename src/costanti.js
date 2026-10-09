@@ -1,5 +1,3 @@
-// src/costanti.js
-//
 // Valori condivisi fra le rotte: nomi radio, stati e priorità delle
 // segnalazioni, errori con il loro codice HTTP.
 
@@ -38,14 +36,12 @@ export function erroreConflitto(messaggio) {
     return errore;
 }
 
-// Risorsa inesistente: 404.
 export function erroreNonTrovato(messaggio = 'Segnalazione non trovata.') {
     const errore = new Error(messaggio);
     errore.nonTrovato = true;
     return errore;
 }
 
-// Stato e priorità in italiano, ovunque li legga un volontario.
 export const ETICHETTA_PRIORITA = { High: 'ALTA', Medium: 'MEDIA', Low: 'BASSA' };
 export const ETICHETTA_STATO = { New: 'Nuova', Open: 'Aperta', InProgress: 'In corso', Closed: 'Chiusa', Resolved: 'Risolta' };
 

@@ -1,5 +1,3 @@
-// src/middleware/idempotenza.js
-//
 // Con la rete che va e viene una richiesta può arrivare al server e la
 // risposta perdersi per strada: chi la rimanda non deve creare due volte la
 // stessa segnalazione o la stessa nota. Chi scrive manda un'intestazione

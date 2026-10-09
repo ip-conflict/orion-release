@@ -1,4 +1,3 @@
-// login.js
 
 // GESTIONE "PASSWORD DIMENTICATA"
 const loginForm = document.getElementById('login-form');
@@ -13,7 +12,7 @@ async function loadLoginBranding() {
         const associationNameElement = document.getElementById('association-name-display');
         if (associationNameElement && settings && settings.association_name) {
             associationNameElement.textContent = settings.association_name;
-            document.title = `Login - ${settings.association_name}`;
+            document.title = `Accesso - ${settings.association_name}`;
         }
 
         const logoInfo = await fetch('/api/branding').then(res => res.json());
@@ -31,6 +30,8 @@ async function loadLoginBranding() {
         // In caso di errore, la pagina userà i valori di default presenti nell'HTML.
     }
 }
+
+const ULTIMO_UTENTE = 'orion.ultimoUtente';
 
 // Accesso riuscito (con la password, o dopo la verifica in due passaggi):
 // si salvano i dati della persona e si va al centro operativo.
@@ -52,22 +53,39 @@ async function entra(data, username, avviso = '') {
         localStorage.setItem('userRuoli', JSON.stringify(Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role]));
         localStorage.setItem('userPermessi', JSON.stringify(Array.isArray(data.permessi) ? data.permessi : []));
         localStorage.setItem('username', data.username || username.toLowerCase());
+        // Il nome che si propone al prossimo accesso da questo browser: "Esci"
+        // non lo toglie, "Non sei tu?" sì.
+        localStorage.setItem(ULTIMO_UTENTE, data.username || username.toLowerCase());
     } catch (storageError) {
         console.error("Errore durante il salvataggio in localStorage:", storageError);
         avviso = avviso || "Attenzione: impossibile salvare le informazioni utente. Alcune funzionalità potrebbero non essere disponibili.";
     }
     mostraVista(loginForm);
     if (messageDiv) {
-        messageDiv.textContent = avviso || 'Login effettuato con successo! Reindirizzamento...';
+        messageDiv.textContent = avviso || 'Accesso riuscito: apro ORION…';
         messageDiv.style.color = avviso ? 'var(--warning-color, #b45309)' : 'green';
     }
     // Da un telefono Android, prima si propone l'app, se c'e'. Poi la prima
     // pagina: il centro operativo, ma per chi è solo volontario, quando non
     // c'è un'emergenza, il suo profilo (DPI, scadenze, tesserino).
-    const destinazione = await primaPagina(data);
+    const destinazione = paginaChiesta() || await primaPagina(data);
     const vaiAlCentroOperativo = () => { window.location.href = destinazione; };
     const proposta = await proponiApp(data.token, vaiAlCentroOperativo);
     if (!proposta) setTimeout(vaiAlCentroOperativo, avviso ? 4000 : 500);
+}
+
+// Mandati qui da una pagina riservata (il QR di un'etichetta del magazzino
+// aperto con la fotocamera, un collegamento in una email): dopo l'accesso si
+// torna lì, non alla prima pagina. Solo indirizzi di questo stesso server.
+function paginaChiesta() {
+    const chiesta = new URLSearchParams(window.location.search).get('redirect');
+    if (!chiesta || !chiesta.startsWith('/') || chiesta.startsWith('//') || chiesta.startsWith('/\\')) return null;
+    try {
+        const url = new URL(chiesta, window.location.origin);
+        if (url.origin !== window.location.origin) return null;
+        if (url.pathname === '/' || url.pathname === '/login.html' || url.pathname === '/index.html') return null;
+        return url.pathname + url.search + url.hash;
+    } catch { return null; }
 }
 
 // Con un'emergenza aperta si va tutti in sala. Senza, ognuno dove lavora:
@@ -221,7 +239,9 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
         const data = await response.json().catch(e => {
             console.error("Risposta non JSON dal server:", e);
-            throw new Error(`Risposta non valida dal server (Status: ${response.status})`);
+            throw new Error(response.status === 429
+                ? 'Troppi tentativi in poco tempo: aspetta un quarto d\'ora e riprova.'
+                : `Il server non ha risposto come doveva (errore ${response.status}): riprova fra poco.`);
         });
 
         if (response.ok) {
@@ -234,7 +254,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             const errorMessage = data?.message || data?.errors?.[0]?.msg || `Errore ${response.status}`;
             console.warn("Login fallito:", errorMessage);
             if (messageDiv) {
-                messageDiv.textContent = `Login fallito: ${errorMessage}`;
+                messageDiv.textContent = `Accesso non riuscito: ${errorMessage}`;
                 messageDiv.style.color = 'red';
             }
             abilitaAccesso(true);
@@ -242,7 +262,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     } catch (error) {
         console.error('Errore grave durante il login:', error);
         if (messageDiv) {
-            messageDiv.textContent = `Errore: ${error.message}`;
+            // Senza rete il browser dice "Failed to fetch": si dice in italiano cosa fare.
+            messageDiv.textContent = error instanceof TypeError
+                ? 'Il server non si raggiunge: controlla la connessione a internet e riprova.'
+                : error.message;
             messageDiv.style.color = 'red';
         }
         abilitaAccesso(true);
@@ -256,7 +279,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     if (!messageDiv || !errore) return;
     const testi = {
         mfa_richiesta: 'Per gli amministratori serve la verifica in due passaggi: accedi di nuovo.',
-        account_sospeso: 'Il tuo account non è più attivo. Contatta la segreteria.'
+        account_sospeso: 'Il tuo accesso a ORION non è più attivo. Chiedi alla segreteria.'
     };
     if (testi[errore]) {
         messageDiv.textContent = testi[errore];
@@ -271,7 +294,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (utente) {
         document.getElementById('username').value = utente;
         document.getElementById('password').focus();
+        return;
     }
+    // Chi è entrato l'ultima volta da questo browser trova il suo nome già
+    // scritto; sui computer della sala, "Non sei tu?" lo cancella.
+    let ultimo = null;
+    try { ultimo = localStorage.getItem(ULTIMO_UTENTE); } catch { /* niente */ }
+    if (!ultimo) return;
+    const campo = document.getElementById('username');
+    const nonSeiTu = document.getElementById('non-sei-tu');
+    campo.value = ultimo;
+    nonSeiTu.hidden = false;
+    document.getElementById('password').focus();
+    campo.addEventListener('input', () => { nonSeiTu.hidden = true; }, { once: true });
+    document.getElementById('cambia-utente').addEventListener('click', (e) => {
+        e.preventDefault();
+        try { localStorage.removeItem(ULTIMO_UTENTE); } catch { /* niente */ }
+        campo.value = '';
+        nonSeiTu.hidden = true;
+        campo.focus();
+    });
 });
 
 if (showForgotBtn && showLoginBtn) {

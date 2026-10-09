@@ -1,5 +1,3 @@
-// src/attivita.js
-//
 // Le attività del gruppo fuori emergenza e il calendario.
 //
 // Un'attività (esercitazione, addestramento, servizio, riunione,
@@ -26,6 +24,7 @@
 
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
+import { copiaCopione } from './copione.js';
 import { domainName } from './config.js';
 import { dataItaliana, dataOraItaliana, fusoOrario, oraItaliana } from './date.js';
 import { pool } from './db.js';
@@ -34,6 +33,13 @@ import { haPermesso, richiedePermesso } from './permessi.js';
 import { ruoliDi } from './autenticazione.js';
 import { notifiche } from './tempoReale.js';
 import { registraPresenzeAttivita } from './presenze.js';
+import crypto from 'crypto';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { inviaFile, proteggiCaricati } from './cifratura.js';
+import { FORMATI, MB_MASSIMI, TIPO_DA_ESTENSIONE, contenutoValido } from './documenti.js';
 
 const LIMITE = { titolo: 150, descrizione: 4000, luogo: 200, nota: 300, motivo: 300, scenario: 4000, enti: 500 };
 const NATURE = ['generica', 'addestramento', 'esercitazione'];
@@ -73,6 +79,29 @@ function interoOpzionale(valore) {
     return Number.isInteger(n) ? n : NaN;
 }
 
+// Gli allegati di un'attività (il programma, la scheda dell'esercitazione, la
+// circolare): stessi formati e stesso tetto dell'archivio dei documenti,
+// cifrati come gli altri file caricati.
+export const cartellaAllegati = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'protected_uploads', 'attivita');
+fs.mkdirSync(cartellaAllegati, { recursive: true });
+const ALLEGATI_MASSIMI = 20;
+const caricaAllegato = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, cartellaAllegati),
+        filename: (req, file, cb) => cb(null, `${crypto.randomBytes(16).toString('hex')}${path.extname(file.originalname).toLowerCase()}`)
+    }),
+    limits: { fileSize: MB_MASSIMI * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, cb) => {
+        if (Object.hasOwn(FORMATI, path.extname(file.originalname).toLowerCase())) return cb(null, true);
+        req.erroreFile = 'Formato non ammesso: PDF, immagini (JPG, PNG, WEBP), Word, Excel, PowerPoint, OpenDocument o testo.';
+        return cb(null, false);
+    }
+}).single('file');
+const togliAllegato = (nome) => fs.promises.unlink(path.join(cartellaAllegati, path.basename(nome))).catch(() => {});
+const allegatiDi = async (id) => (await pool.query(
+    `SELECT id, nome_originale, tipo, dimensione, caricato_da_nome, caricato_il
+       FROM attivita_allegati WHERE attivita_id = $1 ORDER BY caricato_il, id`, [id])).rows;
+
 const sonoEsterno = (req) => ruoliDi(req.user).includes('esterno');
 const organizza = (req) => haPermesso(req, 'gruppo.attivita');
 
@@ -81,7 +110,7 @@ function soloInterni(req, res, next) {
     return res.status(403).json({ message: 'Le attività del gruppo sono riservate agli interni.' });
 }
 
-async function moduloAcceso(req, res, next) {
+export async function moduloAcceso(req, res, next) {
     try {
         if (await attivitaAccese()) return next();
         return res.status(404).json({ message: 'Il modulo Attività è spento.', modulo_spento: true });
@@ -102,7 +131,7 @@ const SELECT_ATTIVITA = `
            (SELECT COUNT(*)::int FROM attivita_persone p WHERE p.attivita_id = a.id AND p.convocato) AS convocati,
            (SELECT COUNT(*)::int FROM partecipazioni x WHERE x.attivita_id = a.id) AS presenti,
            mia.convocato AS sono_convocato, mia.risposta AS mia_risposta, mia.nota AS mia_nota,
-           t.natura, a.simulazione, a.scenario, a.obiettivi, a.enti,
+           t.natura, a.simulazione, a.scenario, a.obiettivi, a.enti, a.scenario_id,
            COALESCE((SELECT json_agg(json_build_object('id', u.id, 'nome', u.nome, 'cognome', u.cognome) ORDER BY u.cognome, u.nome)
                        FROM attivita_regia g JOIN users u ON u.id = g.user_id WHERE g.attivita_id = a.id), '[]'::json) AS regia,
            EXISTS (SELECT 1 FROM attivita_regia g WHERE g.attivita_id = a.id AND g.user_id = $1) AS sono_regia,
@@ -376,6 +405,7 @@ export function registraRotteAttivita(app) {
         try {
             const a = await leggiAttivita(req, id);
             if (!a) return res.status(404).json({ message: 'Attività non trovata.' });
+            a.allegati = await allegatiDi(id);
             if (a.gestisce) {
                 a.persone = await personeDi(a);
                 a.presenze = (await pool.query(
@@ -395,15 +425,25 @@ export function registraRotteAttivita(app) {
             const letto = await leggiCampi(req.body || {}, client);
             if (letto.errore) return res.status(400).json({ message: letto.errore });
             const { campi, persone } = letto;
+            // Pianificata da uno scenario della biblioteca (src/scenari.js): il
+            // copione dello scenario si copia nell'attività, che poi lo ritocca da sé.
+            const scenarioId = req.body?.scenario_id ? parseInt(req.body.scenario_id, 10) : null;
+            if (scenarioId !== null) {
+                if (!Number.isInteger(scenarioId) || !(await client.query('SELECT 1 FROM scenari WHERE id = $1', [scenarioId])).rowCount) {
+                    return res.status(400).json({ message: 'Scenario inesistente.' });
+                }
+                if (!campi.simulazione) return res.status(400).json({ message: 'Uno scenario si pianifica come simulazione: scegli in sala o l\'allertamento.' });
+            }
             await client.query('BEGIN');
             const r = await client.query(
                 `INSERT INTO attivita (tipo_id, titolo, descrizione, luogo, inizio, fine, convocazione, posti, avviso_app, avviso_email,
-                                       responsabile_id, corso_id, creato_da, simulazione, scenario, obiettivi, enti)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+                                       responsabile_id, corso_id, creato_da, simulazione, scenario, obiettivi, enti, scenario_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
                 [campi.tipo_id, campi.titolo, campi.descrizione, campi.luogo, campi.inizio, campi.fine, campi.convocazione, campi.posti,
                  campi.avviso_app, campi.avviso_email, campi.responsabile_id, campi.corso_id, req.user.id,
-                 campi.simulazione, campi.scenario, campi.obiettivi, campi.enti]);
+                 campi.simulazione, campi.scenario, campi.obiettivi, campi.enti, scenarioId]);
             const id = r.rows[0].id;
+            if (scenarioId) await copiaCopione(client, scenarioId, id, { da: 'scenario_id' });
             if (letto.regia.length) {
                 await client.query('INSERT INTO attivita_regia (attivita_id, user_id) SELECT $1, unnest($2::int[])', [id, letto.regia]);
             }
@@ -413,7 +453,7 @@ export function registraRotteAttivita(app) {
             }
             await client.query('COMMIT');
             const a = await leggiAttivita(req, id);
-            registraAudit(req, 'attivita.creata', { tipo: 'attivita', id, dettagli: { titolo: campi.titolo, convocazione: campi.convocazione, convocati: persone.length || null } });
+            registraAudit(req, 'attivita.creata', { tipo: 'attivita', id, dettagli: { titolo: campi.titolo, convocazione: campi.convocazione, convocati: persone.length || null, scenario: scenarioId } });
             res.status(201).json(a);
             destinatari(a).then(chi => avvisa(a, chi, { tipo: 'convocazione', ...convocazioneTesto(a), oggetto: convocazioneTesto(a).titolo }))
                 .catch(e => logger.error('[Attività] Convocazioni non inviate:', e));
@@ -528,14 +568,89 @@ export function registraRotteAttivita(app) {
         try {
             const presenti = (await pool.query('SELECT COUNT(*)::int AS n FROM partecipazioni WHERE attivita_id = $1', [id])).rows[0].n;
             if (presenti) return res.status(409).json({ message: `Ci sono ${presenti} presenze registrate: un'attività fatta resta nello storico.` });
+            const file = (await pool.query('SELECT file FROM attivita_allegati WHERE attivita_id = $1', [id])).rows;
             const r = await pool.query('DELETE FROM attivita WHERE id = $1 RETURNING titolo', [id]);
             if (!r.rowCount) return res.status(404).json({ message: 'Attività non trovata.' });
+            file.forEach(f => togliAllegato(f.file));
             await notifiche.scadi({ riferimento: { tipo: 'attivita', id } });
             registraAudit(req, 'attivita.eliminata', { tipo: 'attivita', id, dettagli: { titolo: r.rows[0].titolo } });
             res.json({ message: 'Attività eliminata.' });
         } catch (e) {
             logger.error('Errore DELETE /api/attivita/:id:', e);
             res.status(500).json({ message: "Errore nell'eliminare l'attività." });
+        }
+    });
+
+    // Gli allegati: li apre chi vede l'attività, li carica e li toglie chi la gestisce.
+    app.post('/api/attivita/:id/allegati', ...base, (req, res, next) => {
+        caricaAllegato(req, res, (errore) => {
+            if (errore?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ message: `Il file supera i ${MB_MASSIMI} MB.` });
+            if (errore) return res.status(400).json({ message: 'Caricamento non riuscito.' });
+            if (req.erroreFile) return res.status(400).json({ message: req.erroreFile });
+            next();
+        });
+    }, async (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        const file = req.file;
+        const scarta = () => file && togliAllegato(file.filename);
+        if (!Number.isInteger(id)) { scarta(); return res.status(400).json({ message: 'Attività non valida.' }); }
+        if (!file) return res.status(400).json({ message: 'Scegli il file da allegare.' });
+        try {
+            if (!(await puoGestire(req, id)) || !(await leggiAttivita(req, id))) { scarta(); return res.status(404).json({ message: 'Attività non trovata.' }); }
+            if (!(await contenutoValido(file))) { scarta(); return res.status(400).json({ message: 'Il contenuto del file non corrisponde al formato del suo nome.' }); }
+            const quanti = (await pool.query('SELECT COUNT(*)::int AS n FROM attivita_allegati WHERE attivita_id = $1', [id])).rows[0].n;
+            if (quanti >= ALLEGATI_MASSIMI) { scarta(); return res.status(409).json({ message: `Un'attività tiene al massimo ${ALLEGATI_MASSIMI} allegati.` }); }
+            await proteggiCaricati(file);
+            const chi = (await pool.query('SELECT nome, cognome, username FROM users WHERE id = $1', [req.user.id])).rows[0];
+            const nome = String(file.originalname).replace(/[\\/\u0000-\u001f]/g, '').slice(0, 200) || 'allegato';
+            const { rows: [allegato] } = await pool.query(
+                `INSERT INTO attivita_allegati (attivita_id, file, nome_originale, tipo, dimensione, caricato_da, caricato_da_nome)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING id, nome_originale, tipo, dimensione, caricato_da_nome, caricato_il`,
+                [id, file.filename, nome, TIPO_DA_ESTENSIONE[path.extname(nome).toLowerCase()] || 'application/octet-stream', file.size,
+                    req.user.id, [chi?.nome, chi?.cognome].filter(Boolean).join(' ') || chi?.username || null]);
+            registraAudit(req, 'attivita.allegato_aggiunto', { tipo: 'attivita', id, dettagli: { file: nome } });
+            res.status(201).json(allegato);
+        } catch (e) {
+            scarta();
+            logger.error('Errore POST /api/attivita/:id/allegati:', e);
+            res.status(500).json({ message: "Allegato non salvato." });
+        }
+    });
+
+    app.get('/api/attivita/:id/allegati/:allegato', ...base, async (req, res) => {
+        const id = parseInt(req.params.id, 10), aid = parseInt(req.params.allegato, 10);
+        if (!Number.isInteger(id) || !Number.isInteger(aid)) return res.status(400).json({ message: 'Richiesta non valida.' });
+        try {
+            if (!(await leggiAttivita(req, id))) return res.status(404).json({ message: 'Attività non trovata.' });
+            const v = (await pool.query('SELECT file, nome_originale, tipo FROM attivita_allegati WHERE id = $1 AND attivita_id = $2', [aid, id])).rows[0];
+            if (!v) return res.status(404).json({ message: 'Allegato non trovato.' });
+            // PDF e immagini si aprono nel browser; il resto si scarica.
+            const inLinea = v.tipo === 'application/pdf' || v.tipo.startsWith('image/');
+            await inviaFile(res, path.join(cartellaAllegati, path.basename(v.file)), { headers: {
+                'X-Content-Type-Options': 'nosniff',
+                'Cache-Control': 'private, no-store',
+                'Content-Disposition': `${inLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(v.nome_originale)}`
+            } });
+        } catch (e) {
+            logger.error('Errore GET allegato attività:', e);
+            if (!res.headersSent) res.status(500).json({ message: "Errore nel leggere l'allegato." });
+        }
+    });
+
+    app.delete('/api/attivita/:id/allegati/:allegato', ...base, async (req, res) => {
+        const id = parseInt(req.params.id, 10), aid = parseInt(req.params.allegato, 10);
+        if (!Number.isInteger(id) || !Number.isInteger(aid)) return res.status(400).json({ message: 'Richiesta non valida.' });
+        try {
+            if (!(await puoGestire(req, id))) return res.status(404).json({ message: 'Attività non trovata.' });
+            const r = await pool.query('DELETE FROM attivita_allegati WHERE id = $1 AND attivita_id = $2 RETURNING file, nome_originale', [aid, id]);
+            if (!r.rowCount) return res.status(404).json({ message: 'Allegato non trovato.' });
+            togliAllegato(r.rows[0].file);
+            registraAudit(req, 'attivita.allegato_tolto', { tipo: 'attivita', id, dettagli: { file: r.rows[0].nome_originale } });
+            res.json({ message: 'Allegato tolto.' });
+        } catch (e) {
+            logger.error('Errore DELETE allegato attività:', e);
+            res.status(500).json({ message: "Errore nel togliere l'allegato." });
         }
     });
 

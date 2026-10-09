@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORION - Simulazioni</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/componenti.css">
+    <link rel="stylesheet" href="/css/admin-styles.css">
+    <link rel="stylesheet" href="/css/dashboard-admin.css">
+    <link rel="stylesheet" href="/css/calendario.css">
+    <link rel="stylesheet" href="/css/simulazioni.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body>
+<div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
+    <nav class="admin-sidebar">
+        <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+            <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+            <h2 style="margin: 0;">ORION</h2>
+        </div>
+        <ul class="sidebar-menu"></ul>
+    </nav>
+
+    <main class="admin-content">
+        <header class="content-header">
+            <h1>Simulazioni</h1>
+            <p class="sottotitolo">Gli scenari si preparano qui con calma, con il loro copione. Quando sono pronti si pianificano nel calendario, o si aprono al volo dal centro operativo; ogni volta l'attività riceve una copia del copione, e lo scenario resta per la volta dopo.</p>
+        </header>
+
+        <section id="modulo-spento" class="riquadro-avviso" hidden>
+            <strong>Il modulo Attività è spento.</strong>
+            Un amministratore lo accende da Impostazioni. Gli scenari non sono andati persi.
+        </section>
+
+        <div id="contenuto-simulazioni">
+            <div class="barra-scenari">
+                <input type="search" id="cerca-scenari" placeholder="Cerca fra gli scenari..." aria-label="Cerca fra gli scenari">
+                <button type="button" class="button-style" id="btn-nuovo-scenario"><i class="fas fa-plus" aria-hidden="true"></i> Nuovo scenario</button>
+            </div>
+
+            <section class="blocco-simulazioni">
+                <h2>Scenari</h2>
+                <div id="elenco-scenari" class="griglia-scenari" aria-live="polite">
+                    <p class="nota">Carico gli scenari…</p>
+                </div>
+            </section>
+
+            <section class="blocco-simulazioni">
+                <h2>In programma</h2>
+                <ul id="elenco-programmate" class="elenco-simulazioni"></ul>
+            </section>
+
+            <section class="blocco-simulazioni">
+                <h2>Svolte</h2>
+                <ul id="elenco-svolte" class="elenco-simulazioni"></ul>
+            </section>
+        </div>
+    </main>
+</div>
+
+<!-- Uno scenario: i dati; il copione si scrive sulla sua pagina. -->
+<div id="modale-scenario" class="modale" hidden>
+    <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="scenario-titolo">
+        <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
+        <h2 id="scenario-titolo">Nuovo scenario</h2>
+        <form id="form-scenario">
+            <div class="griglia-campi">
+                <label class="campo-largo">Titolo <span class="obbligatorio">*</span>
+                    <input type="text" id="s-titolo" maxlength="150" required placeholder="Per esempio: piena del torrente in zona industriale">
+                </label>
+                <label>Che cos'è
+                    <select id="s-natura">
+                        <option value="addestramento">Addestramento</option>
+                        <option value="esercitazione">Esercitazione</option>
+                    </select>
+                </label>
+                <label>Quanto dura, più o meno
+                    <select id="s-durata"></select>
+                </label>
+                <label class="campo-largo">Scenario <span class="nota">(lo leggono tutti i partecipanti)</span>
+                    <textarea id="s-scenario" rows="4" maxlength="4000" placeholder="La situazione di partenza: allerta, meteo, cosa succede in zona."></textarea>
+                </label>
+                <label class="campo-largo">Obiettivi
+                    <textarea id="s-obiettivi" rows="3" maxlength="4000" placeholder="Cosa si vuole provare: i tempi della sala, le idrovore, il collegamento radio..."></textarea>
+                </label>
+                <label class="campo-largo" id="campo-s-enti">Enti che partecipano
+                    <input type="text" id="s-enti" maxlength="500" placeholder="Comune, Vigili del fuoco...">
+                </label>
+            </div>
+            <div class="azioni-modale">
+                <button type="button" class="button-style button-secondary" data-chiudi>Annulla</button>
+                <button type="submit" class="button-style" id="salva-scenario">Crea e scrivi il copione</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/vendor/js-cookie/js.cookie.min.js"></script>
+<script src="/js/apiHelper.js"></script>
+<script src="/js/menu-laterale.js"></script>
+<script src="/js/simulazioni.js"></script>
+</body>
+</html>

@@ -1,4 +1,3 @@
-// /public/js/admin-archive.js
 
 let brandingSettings = {
     association_name: 'Archivio Emergenze'
@@ -211,7 +210,6 @@ let brandingSettings = {
                     </div>
                 </a>
             `;
-            // Rimosso il listener per il pulsante non più esistente
             docsListContainer.appendChild(docElement);
         });
     }

@@ -1,5 +1,3 @@
-// src/rischiZone.js
-//
 // I rischi di una segnalazione presi dalle zone di pericolo della mappa
 // (alluvione, frana, altri pericoli; del piano o disegnate in sala). Quando
 // una segnalazione nasce o si sposta, e quando una zona di pericolo si

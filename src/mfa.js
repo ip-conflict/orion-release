@@ -1,5 +1,3 @@
-// src/mfa.js
-//
 // La verifica in due passaggi: dopo la password, un codice di sei cifre che
 // cambia ogni 30 secondi, generato da un'app sul telefono (Google
 // Authenticator, Microsoft Authenticator, FreeOTP, Aegis: lo standard è

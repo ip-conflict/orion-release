@@ -1,5 +1,3 @@
-// src/backup.js
-//
 // I backup che l'applicazione fa da sola e lo stato di manutenzione.
 
 import './config.js';

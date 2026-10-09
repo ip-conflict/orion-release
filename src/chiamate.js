@@ -1,5 +1,3 @@
-// src/chiamate.js
-//
 // La chiamata dei volontari e la loro disponibilità.
 //
 // La sala (o chi organizza un'attività di allertamento) sceglie chi chiamare:

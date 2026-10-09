@@ -1,5 +1,3 @@
-// src/modelloTesserino.js
-//
 // Il controllo del modello del tesserino scelto dall'amministratore (la chiave
 // badge_modello delle impostazioni), prima di salvarlo. Il disegno vero sta in
 // public/js/tesserino.js, che rilegge il modello con le stesse regole: qui si

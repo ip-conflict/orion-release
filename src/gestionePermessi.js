@@ -1,5 +1,3 @@
-// src/gestionePermessi.js
-//
 // Il catalogo dei permessi, per chi deve mostrarlo, e i permessi in più di
 // una persona, che dà e toglie solo l'amministratore (permessi.js).
 
@@ -18,7 +16,6 @@ async function leggiPersona(id) {
 }
 
 export function registraRotteGestionePermessi(app) {
-    // Il catalogo: i nomi per il web e l'app, i pacchetti dei ruoli.
     app.get('/api/permessi/catalogo', (req, res) => {
         res.json({ categorie: CATEGORIE_PERMESSI, permessi: PERMESSI, ruoli: NOMI_RUOLI, pacchetti: PERMESSI_DEI_RUOLI });
     });
@@ -45,7 +42,6 @@ export function registraRotteGestionePermessi(app) {
         }
     });
 
-    // Sostituisce i permessi in più di una persona con quelli indicati.
     app.put('/api/admin/users/:id/permessi', checkAdminRole, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });

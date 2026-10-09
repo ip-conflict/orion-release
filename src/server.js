@@ -1,5 +1,3 @@
-// src/server.js
-//
 // Il punto d'avvio: configura Express, registra le rotte dei moduli e avvia il
 // server. L'ordine conta: prima le rotte pubbliche, poi il controllo della
 // sessione, poi tutto il resto.
@@ -13,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import { registraRotteApp } from './appMobile.js';
+import { avviaAllerta, registraRotteAllerta } from './allerta.js';
 import { registraAudit } from './audit.js';
 import { creaIdempotenza } from './middleware/idempotenza.js';
 import { authenticateToken, checkAdminRole, chiudiSessioni, haRuolo, nomeUtente, nonEsterni, ruoliDi, ruoloPrincipale, scriviRuoli } from './autenticazione.js';
@@ -57,6 +56,7 @@ import { registraRotteAttivita } from './attivita.js';
 import { registraRottePresenze } from './presenze.js';
 import { registraRotteChiamate } from './chiamate.js';
 import { registraRotteCopione } from './copione.js';
+import { registraRotteScenari } from './scenari.js';
 import { annotaRegistroSquadre, nomiRadioBloccati, registraRotteSquadre } from './squadre.js';
 import { activeEmergency, loadActiveEmergency } from './statoEmergenza.js';
 import { avviaTempoReale, avvisaClienti, notifiche } from './tempoReale.js';
@@ -140,7 +140,7 @@ const PAGINE_RISERVATE = new Set([
     '/centro-operativo.html', '/profile.html', '/admin-segreteria.html',
     '/magazzino.html', '/magazzino-etichette.html', '/magazzino-verbale.html',
     '/print-report.html', '/situazione.html', '/rubrica.html', '/documenti.html', '/calendario.html',
-    '/chiamata.html', '/copione.html'
+    '/chiamata.html', '/copione.html', '/simulazioni.html'
 ]);
 app.use(async (req, res, next) => {
     if (!PAGINE_RISERVATE.has(req.path)) return next();
@@ -230,6 +230,7 @@ registraRotteAttivita(app);
 registraRottePresenze(app);
 registraRotteChiamate(app);
 registraRotteCopione(app);
+registraRotteScenari(app);
 
 registraRotteRubrica(app, { pool, logger, nonEsterni, registraAudit, nomeUtente, avvisaClienti });
 
@@ -239,6 +240,7 @@ registraRotteMappaElementi(app, {
 });
 
 registraRotteCartografia(app, { logger, registraAudit });
+registraRotteAllerta(app);
 
 registraRotteFunzioni(app, {
     pool, logger, haRuolo, ruoliDi, registraAudit, nomeUtente, avvisaClienti, checkAdminRole,
@@ -359,6 +361,8 @@ app.use((err, req, res, next) => {
         setInterval(backupDiRecupero, 6 * 3600000);
         // Il controllo giornaliero delle versioni, se acceso: guarda ogni ora
         // se è passato un giorno dall'ultimo.
+        // Il bollettino di allerta, se la Regione è scelta nelle impostazioni.
+        avviaAllerta();
         manutenzione.controlloAutomatico();
         setInterval(manutenzione.controlloAutomatico, 3600000);
         server.listen(port, () => {

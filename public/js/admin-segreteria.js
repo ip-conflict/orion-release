@@ -226,7 +226,7 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
             <div class="alert-card-header">
                 <div class="alert-icon"><i class="fas fa-heartbeat"></i></div>
                 <div class="alert-info">
-                    <h3>Visite Mediche da Rinnovare</h3>
+                    <h3>Visite mediche da rinnovare</h3>
                     <p><strong>${medicalAlerts.length}</strong> volontari segnalati${maiRegistrate ? ` (${maiRegistrate === medicalAlerts.length ? 'tutti' : maiRegistrate} senza nessuna visita registrata)` : ''}</p>
                 </div>
             </div>
@@ -265,7 +265,7 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
             <div class="alert-card-header">
                 <div class="alert-icon"><i class="fas fa-graduation-cap"></i></div>
                 <div class="alert-info">
-                    <h3>Corsi in Scadenza</h3>
+                    <h3>Corsi in scadenza</h3>
                     <p><strong>${coursesAlerts.length}</strong> certificati da aggiornare</p>
                 </div>
             </div>
@@ -291,6 +291,9 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
 }
 
 // CARICAMENTO UTENTI NELLA TABELLA
+// Le persone dell'elenco, per id: la stampa dei fascicoli scelti ne prende i dati.
+let utentiSegreteria = new Map();
+
 async function loadUsers() {
     try {
         const response = await fetch('/api/admin/users'); 
@@ -299,6 +302,7 @@ async function loadUsers() {
         
         let users = await response.json();
         users = users.filter(u => u.is_active !== false && u.role !== 'esterno');
+        utentiSegreteria = new Map(users.map(u => [u.id, u]));
 
         const tbody = document.getElementById('segreteria-users-table');
         tbody.innerHTML = '';
@@ -388,7 +392,7 @@ async function loadUsers() {
 // LOGICA DEL MODALE VISITA MEDICA
 async function openMedicalModal(userId, userName) {
     document.getElementById('medical-user-id').value = userId;
-    document.getElementById('medical-user-name').innerText = `Fascicolo Sanitario: ${userName}`;
+    document.getElementById('medical-user-name').innerText = userName;
     document.getElementById('medical-form').reset();
 
     const ul = document.getElementById('user-medical-ul');
@@ -540,7 +544,7 @@ document.getElementById('medical-form').addEventListener('submit', async (e) => 
 // LOGICA DEL MODALE CORSI
 async function openCoursesModal(userId, userName) {
     document.getElementById('course-user-id').value = userId;
-    document.getElementById('courses-user-name').innerText = `Fascicolo Formativo: ${userName}`;
+    document.getElementById('courses-user-name').innerText = userName;
     document.getElementById('course-form').reset();
     
     const coursesModal = document.getElementById('courses-modal');
@@ -706,7 +710,7 @@ async function loadEditMedicalRecord(record, userId, userName) {
 
     document.getElementById('edit-medical-user-id').value = userId;
     document.getElementById('edit-medical-record-id').value = record.id;
-    document.getElementById('medical-edit-user-name').innerText = `Volontario: ${userName}`;
+    document.getElementById('medical-edit-user-name').innerText = userName;
     
     try {
         if (!window.catalogsData.medicalVisits || window.catalogsData.medicalVisits.length === 0) {
@@ -740,7 +744,7 @@ const closeEditModal = () => {
     document.getElementById('medical-edit-modal').style.display = 'none';
     
     const userId = document.getElementById('edit-medical-user-id').value;
-    const userName = document.getElementById('medical-edit-user-name').innerText.replace('Volontario: ', '');
+    const userName = document.getElementById('medical-edit-user-name').innerText;
 };
 
 // Eventi di chiusura Modale Modifica
@@ -940,7 +944,7 @@ function loadEditCourseRecord(course, userId, userName) {
 
     document.getElementById('edit-course-user-id').value = userId;
     document.getElementById('edit-course-record-id').value = course.id;
-    document.getElementById('course-edit-user-name').innerText = `Volontario: ${userName}`;
+    document.getElementById('course-edit-user-name').innerText = userName;
     
     document.getElementById('edit_course_name').value = course.name;
     document.getElementById('edit_acquisition_date').value = new Date(course.acquisition_date).toISOString().split('T')[0];
@@ -959,7 +963,7 @@ function loadEditCourseRecord(course, userId, userName) {
 const closeEditCourseModal = () => {
     document.getElementById('course-edit-modal').style.display = 'none';
     const userId = document.getElementById('edit-course-user-id').value;
-    const userName = document.getElementById('course-edit-user-name').innerText.replace('Volontario: ', '');
+    const userName = document.getElementById('course-edit-user-name').innerText;
 };
 
 document.getElementById('course-edit-cancel-btn').addEventListener('click', closeEditCourseModal);
@@ -1045,12 +1049,14 @@ function mostraQrDettaglio(token) {
 
 // La foto la cambia anche la segreteria: è lei che stampa il tesserino.
 document.getElementById('detail-photo-upload')?.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+    const scelta = e.target.files[0];
     e.target.value = '';
-    if (!file || !currentUserViewId) return;
-    if (file.size > 5 * 1024 * 1024) return notifica('La foto non può superare i 5MB.', 'errore');
+    if (!scelta || !currentUserViewId) return;
+    if (scelta.size > 25 * 1024 * 1024) return notifica('La foto è troppo grande (più di 25 MB).', 'errore');
+    const file = await window.ritagliaFoto(scelta);
+    if (!file) return;
     const dati = new FormData();
-    dati.append('photo', file);
+    dati.append('photo', file, 'foto.jpg');
     try {
         const esito = await fetchApi(`/api/admin/users/${currentUserViewId}/photo`, { method: 'POST', body: dati });
         currentUserViewData.photo_url = esito.photo_url;
@@ -1107,15 +1113,17 @@ async function showUserDetailView(user) {
 
     mainView.style.display = 'none';
     detailView.style.display = 'block';
+    // Il fascicolo si legge dall'inizio, anche se la riga era in fondo all'elenco.
+    window.scrollTo(0, 0);
 
     await refreshUserDetailLists();
 }
 
 function getStatusBadge(expiryDateStr) {
-    if (!expiryDateStr) return '<span class="status-badge active" style="background: var(--info-soft-bg); color:#0284c7; border:none; margin-top:5px;">Senza Scadenza</span>';
+    if (!expiryDateStr) return '<span class="status-badge active" style="background: var(--info-soft-bg); color: var(--info-text); border:none; margin-top:5px;">Non scade</span>';
     const diffDays = Math.round((new Date(expiryDateStr).getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24));
     if (diffDays < 0) return '<span class="status-badge suspended" style="background: var(--danger-soft-bg); color: var(--danger-text); border:none; margin-top:5px;">Scaduto</span>';
-    if (diffDays <= 30) return '<span class="status-badge warning" style="background: var(--warning-soft-bg); color: var(--warning-text); border:none; margin-top:5px;">In Scadenza</span>';
+    if (diffDays <= 30) return '<span class="status-badge warning" style="background: var(--warning-soft-bg); color: var(--warning-text); border:none; margin-top:5px;">Scade presto</span>';
     return '<span class="status-badge active" style="background: var(--success-soft-bg); color: var(--success-text); border:none; margin-top:5px;">Valido</span>';
 }
 
@@ -1161,10 +1169,12 @@ async function refreshUserDetailLists() {
             medicalRecords.forEach(m => {
                 const visitDate = new Date(m.last_visit_date).toLocaleDateString('it-IT');
                 const expDate = new Date(m.expiry_date).toLocaleDateString('it-IT');
-                const badge = m.isLatest ? getStatusBadge(m.expiry_date) : '<span class="status-badge" style="background:#f1f5f9; color:#64748b; border:none; margin-top:5px;"><i class="fas fa-archive"></i> Storico</span>';
+                const badge = m.isLatest ? getStatusBadge(m.expiry_date) : '<span class="status-badge" style="background: var(--secondary-bg-color); color: var(--text-muted); border:none; margin-top:5px;"><i class="fas fa-archive"></i> Precedente</span>';
 
+                // Il nome del tipo arriva con il libretto: il catalogo in
+                // memoria c'è solo dopo aver aperto una finestra.
                 const visitTypeObj = window.catalogsData?.medicalVisits?.find(v => v.id == m.visit_type_id);
-                const visitName = visitTypeObj ? visitTypeObj.name : m.status;
+                const visitName = m.visit_name || (visitTypeObj ? visitTypeObj.name : 'Visita');
 
                 const li = document.createElement('li');
                 li.style.borderBottom = '1px solid var(--border-light-color)';
@@ -1176,8 +1186,8 @@ async function refreshUserDetailLists() {
                 const leftDiv = document.createElement('div');
                 leftDiv.style.lineHeight = '1.4';
                 leftDiv.innerHTML = `
-                    <strong style="color: var(--text-color); font-size: 1.05rem;">Visita: ${escapeHTML(visitName)}</strong>
-                    <div class="history-date-text">Data: ${visitDate} | Scade: <strong>${expDate}</strong></div>
+                    <strong style="color: var(--text-color); font-size: 1.05rem;">${escapeHTML(visitName)}</strong>
+                    <div class="history-date-text">Fatta il ${visitDate} · scade il <strong>${expDate}</strong> · ${escapeHTML(m.status || '')}</div>
                     ${badge}
                 `;
                 
@@ -1187,16 +1197,15 @@ async function refreshUserDetailLists() {
                 rightDiv.style.alignItems = 'center';
                 
                 if (m.document_url) {
-                    rightDiv.innerHTML += `<a href="${escapeHTML(m.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri Certificato"><i class="fas fa-paperclip"></i></a>`;
+                    rightDiv.innerHTML += `<a href="${escapeHTML(m.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri il certificato"><i class="fas fa-paperclip"></i> Certificato</a>`;
                 }
 
                 // Tasto RINNOVA (Solo per l'ultimo record valido)
                 if (m.isLatest) {
                     const renewBtn = document.createElement('button');
                     renewBtn.className = 'btn-icon-action';
-                    renewBtn.style.color = '#f59e0b';
-                    renewBtn.title = 'Rinnova Visita (Nuovo Record)';
-                    renewBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+                    renewBtn.title = 'Registra la visita nuova, che sostituisce questa';
+                    renewBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Rinnova';
                     renewBtn.addEventListener('click', () => {
                         document.getElementById('btn-add-medical').click();
                         setTimeout(() => document.getElementById('visit_type_id').value = m.visit_type_id, 300);
@@ -1206,14 +1215,14 @@ async function refreshUserDetailLists() {
 
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn-icon-action btn-edit-record';
-                editBtn.title = 'Modifica Dati Esistenti';
-                editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                editBtn.title = 'Correggi i dati di questa registrazione';
+                editBtn.innerHTML = '<i class="fas fa-edit"></i> Modifica';
                 editBtn.addEventListener('click', () => loadEditMedicalRecord(m, currentUserViewId, currentUserViewName));
 
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn-icon-action btn-delete-record';
-                delBtn.title = 'Elimina';
-                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.title = 'Elimina questa registrazione';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i> Elimina';
                 delBtn.addEventListener('click', () => deleteMedicalRecord(m.id, currentUserViewId, currentUserViewName));
 
                 rightDiv.appendChild(editBtn);
@@ -1241,7 +1250,7 @@ async function refreshUserDetailLists() {
             courses.forEach(c => {
                 const acqDate = new Date(c.acquisition_date).toLocaleDateString('it-IT');
                 const expDate = c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Nessuna';
-                const badge = c.isLatest ? getStatusBadge(c.expiry_date) : '<span class="status-badge" style="background:#f1f5f9; color:#64748b; border:none; margin-top:5px;"><i class="fas fa-archive"></i> Storico</span>';
+                const badge = c.isLatest ? getStatusBadge(c.expiry_date) : '<span class="status-badge" style="background: var(--secondary-bg-color); color: var(--text-muted); border:none; margin-top:5px;"><i class="fas fa-archive"></i> Precedente</span>';
 
                 const li = document.createElement('li');
                 li.style.borderBottom = '1px solid var(--border-light-color)';
@@ -1254,7 +1263,7 @@ async function refreshUserDetailLists() {
                 leftDiv.style.lineHeight = '1.4';
                 leftDiv.innerHTML = `
                     <strong style="color: var(--text-color); font-size: 1.05rem;">${escapeHTML(c.name)}</strong>
-                    <div class="history-date-text">Acquisito: ${acqDate} | Scade: <strong>${expDate}</strong></div>
+                    <div class="history-date-text">Fatto il ${acqDate} · ${c.expiry_date ? `scade il <strong>${expDate}</strong>` : 'non scade'}</div>
                     ${badge}
                 `;
                 
@@ -1264,16 +1273,15 @@ async function refreshUserDetailLists() {
                 rightDiv.style.alignItems = 'center';
 
                 if (c.document_url) {
-                    rightDiv.innerHTML += `<a href="${escapeHTML(c.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri Attestato"><i class="fas fa-paperclip"></i></a>`;
+                    rightDiv.innerHTML += `<a href="${escapeHTML(c.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri l'attestato"><i class="fas fa-paperclip"></i> Attestato</a>`;
                 }
 
                 // Tasto RINNOVA
                 if (c.isLatest) {
                     const renewBtn = document.createElement('button');
                     renewBtn.className = 'btn-icon-action';
-                    renewBtn.style.color = '#8b5cf6';
-                    renewBtn.title = 'Rinnova Corso (Nuovo Record)';
-                    renewBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+                    renewBtn.title = 'Registra il corso rifatto, che sostituisce questo';
+                    renewBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Rinnova';
                     renewBtn.addEventListener('click', () => {
                         document.getElementById('btn-add-course').click();
                         setTimeout(() => document.getElementById('course_id').value = c.course_id, 300);
@@ -1283,14 +1291,14 @@ async function refreshUserDetailLists() {
 
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn-icon-action btn-edit-record';
-                editBtn.title = 'Modifica Dati Esistenti';
-                editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                editBtn.title = 'Correggi i dati di questa registrazione';
+                editBtn.innerHTML = '<i class="fas fa-edit"></i> Modifica';
                 editBtn.addEventListener('click', () => loadEditCourseRecord(c, currentUserViewId, currentUserViewName));
 
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn-icon-action btn-delete-record';
-                delBtn.title = 'Elimina';
-                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.title = 'Elimina questa registrazione';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i> Elimina';
                 delBtn.addEventListener('click', () => deleteCourseRecord(c.id, currentUserViewId, currentUserViewName));
 
                 rightDiv.appendChild(editBtn);
@@ -1325,7 +1333,7 @@ async function refreshUserDetailLists() {
 // Bottone Aggiungi Visita (nella vista dettaglio)
 document.getElementById('btn-add-medical').addEventListener('click', async () => {
     document.getElementById('medical-user-id').value = currentUserViewId;
-    document.getElementById('medical-user-name').innerText = `Nuova Visita: ${currentUserViewName}`;
+    document.getElementById('medical-user-name').innerText = `Nuova visita per ${currentUserViewName}`;
     document.getElementById('medical-form').reset();
     document.getElementById('current-medical-list').style.display = 'none'; 
 
@@ -1349,7 +1357,7 @@ document.getElementById('btn-add-medical').addEventListener('click', async () =>
 // Bottone Aggiungi Corso (nella vista dettaglio)
 document.getElementById('btn-add-course').addEventListener('click', async () => {
     document.getElementById('course-user-id').value = currentUserViewId;
-    document.getElementById('courses-user-name').innerText = `Nuovo Corso: ${currentUserViewName}`;
+    document.getElementById('courses-user-name').innerText = `Nuovo corso per ${currentUserViewName}`;
     document.getElementById('course-form').reset();
     document.getElementById('current-courses-list').style.display = 'none'; 
     
@@ -1520,8 +1528,8 @@ document.getElementById('anagrafica-form').addEventListener('submit', async (e) 
 // GENERAZIONE PDF DALLA SEGRETERIA
 document.getElementById('btn-print-user-badge')?.addEventListener('click', generateAdminPDFLibretto);
 
-// La foto ritagliata in proporzione larghezza:altezza, al centro, come una
-// fototessera: con "fit" una foto larga lasciava una fascia vuota sotto.
+// La foto ritagliata come una fototessera, al centro: con "fit" una foto larga
+// lascerebbe una fascia vuota sotto.
 async function ritagliaFototessera(url, larghezza, altezza) {
     const dati = await getBase64ImageFromUrl(url);
     if (!dati) return null;
@@ -1564,6 +1572,132 @@ async function getBase64ImageFromUrl(imageUrl) {
     }
 }
 
+// Il contenuto del fascicolo di una persona (anagrafica, visite, corsi), per
+// il PDF di uno solo o di più fascicoli insieme, uno per pagina.
+async function contenutoFascicolo(utente, libretto, logoBase64) {
+    const currentUserViewData = utente, currentLibrettoViewData = libretto;
+    const photoBase64 = utente.photo_url ? await getBase64ImageFromUrl(utente.photo_url) : null;
+
+    const headerColumns = [];
+    if (logoBase64) headerColumns.push({ image: logoBase64, width: 60, alignment: 'left' });
+    
+    headerColumns.push({
+        text: [
+            { text: (brandingSettings.association_name || 'Protezione Civile').toUpperCase() + '\n', style: 'headerTitle' },
+            { text: 'Sistema Informativo ORION\n', style: 'headerSub' },
+            { text: 'FASCICOLO PERSONALE VOLONTARIO', style: 'documentTitle' }
+        ],
+        alignment: logoBase64 ? 'right' : 'center',
+        margin: [0, 5, 0, 0]
+    });
+
+    const profileColumns = [];
+    if (photoBase64) {
+        profileColumns.push({ width: 'auto', image: photoBase64, fit: [95, 95], margin: [0, 0, 35, 0] });
+    }
+    profileColumns.push({
+        width: '*', 
+        table: {
+            widths: [110, '*'], 
+            body: [
+                [{ text: 'Volontario:', bold: true, border: [false, false, false, false] }, { text: `${currentUserViewData.nome} ${currentUserViewData.cognome}`, border: [false, false, false, false] }],
+                [{ text: 'Codice Fiscale:', bold: true, border: [false, false, false, false] }, { text: currentUserViewData.codice_fiscale || 'N/D', border: [false, false, false, false] }],
+                [{ text: 'Recapito:', bold: true, border: [false, false, false, false] }, { text: currentUserViewData.telefono || 'N/D', border: [false, false, false, false] }],
+                [{ text: 'Data Stampa:', bold: true, border: [false, false, false, false] }, { text: new Date().toLocaleDateString('it-IT'), border: [false, false, false, false] }]
+            ]
+        },
+        layout: 'noBorders', margin: [0, 5, 0, 0]
+    });
+
+    return [
+        { columns: headerColumns, margin: [0, 0, 0, 15] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#3b82f6' }], margin: [0, 0, 0, 20] },
+        { columns: profileColumns, margin: [0, 0, 0, 30] },
+        
+        { text: 'SORVEGLIANZA SANITARIA', style: 'sectionHeader' },
+        {
+            table: {
+                headerRows: 1,
+                widths: ['*', 'auto', 'auto', 'auto'],
+                body: [
+                    [
+                        { text: 'TIPO VISITA', style: 'tableHeader' }, 
+                        { text: 'DATA ESECUZIONE', style: 'tableHeader' }, 
+                        { text: 'DATA SCADENZA', style: 'tableHeader' }, 
+                        { text: 'ESITO', style: 'tableHeader' }
+                    ],
+                    ...(Array.isArray(currentLibrettoViewData.medical_records) ? currentLibrettoViewData.medical_records : (currentLibrettoViewData.medical_record ? [currentLibrettoViewData.medical_record] : [])).map((m, index, arr) => {
+                        const isLatest = arr.findIndex(x => x.visit_type_id === m.visit_type_id) === index;
+                        const isExpired = new Date(m.expiry_date) < new Date();
+                        const statoText = isLatest ? m.status.toUpperCase() : 'STORICO';
+                        const statoColor = !isLatest ? '#94a3b8' : (m.status === 'Idoneo' ? '#10b981' : '#ef4444');
+                        return [
+                            { text: m.visit_name || 'Visita di Idoneità', margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
+                            { text: new Date(m.last_visit_date).toLocaleDateString('it-IT'), margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
+                            { text: new Date(m.expiry_date).toLocaleDateString('it-IT'), color: (!isLatest) ? '#94a3b8' : (isExpired ? '#ef4444' : '#000000'), bold: isExpired && isLatest, margin: [0, 5, 0, 5] },
+                            { text: statoText, color: statoColor, bold: true, margin: [0, 5, 0, 5] }
+                        ];
+                    })
+                ]
+            },
+            layout: {
+                hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 1; },
+                vLineWidth: function () { return 0; },
+                hLineColor: function () { return '#e2e8f0'; },
+                paddingLeft: function() { return 8; },
+                paddingRight: function() { return 8; },
+                fillColor: function (rowIndex) { return (rowIndex % 2 === 0 && rowIndex !== 0) ? '#f8fafc' : null; }
+            },
+            margin: [0, 0, 0, 30]
+        },
+
+        { text: 'FORMAZIONE E SPECIALIZZAZIONI', style: 'sectionHeader' },
+        {
+            table: {
+                headerRows: 1,
+                widths: ['*', 'auto', 'auto', 'auto'],
+                body: [
+                    [
+                        { text: 'CORSO FREQUENTATO', style: 'tableHeader' }, 
+                        { text: 'ACQUISITO IL', style: 'tableHeader' }, 
+                        { text: 'SCADENZA', style: 'tableHeader' },
+                        { text: 'STATO', style: 'tableHeader' }
+                    ],
+                    ...(currentLibrettoViewData.courses || []).map((c, index, arr) => {
+                        const isLatest = arr.findIndex(x => x.course_id === c.course_id) === index;
+                        const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date();
+                        const statoText = isLatest ? (isExpired ? 'SCADUTO' : 'VALIDO') : 'STORICO';
+                        const statoColor = !isLatest ? '#94a3b8' : (isExpired ? '#ef4444' : '#3b82f6');
+                        return [
+                            { text: c.name, margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
+                            { text: new Date(c.acquisition_date).toLocaleDateString('it-IT'), margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
+                            { text: c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Nessuna', color: (!isLatest) ? '#94a3b8' : (isExpired ? '#ef4444' : '#000000'), bold: isExpired && isLatest, margin: [0, 5, 0, 5] },
+                            { text: statoText, color: statoColor, bold: true, margin: [0, 5, 0, 5] }
+                        ];
+                    })
+                ]
+            },
+            layout: {
+                hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 1; },
+                vLineWidth: function () { return 0; },
+                hLineColor: function () { return '#e2e8f0'; },
+                paddingLeft: function() { return 8; },
+                paddingRight: function() { return 8; },
+                fillColor: function (rowIndex) { return (rowIndex % 2 === 0 && rowIndex !== 0) ? '#f8fafc' : null; }
+            }
+        }
+    
+    ];
+}
+
+const STILI_FASCICOLO = {
+    headerTitle: { fontSize: 18, bold: true, color: '#1e293b', letterSpacing: 1 },
+    headerSub: { fontSize: 10, color: '#64748b', margin: [0, 2, 0, 10] },
+    documentTitle: { fontSize: 14, bold: true, color: '#3b82f6' },
+    sectionHeader: { fontSize: 12, bold: true, color: '#334155', margin: [0, 10, 0, 10] },
+    tableHeader: { bold: true, fontSize: 9, color: '#64748b', fillColor: '#f1f5f9', margin: [0, 5, 0, 5] }
+};
+
 async function generateAdminPDFLibretto() {
     if (!currentUserViewData || !currentLibrettoViewData) {
         notifica('Attendi il caricamento completo dei dati del volontario.', 'attenzione'); return;
@@ -1576,132 +1710,11 @@ async function generateAdminPDFLibretto() {
 
     try {
         const logoBase64 = await getBase64ImageFromUrl('/logo.png');
-        const photoBase64 = currentUserViewData.photo_url ? await getBase64ImageFromUrl(currentUserViewData.photo_url) : null;
-
-        const headerColumns = [];
-        if (logoBase64) headerColumns.push({ image: logoBase64, width: 60, alignment: 'left' });
-        
-        headerColumns.push({
-            text: [
-                { text: (brandingSettings.association_name || 'Protezione Civile').toUpperCase() + '\n', style: 'headerTitle' },
-                { text: 'Sistema Informativo ORION\n', style: 'headerSub' },
-                { text: 'FASCICOLO PERSONALE VOLONTARIO', style: 'documentTitle' }
-            ],
-            alignment: logoBase64 ? 'right' : 'center',
-            margin: [0, 5, 0, 0]
-        });
-
-        const profileColumns = [];
-        if (photoBase64) {
-            profileColumns.push({ width: 'auto', image: photoBase64, fit: [95, 95], margin: [0, 0, 35, 0] });
-        }
-        profileColumns.push({
-            width: '*', 
-            table: {
-                widths: [110, '*'], 
-                body: [
-                    [{ text: 'Volontario:', bold: true, border: [false, false, false, false] }, { text: `${currentUserViewData.nome} ${currentUserViewData.cognome}`, border: [false, false, false, false] }],
-                    [{ text: 'Codice Fiscale:', bold: true, border: [false, false, false, false] }, { text: currentUserViewData.codice_fiscale || 'N/D', border: [false, false, false, false] }],
-                    [{ text: 'Recapito:', bold: true, border: [false, false, false, false] }, { text: currentUserViewData.telefono || 'N/D', border: [false, false, false, false] }],
-                    [{ text: 'Data Stampa:', bold: true, border: [false, false, false, false] }, { text: new Date().toLocaleDateString('it-IT'), border: [false, false, false, false] }]
-                ]
-            },
-            layout: 'noBorders', margin: [0, 5, 0, 0]
-        });
-
-        const docDefinition = {
-            pageSize: 'A4',
-            pageMargins: [40, 40, 40, 40],
-            content: [
-                { columns: headerColumns, margin: [0, 0, 0, 15] },
-                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#3b82f6' }], margin: [0, 0, 0, 20] },
-                { columns: profileColumns, margin: [0, 0, 0, 30] },
-                
-                { text: 'SORVEGLIANZA SANITARIA', style: 'sectionHeader' },
-                {
-                    table: {
-                        headerRows: 1,
-                        widths: ['*', 'auto', 'auto', 'auto'],
-                        body: [
-                            [
-                                { text: 'TIPO VISITA', style: 'tableHeader' }, 
-                                { text: 'DATA ESECUZIONE', style: 'tableHeader' }, 
-                                { text: 'DATA SCADENZA', style: 'tableHeader' }, 
-                                { text: 'ESITO', style: 'tableHeader' }
-                            ],
-                            ...(Array.isArray(currentLibrettoViewData.medical_records) ? currentLibrettoViewData.medical_records : (currentLibrettoViewData.medical_record ? [currentLibrettoViewData.medical_record] : [])).map((m, index, arr) => {
-                                const isLatest = arr.findIndex(x => x.visit_type_id === m.visit_type_id) === index;
-                                const isExpired = new Date(m.expiry_date) < new Date();
-                                const statoText = isLatest ? m.status.toUpperCase() : 'STORICO';
-                                const statoColor = !isLatest ? '#94a3b8' : (m.status === 'Idoneo' ? '#10b981' : '#ef4444');
-                                return [
-                                    { text: m.visit_name || 'Visita di Idoneità', margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
-                                    { text: new Date(m.last_visit_date).toLocaleDateString('it-IT'), margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
-                                    { text: new Date(m.expiry_date).toLocaleDateString('it-IT'), color: (!isLatest) ? '#94a3b8' : (isExpired ? '#ef4444' : '#000000'), bold: isExpired && isLatest, margin: [0, 5, 0, 5] },
-                                    { text: statoText, color: statoColor, bold: true, margin: [0, 5, 0, 5] }
-                                ];
-                            })
-                        ]
-                    },
-                    layout: {
-                        hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 1; },
-                        vLineWidth: function () { return 0; },
-                        hLineColor: function () { return '#e2e8f0'; },
-                        paddingLeft: function() { return 8; },
-                        paddingRight: function() { return 8; },
-                        fillColor: function (rowIndex) { return (rowIndex % 2 === 0 && rowIndex !== 0) ? '#f8fafc' : null; }
-                    },
-                    margin: [0, 0, 0, 30]
-                },
-
-                { text: 'FORMAZIONE E SPECIALIZZAZIONI', style: 'sectionHeader' },
-                {
-                    table: {
-                        headerRows: 1,
-                        widths: ['*', 'auto', 'auto', 'auto'],
-                        body: [
-                            [
-                                { text: 'CORSO FREQUENTATO', style: 'tableHeader' }, 
-                                { text: 'ACQUISITO IL', style: 'tableHeader' }, 
-                                { text: 'SCADENZA', style: 'tableHeader' },
-                                { text: 'STATO', style: 'tableHeader' }
-                            ],
-                            ...(currentLibrettoViewData.courses || []).map((c, index, arr) => {
-                                const isLatest = arr.findIndex(x => x.course_id === c.course_id) === index;
-                                const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date();
-                                const statoText = isLatest ? (isExpired ? 'SCADUTO' : 'VALIDO') : 'STORICO';
-                                const statoColor = !isLatest ? '#94a3b8' : (isExpired ? '#ef4444' : '#3b82f6');
-                                return [
-                                    { text: c.name, margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
-                                    { text: new Date(c.acquisition_date).toLocaleDateString('it-IT'), margin: [0, 5, 0, 5], color: !isLatest ? '#94a3b8' : '#000000' },
-                                    { text: c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Nessuna', color: (!isLatest) ? '#94a3b8' : (isExpired ? '#ef4444' : '#000000'), bold: isExpired && isLatest, margin: [0, 5, 0, 5] },
-                                    { text: statoText, color: statoColor, bold: true, margin: [0, 5, 0, 5] }
-                                ];
-                            })
-                        ]
-                    },
-                    layout: {
-                        hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 1; },
-                        vLineWidth: function () { return 0; },
-                        hLineColor: function () { return '#e2e8f0'; },
-                        paddingLeft: function() { return 8; },
-                        paddingRight: function() { return 8; },
-                        fillColor: function (rowIndex) { return (rowIndex % 2 === 0 && rowIndex !== 0) ? '#f8fafc' : null; }
-                    }
-                }
-            ],
-            styles: {
-                headerTitle: { fontSize: 18, bold: true, color: '#1e293b', letterSpacing: 1 },
-                headerSub: { fontSize: 10, color: '#64748b', margin: [0, 2, 0, 10] },
-                documentTitle: { fontSize: 14, bold: true, color: '#3b82f6' },
-                sectionHeader: { fontSize: 12, bold: true, color: '#334155', margin: [0, 10, 0, 10] },
-                tableHeader: { bold: true, fontSize: 9, color: '#64748b', fillColor: '#f1f5f9', margin: [0, 5, 0, 5] }
-            },
+        const content = await contenutoFascicolo(currentUserViewData, currentLibrettoViewData, logoBase64);
+        pdfMake.createPdf({
+            pageSize: 'A4', pageMargins: [40, 40, 40, 40], content, styles: STILI_FASCICOLO,
             defaultStyle: { fontSize: 10, color: '#334155' }
-        };
-
-        pdfMake.createPdf(docDefinition).download(`Fascicolo_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
-
+        }).download(`Fascicolo_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
     } catch (error) {
         console.error("Errore generazione PDF in Segreteria:", error);
         notifica("Si è verificato un errore durante la generazione del PDF. Riprova.", 'errore');
@@ -1711,201 +1724,43 @@ async function generateAdminPDFLibretto() {
     }
 }
 
-// GENERAZIONE SCHEDA STATO ATTUALE (solo requisiti validi ora, no storico)
-document.getElementById('btn-print-status-card')?.addEventListener('click', generateSyntheticStatusCard);
-
-// Ritorna, per ogni tipo di visita, solo il record più recente se è ancora valido (Idoneo, non scaduto).
-// L'array arriva già ordinato per last_visit_date DESC dal backend (/api/users/:id/libretto).
-function getCurrentValidMedicalRecords(data) {
-    const raw = Array.isArray(data?.medical_records) ? data.medical_records : (data?.medical_record ? [data.medical_record] : []);
-    const seenTypes = new Set();
-    const current = [];
-    for (const m of raw) {
-        if (seenTypes.has(m.visit_type_id)) continue;
-        seenTypes.add(m.visit_type_id);
-        const isExpired = !m.expiry_date || new Date(m.expiry_date) < new Date();
-        if (!isExpired && m.status === 'Idoneo') current.push(m);
-    }
-    return current;
-}
-
-function getCurrentValidCourses(data) {
-    const raw = data?.courses || [];
-    const seenCourses = new Set();
-    const current = [];
-    for (const c of raw) {
-        if (seenCourses.has(c.course_id)) continue;
-        seenCourses.add(c.course_id);
-        const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date();
-        if (!isExpired) current.push(c);
-    }
-    return current;
-}
-
-async function generateSyntheticStatusCard() {
-    if (!currentUserViewData || !currentLibrettoViewData) {
-        notifica('Attendi il caricamento completo dei dati del volontario.', 'attenzione'); return;
-    }
-
-    const btn = document.getElementById('btn-print-status-card');
-    const originalText = btn.innerHTML;
+// I fascicoli dei selezionati in un PDF solo, uno per pagina: per l'archivio
+// cartaceo, per l'assicurazione, per una verifica dell'ente.
+async function stampaFascicoliScelti() {
+    const ids = [...sceltiMultipla.keys()];
+    if (!ids.length) return;
+    const btn = document.getElementById('btn-stampa-fascicoli');
+    const testo = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generazione...';
-
     try {
         const logoBase64 = await getBase64ImageFromUrl('/logo.png');
-        const photoBase64 = currentUserViewData.photo_url ? await getBase64ImageFromUrl(currentUserViewData.photo_url) : null;
-
-        const validMedical = getCurrentValidMedicalRecords(currentLibrettoViewData);
-        const validCourses = getCurrentValidCourses(currentLibrettoViewData);
-
-        // Stessa logica di operatività globale usata nel tesserino pubblico QR
-        const isMedOk = validMedical.some(m => (m.visit_name || '').toLowerCase() === 'visita di idoneità fisica');
-        const isCourseBaseOk = validCourses.some(c => c.course_id === 1);
-        const isOperativo = isMedOk && isCourseBaseOk;
-
-        const headerColumns = [];
-        if (logoBase64) headerColumns.push({ image: logoBase64, width: 50, alignment: 'left' });
-        headerColumns.push({
-            text: [
-                { text: (brandingSettings.association_name || 'Protezione Civile').toUpperCase() + '\n', style: 'headerTitle' },
-                { text: 'SCHEDA VOLONTARIO - STATO ATTUALE', style: 'documentTitle' }
-            ],
-            alignment: logoBase64 ? 'right' : 'center',
-            margin: [0, 5, 0, 0]
-        });
-
-        const profileColumns = [];
-        if (photoBase64) profileColumns.push({ width: 'auto', image: photoBase64, fit: [75, 75], margin: [0, 0, 20, 0] });
-        profileColumns.push({
-            width: '*',
-            stack: [
-                { text: `${currentUserViewData.nome} ${currentUserViewData.cognome}`, fontSize: 15, bold: true, color: '#1e293b' },
-                { text: (currentUserViewData.role || '').toUpperCase(), fontSize: 9, color: '#64748b', margin: [0, 2, 0, 8] },
-                { text: isOperativo ? 'OPERATIVO' : 'NON OPERATIVO', bold: true, fontSize: 12, color: isOperativo ? '#10b981' : '#ef4444' }
-            ]
-        });
-
-        const medicalRows = validMedical.map(m => [
-            { text: m.visit_name || 'Visita di idoneità', margin: [0, 4, 0, 4] },
-            { text: new Date(m.last_visit_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] },
-            { text: new Date(m.expiry_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] }
-        ]);
-        const courseRows = validCourses.map(c => [
-            { text: c.name, margin: [0, 4, 0, 4] },
-            { text: new Date(c.acquisition_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] },
-            { text: c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Senza scadenza', margin: [0, 4, 0, 4] }
-        ]);
-
-        const docDefinition = {
-            pageSize: 'A5',
-            pageMargins: [30, 30, 30, 30],
-            content: [
-                { columns: headerColumns, margin: [0, 0, 0, 12] },
-                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 355, y2: 0, lineWidth: 1.5, lineColor: '#3b82f6' }], margin: [0, 0, 0, 15] },
-                { columns: profileColumns, margin: [0, 0, 0, 20] },
-
-                { text: 'VISITA MEDICA VALIDA', style: 'sectionHeader' },
-                medicalRows.length > 0
-                    ? { table: { headerRows: 1, widths: ['*', 'auto', 'auto'], body: [[{ text: 'Tipo', style: 'tableHeader' }, { text: 'Data', style: 'tableHeader' }, { text: 'Scadenza', style: 'tableHeader' }], ...medicalRows] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 20] }
-                    : { text: 'Nessuna visita valida al momento.', italics: true, color: '#ef4444', margin: [0, 0, 0, 20] },
-
-                { text: 'CORSI ATTIVI', style: 'sectionHeader' },
-                courseRows.length > 0
-                    ? { table: { headerRows: 1, widths: ['*', 'auto', 'auto'], body: [[{ text: 'Corso', style: 'tableHeader' }, { text: 'Acquisito', style: 'tableHeader' }, { text: 'Scadenza', style: 'tableHeader' }], ...courseRows] }, layout: 'lightHorizontalLines' }
-                    : { text: 'Nessun corso attivo al momento.', italics: true, color: '#ef4444' },
-
-                { text: `Documento generato il ${new Date().toLocaleDateString('it-IT')} - fotografia dello stato attuale, non sostituisce il fascicolo completo.`, fontSize: 7, color: '#94a3b8', margin: [0, 20, 0, 0] }
-            ],
-            styles: {
-                headerTitle: { fontSize: 13, bold: true, color: '#1e293b' },
-                documentTitle: { fontSize: 9, bold: true, color: '#3b82f6' },
-                sectionHeader: { fontSize: 10, bold: true, color: '#334155', margin: [0, 8, 0, 6] },
-                tableHeader: { bold: true, fontSize: 8, color: '#64748b', fillColor: '#f1f5f9' }
-            },
-            defaultStyle: { fontSize: 9, color: '#334155' }
-        };
-
-        pdfMake.createPdf(docDefinition).download(`Scheda_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
-
-    } catch (error) {
-        console.error("Errore generazione scheda stato attuale:", error);
-        notifica("Si è verificato un errore durante la generazione della scheda.", 'errore');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    }
-}
-
-// GENERAZIONE TESSERINO DI RICONOSCIMENTO (BADGE CR80 Orizzontale)
-document.getElementById('btn-print-id-card')?.addEventListener('click', generateIDCard);
-
-// Tesserino perso: un QR nuovo, e quello vecchio non apre piu' niente.
-document.getElementById('btn-rigenera-qr')?.addEventListener('click', async () => {
-    if (!currentUserViewId || !currentUserViewData) return;
-    if (!confirm(`Rigenerare il QR del tesserino di ${currentUserViewName}?\n\nIl tesserino stampato finora smette di funzionare e va ristampato.`)) return;
-    try {
-        const esito = await fetchApi(`/api/admin/users/${currentUserViewId}/rigenera-tesserino`, { method: 'POST' });
-        currentUserViewData.public_token = esito.public_token;
-        mostraQrDettaglio(esito.public_token);
-        notifica(esito.message, 'successo');
-    } catch (e) {
-        notifica(`Errore: ${e.message}`, 'errore');
-    }
-});
-
-async function generateIDCard() {
-    if (!currentUserViewData) {
-        notifica('Attendi il caricamento dei dati del volontario.', 'attenzione');
-        return;
-    }
-
-    const btn = document.getElementById('btn-print-id-card');
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generazione...';
-
-    try {
-        // QR e foto non stanno nell'elenco degli utenti: se il fascicolo non
-        // li aveva ancora letti, li si chiede adesso.
-        if (currentUserViewData.qr_attivo === undefined) {
-            const t = await fetchApi(`/api/admin/users/${currentUserViewData.id}/tesserino`);
-            Object.assign(currentUserViewData, { public_token: t.public_token, photo_url: t.photo_url, qr_attivo: t.qr_attivo !== false });
+        const content = [];
+        let fatti = 0;
+        for (const id of ids) {
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${++fatti} di ${ids.length}…`;
+            const utente = { ...(utentiSegreteria.get(id) || { id }) };
+            const [tesserino, libretto] = await Promise.all([
+                fetchApi(`/api/admin/users/${id}/tesserino`).catch(() => null),
+                fetchApi(`/api/users/${id}/libretto`)
+            ]);
+            if (tesserino?.photo_url) utente.photo_url = tesserino.photo_url;
+            const parte = await contenutoFascicolo(utente, libretto, logoBase64);
+            if (content.length) parte[0] = { ...parte[0], pageBreak: 'before' };
+            content.push(...parte);
         }
-        const [logo, logo2] = await Promise.all([
-            getBase64ImageFromUrl('/logo.png'),
-            brandingLogos.logo2Url ? getBase64ImageFromUrl(brandingLogos.logo2Url) : null,
-            Tesserino.caratteri()
-        ]);
-        // Senza token (QR spenti dall'amministrazione) il tesserino si stampa
-        // senza QR. Il codice fiscale c'è se è nel fascicolo e l'amministrazione
-        // non l'ha spento.
-        const cf = String(currentUserViewData.codice_fiscale || '').trim().toUpperCase();
-        const dati = {
-            nome: `${currentUserViewData.cognome || ''} ${currentUserViewData.nome || ''}`,
-            distretto: brandingSettings.card_district_label || '',
-            ente: brandingSettings.card_regional_entity_name || '',
-            qr: currentUserViewData.public_token ? `${window.location.origin}/badge.html?token=${currentUserViewData.public_token}` : null,
-            cf: brandingSettings.badge_cf_barcode !== false && /^[A-Z0-9]{16}$/.test(cf) ? cf : null,
-            // Prima il logo dell'ente sovraordinato, poi quello dell'organizzazione.
-            loghi: [logo2, logo]
-        };
-        // La foto, ritagliata come una fototessera sulla misura del suo riquadro.
-        const riquadro = Tesserino.posizioni(brandingSettings.badge_modello, Tesserino.varianti(dati)).foto;
-        if (currentUserViewData.photo_url) dati.foto = await ritagliaFototessera(currentUserViewData.photo_url, riquadro.w, riquadro.h);
-
-        const docDefinition = Tesserino.inPdf(Tesserino.componi(brandingSettings.badge_modello, dati));
-        pdfMake.createPdf(docDefinition).download(`Tesserino_PC_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
-
-    } catch (error) {
-        console.error("Errore generazione Tesserino:", error);
-        notifica("Errore durante la generazione del tesserino.", 'errore');
+        const data = new Date().toISOString().slice(0, 10);
+        pdfMake.createPdf({
+            pageSize: 'A4', pageMargins: [40, 40, 40, 40], content, styles: STILI_FASCICOLO,
+            defaultStyle: { fontSize: 10, color: '#334155' }
+        }).download(ids.length === 1 ? `Fascicolo_${data}.pdf` : `Fascicoli_${ids.length}_volontari_${data}.pdf`);
+    } catch (e) {
+        notifica(`Fascicoli non stampati: ${e.message}`, 'errore');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = originalText;
+        btn.innerHTML = testo;
     }
 }
-
+document.getElementById('btn-stampa-fascicoli')?.addEventListener('click', stampaFascicoliScelti);
 
 // --- Registrazioni multiple ---------------------------------------------------
 // La stessa visita o lo stesso corso a più volontari con la stessa data: la
@@ -2053,3 +1908,9 @@ async function disegnaPresenzeVolontario(userId) {
         lista.appendChild(li);
     }
 }
+
+// "Annulla" in ogni finestra: chiude quella in cui sta, senza salvare.
+document.querySelectorAll('.annulla-finestra').forEach(b => b.addEventListener('click', () => {
+    const finestra = b.closest('.modal');
+    if (finestra) finestra.style.display = 'none';
+}));

@@ -1,5 +1,3 @@
-// public/js/tesserino.js
-//
 // Il tesserino da divisa (formato CR80, 86x54 mm, cioè 243x153 punti PDF),
 // disegnato da un modello che l'amministratore può personalizzare: i colori
 // delle fasce e delle scritte, i due testi fissi, e se vuole la posizione e la

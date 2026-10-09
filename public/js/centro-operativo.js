@@ -1,4 +1,3 @@
-// js/centro-operativo.js
 
 import DOMPurify from '/js/lib/purify.es.js';
 import { creaRicerca, calcolaPercorso, distanzaMetri, distanzaLeggibile, durataLeggibile } from '/js/mappa-strumenti.js';
@@ -20,6 +19,15 @@ const restaInCoda = (esito, cosa) => {
     notifica(`${cosa}: il server non risponde, resta in coda e parte da sola appena torna.`, 'attenzione', 7000);
     return true;
 };
+
+// Sul telefono l'intestazione va a capo su più righe: gli avvisi a comparsa
+// partono da dove finisce, così non coprono i pulsanti.
+function segnaFondoTestata() {
+    const testata = document.querySelector('body > header');
+    if (testata) document.documentElement.style.setProperty('--fondo-testata', `${Math.round(testata.getBoundingClientRect().bottom)}px`);
+}
+if (window.ResizeObserver && document.querySelector('body > header')) new ResizeObserver(segnaFondoTestata).observe(document.querySelector('body > header'));
+window.addEventListener('resize', segnaFondoTestata);
 
 const reportListBody = document.getElementById('report-list-body');
 const createNewReportBtn = document.getElementById('createNewReportBtn');
@@ -259,7 +267,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const meResponse = await fetchApi('/api/me/status');
         currentUserRole = meResponse.role; 
         
-
         localStorage.setItem('userRole', currentUserRole);
         localStorage.setItem('userRuoli', JSON.stringify(
             Array.isArray(meResponse.ruoli) && meResponse.ruoli.length ? meResponse.ruoli : [currentUserRole]
@@ -632,8 +639,8 @@ function initMap() {
         "Posizione Squadre": teamMarkersLayer
     };
 
-    // Livelli e ricerca in basso a sinistra: in alto a destra stanno gli
-    // eventi e gli avvisi a comparsa, e i comandi finivano coperti.
+    // Livelli e ricerca in basso a sinistra: in alto a destra stanno gli eventi
+    // e gli avvisi a comparsa.
     L.control.logo({ position: 'topleft' }).addTo(map);
     creaRicerca(map, { cercaLocale: cercaSullaMappa, suScelta: usaRisultatoRicerca });
     const controlloLivelli = creaControlloLivelli(baseMaps, overlayMaps, { position: 'bottomleft' }).addTo(map);
@@ -1932,9 +1939,8 @@ function initiateCoordinateUpdateFromPanel(reportId) {
     toggleActionButtonsAvailability(false, 'details-panel-update-coords-btn');
 }
 
-// Mentre si sceglie il punto di una segnalazione sulla mappa, le zone e le
-// strade disegnate non prendono il clic: un punto dentro un'area apriva il
-// riquadro dell'area invece di essere scelto.
+// Mentre si sceglie il punto di una segnalazione, zone e strade disegnate non
+// prendono il clic: un punto dentro un'area aprirebbe il riquadro dell'area.
 function sceltaPunto(si) {
     if (!map) return;
     map.getContainer().style.cursor = si ? 'crosshair' : '';
@@ -2439,7 +2445,6 @@ async function openAssignTeamModal(report) {
         selettoreMotivo.value = report.no_team_reason || '';
         selettoreMotivo.disabled = false;
     }
-
 
     const assignedTeamEntries = report.assigned_teams || [];
     console.log(`[openAssignTeamModal] Squadre da visualizzare come assegnate (da report.assigned_teams):`, JSON.parse(JSON.stringify(assignedTeamEntries)));
@@ -3922,7 +3927,6 @@ async function assegnaSquadra(squadra, segnalazione) {
     }
 }
 
-
 function preparaScorciatoieSquadre() {
     const pannello = document.getElementById('team-status-panel');
     if (!pannello || !puoGestireSquadre() || document.getElementById('scorciatoie-squadre')) return;
@@ -4152,11 +4156,9 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
                   ? report.assigned_teams.map(t => t.nome_radio || '?').join(', ')
                   : null;
 
-
     const prio = PRIORITA_CARD[report.priority] || PRIORITA_CARD.Medium;
     card.classList.remove('prio-alta', 'prio-media', 'prio-bassa');
     card.classList.add(prio.classe);
-
 
     const attesa = calcolaAttesa(report);
     const terminale = TERMINAL_REPORT_STATUSES.includes(report.status);
@@ -4645,6 +4647,9 @@ function preparaAvvisiComputer() {
             notifica('Avvisi sul computer attivi: arriveranno anche con la finestra in secondo piano.', 'successo');
         } else if (Notification.permission === 'denied') {
             notifica('Avvisi sul computer non permessi: si riattivano dalle impostazioni del sito nel browser (il lucchetto accanto all\'indirizzo).', 'attenzione');
+        } else {
+            // La domanda del browser è stata chiusa senza scegliere: si dice cosa fare.
+            notifica('Il browser chiede il permesso in alto, accanto all\'indirizzo: scegli "Consenti". Se non compare, riprova.', 'info');
         }
     });
 }
@@ -4662,7 +4667,6 @@ function aggiornaBadgeSezioni() {
     } else {
         quanti = novitaDocumenti;
     }
-
 
     const etichetta = documentiInVista
         ? '<i class="fas fa-arrow-left"></i> Elenco'
@@ -4774,7 +4778,6 @@ function appendReportRows(reports) {
     }
     reports.forEach(report => createOrUpdateReportRow(report, true));
 }
-
 
 // --- Riepilogo sopra l'elenco ---------------------------------------------
 // Quante segnalazioni aperte ci sono in ogni situazione, con i colori dei

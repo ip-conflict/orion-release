@@ -1,5 +1,3 @@
-// public/js/copione.js
-//
 // La pagina del copione di una simulazione (/copione.html?attivita=N),
 // costruita come il centro operativo: a sinistra l'elenco degli eventi in
 // ordine di tempo, a destra la mappa con i loro punti e le strade. "Nuovo
@@ -11,6 +9,11 @@
 // i tempi di ogni segnalazione, le osservazioni della regia, il debriefing,
 // la pubblicazione ai partecipanti. Chi non è della regia, se il copione è
 // stato pubblicato, vede tutto in sola lettura.
+//
+// La stessa pagina scrive il copione di uno scenario della biblioteca
+// (/copione.html?scenario=N, dalla pagina Simulazioni): niente valutazione né
+// pubblicazione, che sono delle simulazioni svolte, e un pulsante per
+// pianificarlo nel calendario.
 
 import { cercaIndirizzi, creaRicerca, calcolaPercorso } from './mappa-strumenti.js';
 import { montaElementiMappa, creaControlloLivelli, aggiungiCartografia } from './mappa-elementi.js';
@@ -41,8 +44,11 @@ const disegnaArea = (tipoElemento) => tipoElemento !== 'strada_chiusa';
 const PRIORITA = { High: 'Alta', Medium: 'Media', Low: 'Bassa' };
 const NOMI_RADIO = ['Alfa', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa'];
 
-const idAttivita = Number(new URLSearchParams(location.search).get('attivita'));
-let dati = null;          // la risposta di GET /api/attivita/:id/copione
+const parametri = new URLSearchParams(location.search);
+const idScenario = Number(parametri.get('scenario')) || null;
+const idAttivita = idScenario ? null : Number(parametri.get('attivita'));
+const radice = idScenario ? `/api/scenari/${idScenario}` : `/api/attivita/${idAttivita}`;
+let dati = null;          // la risposta di GET .../copione
 let inModifica = null;    // l'evento nel modulo ({} se nuovo)
 let tipoModulo = null;
 let punto = null;         // { lat, lng } del modulo
@@ -61,15 +67,18 @@ const oraDi = (v) => data(v).toLocaleTimeString('it-IT', { hour: '2-digit', minu
 
 async function carica() {
     try {
-        dati = await fetchApi(`/api/attivita/${idAttivita}/copione`);
+        dati = await fetchApi(`${radice}/copione`);
     } catch (e) {
         document.querySelector('.cp-lavoro').replaceChildren(el('p', 'cp-pannello', e.message || 'Copione non disponibile.'));
+        $('cp-azioni').hidden = true;
         return;
     }
     const a = dati.attivita;
     document.title = `Copione: ${a.titolo} - ORION`;
     $('cp-titolo').textContent = a.titolo;
-    $('cp-sottotitolo').textContent = [a.tipo, dati.sala ? (dati.sala.aperta ? `Sala aperta: ${dati.sala.codice}` : `Simulazione svolta: ${dati.sala.codice}`) : 'La sala non è ancora stata aperta'].filter(Boolean).join(' · ');
+    $('cp-sottotitolo').textContent = idScenario
+        ? ['Scenario', a.tipo, dati.scenario.durata_ore === 1 ? 'circa 1 ora' : `circa ${dati.scenario.durata_ore} ore`].join(' · ')
+        : [a.tipo, dati.sala ? (dati.sala.aperta ? `Sala aperta: ${dati.sala.codice}` : `Simulazione svolta: ${dati.sala.codice}`) : 'La sala non è ancora stata aperta'].filter(Boolean).join(' · ');
     $('cp-scenario').hidden = !a.scenario && !a.obiettivi;
     $('cp-scenario-testo').textContent = a.scenario || '';
     $('cp-obiettivi-testo').textContent = a.obiettivi ? `Obiettivi: ${a.obiettivi}` : '';
@@ -78,7 +87,7 @@ async function carica() {
     $('cp-nuovo').hidden = !modifica;
     disegnaElenco();
     disegnaMappa();
-    disegnaValutazione();
+    if (!idScenario) disegnaValutazione();
 }
 
 // --- L'elenco -----------------------------------------------------------------------
@@ -405,7 +414,7 @@ async function salva(ev) {
     const corpo = corpoModulo();
     try {
         if (inModifica?.id) await fetchApi(`/api/copione/eventi/${inModifica.id}`, { method: 'PUT', body: JSON.stringify(corpo) });
-        else await fetchApi(`/api/attivita/${idAttivita}/copione/eventi`, { method: 'POST', body: JSON.stringify(corpo) });
+        else await fetchApi(`${radice}/copione/eventi`, { method: 'POST', body: JSON.stringify(corpo) });
         notifica('Evento salvato.', 'successo');
         chiudiModulo();
         await carica();
@@ -437,7 +446,7 @@ async function trovaIndirizzo() {
 
 function apriExcel() {
     $('excel-esito').replaceChildren();
-    $('excel-scarica').href = `/api/attivita/${idAttivita}/copione.xlsx`;
+    $('excel-scarica').href = `${radice}/copione.xlsx`;
     $('modale-excel').hidden = false;
 }
 
@@ -450,7 +459,7 @@ async function caricaExcel() {
     fd.append('file', file);
     fd.append('modo', $('excel-sostituisci').checked ? 'sostituisci' : 'aggiungi');
     try {
-        const corpo = await fetchApi(`/api/attivita/${idAttivita}/copione/importa`, { method: 'POST', body: fd });
+        const corpo = await fetchApi(`${radice}/copione/importa`, { method: 'POST', body: fd });
         esito.replaceChildren(el('p', '', `Caricati ${corpo.caricati} eventi.${corpo.da_posizionare ? ` ${corpo.da_posizionare} sono da mettere sulla mappa.` : ''}`));
         await carica();
     } catch (e) {
@@ -468,23 +477,25 @@ async function caricaExcel() {
 
 async function apriCopia() {
     const ul = $('copia-elenco');
-    ul.replaceChildren(el('li', 'nota', 'Cerco le attività con un copione…'));
+    ul.replaceChildren(el('li', 'nota', 'Cerco gli scenari e le attività con un copione…'));
     $('modale-copia').hidden = false;
-    let elenco = [];
+    let attivita = [], scenari = [];
     try {
         const da = new Date(); da.setFullYear(da.getFullYear() - 3);
         const a = new Date(); a.setFullYear(a.getFullYear() + 1);
         const g = (d) => d.toISOString().slice(0, 10);
-        elenco = (await fetchApi(`/api/attivita?da=${g(da)}&a=${g(a)}`)).filter(x => x.simulazione === 'sala' && x.regista && x.id !== idAttivita);
+        attivita = (await fetchApi(`/api/attivita?da=${g(da)}&a=${g(a)}`)).filter(x => x.simulazione === 'sala' && x.regista && x.id !== idAttivita);
     } catch (e) { ul.replaceChildren(el('li', 'nota', e.message)); return; }
+    // Gli scenari della biblioteca li vede chi apre le simulazioni o le organizza.
+    try { scenari = (await fetchApi('/api/simulazioni/scenari')).filter(x => x.eventi && x.id !== idScenario); } catch { /* niente scenari */ }
     ul.replaceChildren();
-    if (!elenco.length) ul.appendChild(el('li', 'nota', 'Nessuna altra attività con la simulazione in sala di cui fai la regia.'));
-    for (const x of elenco.sort((p, q) => data(q.inizio) - data(p.inizio))) {
-        const b = el('button', 'button-style button-secondary', `${data(x.inizio).toLocaleDateString('it-IT')} · ${x.titolo}`);
+    if (!attivita.length && !scenari.length) ul.appendChild(el('li', 'nota', 'Nessuno scenario e nessuna altra attività con la simulazione in sala di cui fai la regia.'));
+    const voce = (testo, corpo) => {
+        const b = el('button', 'button-style button-secondary', testo);
         b.type = 'button';
         b.addEventListener('click', async () => {
             try {
-                const r = await fetchApi(`/api/attivita/${idAttivita}/copione/copia`, { method: 'POST', body: JSON.stringify({ da: x.id }) });
+                const r = await fetchApi(`${radice}/copione/copia`, { method: 'POST', body: JSON.stringify(corpo) });
                 notifica(`Copiati ${r.copiati} eventi.`, 'successo');
                 $('modale-copia').hidden = true;
                 await carica();
@@ -493,7 +504,11 @@ async function apriCopia() {
         const li = el('li');
         li.appendChild(b);
         ul.appendChild(li);
-    }
+    };
+    if (scenari.length) ul.appendChild(el('li', 'cp-copia-gruppo', 'Scenari'));
+    for (const x of scenari) voce(`${x.titolo} (${x.eventi} ${x.eventi === 1 ? 'evento' : 'eventi'})`, { da_scenario: x.id });
+    if (scenari.length && attivita.length) ul.appendChild(el('li', 'cp-copia-gruppo', 'Attività'));
+    for (const x of attivita.sort((p, q) => data(q.inizio) - data(p.inizio))) voce(`${data(x.inizio).toLocaleDateString('it-IT')} · ${x.titolo}`, { da: x.id });
 }
 
 // --- La valutazione ---------------------------------------------------------------------------------
@@ -593,9 +608,22 @@ function scheda(quale) {
 // --- Avvio ---------------------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!Number.isInteger(idAttivita) || idAttivita <= 0) {
+    if (!idScenario && (!Number.isInteger(idAttivita) || idAttivita <= 0)) {
         document.querySelector('.cp-lavoro').replaceChildren(el('p', 'cp-pannello', "Manca l'attività: apri il copione dal calendario."));
         return;
+    }
+    if (idScenario) {
+        // Lo scenario: si torna alla biblioteca, niente valutazione, si pianifica.
+        const indietro = document.querySelector('.cp-indietro');
+        indietro.href = '/simulazioni.html';
+        indietro.title = 'Torna alle simulazioni';
+        $('cp-segno').textContent = 'SCENARIO';
+        document.querySelector('.cp-schede').hidden = true;
+        $('copia-titolo').textContent = 'Copia il copione di uno scenario o di un\'attività';
+        const pianifica = el('a', 'button-style', '');
+        pianifica.href = `/calendario.html?scenario=${idScenario}`;
+        pianifica.innerHTML = '<i class="fas fa-calendar-plus"></i> Pianifica';
+        $('cp-azioni').appendChild(pianifica);
     }
     $('nomi-radio').replaceChildren(...NOMI_RADIO.map(n => new Option(n)));
     await preparaMappa();
@@ -643,6 +671,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.cp-velo').forEach(v => { v.hidden = true; });
         if (!$('cp-modulo').hidden) chiudiModulo();
     });
-    if (location.hash === '#valutazione') scheda('valutazione');
+    if (location.hash === '#valutazione' && !idScenario) scheda('valutazione');
     await carica();
 });

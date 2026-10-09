@@ -1,5 +1,3 @@
-// public/js/sistema.js
-//
 // Pagina Sistema: backup, ripristino e stato dell'installazione.
 //
 // Il ripristino è l'unica cosa nell'applicazione che cancella i dati di tutti
@@ -494,8 +492,10 @@ document.addEventListener('DOMContentLoaded', () => {
         esito.className = `esito${operazione.esito ? ' ' + operazione.esito : ''}`;
     }
 
-    $('btn-chiudi-operazione').addEventListener('click', () => {
+    // Si chiude anche sul server: ricaricando la pagina non torna.
+    $('btn-chiudi-operazione').addEventListener('click', async () => {
         $('riquadro-operazione').hidden = true;
+        try { await fetchApi('/api/sistema/operazione', { method: 'DELETE' }); } catch { /* resta solo per questa volta */ }
     });
 
     // All'apertura della pagina: se c'è un'operazione in corso o appena

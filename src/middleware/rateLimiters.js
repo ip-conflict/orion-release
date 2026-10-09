@@ -36,7 +36,7 @@ const nonContare = (req) => ePosizione(req) || eTassello(req);
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1500,
-    message: 'Troppe richieste da questo utente/IP, riprova tra 15 minuti.',
+    message: { message: 'Troppe richieste in poco tempo: aspetta qualche minuto e riprova.' },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: userKeyGenerator, // per persona se collegata, altrimenti per rete
@@ -48,7 +48,7 @@ export const apiLimiter = rateLimit({
 export const limitePerRete = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5000,
-    message: 'Troppe richieste da questa rete, riprova tra qualche minuto.',
+    message: { message: 'Troppe richieste da questa rete: aspetta qualche minuto e riprova.' },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => `rete:${chiaveIndirizzo(req.ip)}`,
@@ -58,10 +58,12 @@ export const limitePerRete = rateLimit({
 export const passwordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  // Per indirizzo: chi tenta una password non è ancora nessuno.
-
+  // Per indirizzo: chi tenta una password non è ancora nessuno. Contano solo
+  // i tentativi sbagliati: una sala che entra tutta insieme non si blocca.
   keyGenerator: (req) => `indirizzo:${chiaveIndirizzo(req.ip)}`,
-  message: 'Troppi tentativi di login da questo IP, riprova più tardi.',
+  skipSuccessfulRequests: true,
+  // In JSON, come le altre risposte: la pagina d'accesso e l'app mostrano il motivo.
+  message: { message: 'Troppi tentativi sbagliati da questa rete: aspetta un quarto d\'ora e riprova.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -69,7 +71,7 @@ export const passwordLimiter = rateLimit({
 export const reportCreationLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, 
     max: 50, // Alzato a 50 (ora è per singolo operatore, molto generoso)
-    message: 'Hai creato troppe segnalazioni, riprova tra alcuni minuti.',
+    message: { message: 'Hai creato troppe segnalazioni in poco tempo: riprova fra qualche minuto.' },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: userKeyGenerator // Limita per operatore
@@ -78,7 +80,7 @@ export const reportCreationLimiter = rateLimit({
 export const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
     max: 100, // Alzato a 100 (circa 6-7 caricamenti di blocchi da 15 foto per operatore)
-    message: 'Hai caricato troppi file, riprova tra 15 minuti.',
+    message: { message: 'Hai caricato troppi file in poco tempo: riprova fra un quarto d\'ora.' },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: userKeyGenerator // Limita per operatore
@@ -87,7 +89,7 @@ export const uploadLimiter = rateLimit({
 export const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
-    message: 'Troppe operazioni amministrative, riprova tra 15 minuti.',
+    message: { message: 'Troppe operazioni di amministrazione in poco tempo: riprova fra un quarto d\'ora.' },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: userKeyGenerator // Limita per operatore admin

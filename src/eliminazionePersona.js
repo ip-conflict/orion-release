@@ -1,5 +1,3 @@
-// src/eliminazionePersona.js
-//
 // Eliminare una persona da ORION vuol dire cancellarne i dati personali. Se
 // la persona non compare nello storico la si cancella del tutto. Se compare
 // in segnalazioni, aggiornamenti o documenti delle emergenze, il registro deve
@@ -34,7 +32,6 @@ function fileDi(url) {
     return null;
 }
 
-// I file della persona: la foto e i certificati di visite e corsi.
 export async function fileDellaPersona(client, id) {
     const r = await client.query(
         `SELECT photo_url AS url FROM users WHERE id = $1
@@ -63,7 +60,6 @@ export async function pseudonimizza(client, id) {
         'attivita_persone', 'partecipazioni', 'chiamate_persone', 'disponibilita', 'reperibilita', 'assenze']) {
         await client.query(`DELETE FROM ${tabella} WHERE user_id = $1`, [id]);
     }
-    // Esce dalle squadre di cui fa ancora parte; quelle passate restano.
     await client.query(
         `UPDATE squadra_membri SET left_at = NOW()
           WHERE left_at IS NULL AND username = (SELECT username FROM users WHERE id = $1)`, [id]);

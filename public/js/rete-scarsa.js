@@ -1,5 +1,3 @@
-// public/js/rete-scarsa.js
-//
 // Il centro operativo con la rete che va e viene. Tre cose:
 //
 // la situazione salvata: le letture principali (segnalazioni, squadre, mappa,

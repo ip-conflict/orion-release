@@ -1,19 +1,6 @@
-// public/js/menu-laterale.js
-//
-// La barra laterale delle pagine di lavoro, uguale dappertutto.
-//
-// Prima ogni pagina aveva la sua copia scritta a mano, e le copie si erano
-// allontanate: da Sistema non si arrivava alla Segreteria né al Magazzino, da
-// Gestione utenti non si arrivava alla Segreteria, dal Magazzino non si
-// arrivava alle Squadre. Adesso le voci comuni stanno qui, con una regola sola
-// per chi le vede; le pagine tengono in fondo solo le proprie voci (i
-// cataloghi della segreteria, le sezioni del profilo).
-//
-// Gli id delle voci (sidebar-settings, sidebar-magazzino...) restano quelli
-// di prima, perché gli script delle pagine li usano ancora.
-//
-// Va caricato dopo apiHelper.js (serve haRuolo) e prima dello script della
-// pagina.
+// La barra laterale comune a tutte le pagine di lavoro; le pagine aggiungono in
+// fondo solo le proprie voci. Va caricato dopo apiHelper.js e prima dello
+// script della pagina.
 (function () {
     const menu = document.querySelector('.admin-sidebar .sidebar-menu');
     if (!menu || typeof haRuolo !== 'function') return;
@@ -21,7 +8,6 @@
     const ruoli = typeof ruoliUtente === 'function' ? ruoliUtente() : [];
     const admin = haRuolo('admin');
     const esterno = !admin && ruoli.includes('esterno');
-    // I permessi (src/permessi.js); senza apiHelper aggiornato, come prima: solo l'amministratore.
     const puo = (...codici) => (typeof haPermesso === 'function' ? haPermesso(...codici) : admin);
 
     // [id, indirizzo, icona, testo, chi la vede]. "moduli" arriva dopo, dalle
@@ -32,8 +18,8 @@
         ['sidebar-segreteria', '/admin-segreteria.html', 'fa-folder-open', 'Segreteria', (m) => m.segreteria && puo('volontari.sanitario', 'volontari.anagrafica')],
         ['sidebar-magazzino', '/magazzino.html', 'fa-boxes-stacked', 'Magazzino', (m) => m.magazzino && !esterno],
         ['sidebar-teams', '/admin/squadre.html', 'fa-truck-pickup', 'Squadre', () => !esterno],
-        // Gli esterni ci trovano i documenti segnati per l'emergenza.
         ['sidebar-calendario', '/calendario.html', 'fa-calendar-days', 'Calendario', (m) => m.attivita && !esterno],
+        ['sidebar-simulazioni', '/simulazioni.html', 'fa-clapperboard', 'Simulazioni', (m) => m.attivita && !esterno && puo('gruppo.attivita')],
         ['sidebar-documenti', '/documenti.html', 'fa-book', 'Documenti', () => true],
         ['sidebar-users', '/admin/admin.html', 'fa-users', 'Utenti', () => puo('volontari.anagrafica')],
         ['sidebar-archive', '/admin/archive.html', 'fa-archive', 'Archivio emergenze', () => puo('emergenze.archivio')],
@@ -45,7 +31,6 @@
     const indirizzi = new Set(VOCI.map(v => v[1]));
     const ids = new Set(VOCI.map(v => v[0]));
 
-    // Via le voci comuni scritte a mano nella pagina: restano solo le sue.
     const proprie = [...menu.children].filter(li => {
         if (ids.has(li.id)) return false;
         const link = li.querySelector('a[href]');
@@ -81,8 +66,6 @@
         proprie.forEach(li => menu.appendChild(li));
     }
 
-    // Uscire si poteva solo dal Centro Operativo: da qualunque altra pagina
-    // bisognava tornare lì per farlo.
     const esci = document.createElement('li');
     esci.id = 'sidebar-esci';
     const linkEsci = document.createElement('a');
@@ -108,15 +91,31 @@
         voci.forEach(({ li, vede }) => { li.style.display = vede(moduli) ? 'block' : 'none'; });
     }
 
-    // I moduli accesi si ricordano dall'ultima pagina: il menu è giusto al
-    // primo colpo, invece di comparire con le voci di base e poi allungarsi
-    // quando arrivano le impostazioni (passando da una pagina all'altra
-    // lampeggiava). Il foglio di stile lo tiene nascosto finché non è pronto.
+    // I moduli accesi dell'ultima pagina, per non far lampeggiare il menu
+    // mentre arrivano le impostazioni.
     const CHIAVE = 'orion.menu.moduli';
     let ricordati = null;
     try { ricordati = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); } catch { /* niente */ }
     mostra(ricordati || { segreteria: false, magazzino: false, funzioni: false, attivita: true });
     menu.classList.add('pronto');
+
+    const testa = document.querySelector('.admin-sidebar .sidebar-header');
+    const barra = document.querySelector('.admin-sidebar');
+    if (testa && barra && !testa.querySelector('.apri-menu')) {
+        if (!menu.id) menu.id = 'menu-pagine';
+        const apri = document.createElement('button');
+        apri.type = 'button';
+        apri.className = 'apri-menu';
+        apri.setAttribute('aria-expanded', 'false');
+        apri.setAttribute('aria-controls', menu.id);
+        apri.innerHTML = '<i class="fas fa-bars" aria-hidden="true"></i> Menu';
+        apri.addEventListener('click', () => {
+            const aperto = barra.classList.toggle('menu-aperto');
+            apri.setAttribute('aria-expanded', String(aperto));
+            apri.innerHTML = aperto ? '<i class="fas fa-xmark" aria-hidden="true"></i> Chiudi' : '<i class="fas fa-bars" aria-hidden="true"></i> Menu';
+        });
+        testa.appendChild(apri);
+    }
     fetch('/api/branding/settings', { credentials: 'same-origin' })
         .then(r => (r.ok ? r.json() : {}))
         .then(impostazioni => {
@@ -134,11 +133,36 @@
             };
             mostra(moduli);
             try { localStorage.setItem(CHIAVE, JSON.stringify(moduli)); } catch { /* niente */ }
-            // Ruoli e permessi possono essere cambiati dall'ultimo accesso: si
-            // rileggono, e il menu si riallinea.
+            // Ruoli e permessi possono essere cambiati dall'ultimo accesso.
             if (typeof fetchApi === 'function' && typeof salvaRuoliEPermessi === 'function') {
                 fetchApi('/api/me/status').then(stato => { salvaRuoliEPermessi(stato); mostra(moduli); }).catch(() => {});
             }
         })
         .catch(() => { /* senza impostazioni restano le voci di base */ });
+})();
+
+// Sul telefono una tabella più larga dello schermo diventa un elenco di schede,
+// così i pulsanti a destra restano visibili.
+(function () {
+    const stretto = window.matchMedia('(max-width: 700px)');
+    let inAttesa = false;
+    function aSchede(tabella) {
+        if (tabella.id === 'user-table' || tabella.classList.contains('no-schede')) return;
+        const contenitore = tabella.parentElement;
+        if (!tabella.classList.contains('a-schede') && tabella.scrollWidth <= contenitore.clientWidth + 2) return;
+        const titoli = [...tabella.querySelectorAll('thead th')].map(th => th.textContent.trim());
+        if (!titoli.length) return;
+        tabella.querySelectorAll('tbody tr').forEach(tr => [...tr.cells].forEach((td, i) => {
+            if (titoli[i] && !td.dataset.etichetta) td.dataset.etichetta = titoli[i];
+        }));
+        tabella.classList.add('a-schede');
+    }
+    function controlla() {
+        inAttesa = false;
+        if (stretto.matches) document.querySelectorAll('table.admin-table').forEach(aSchede);
+    }
+    new MutationObserver(() => {
+        if (!inAttesa) { inAttesa = true; requestAnimationFrame(controlla); }
+    }).observe(document.body, { childList: true, subtree: true });
+    controlla();
 })();

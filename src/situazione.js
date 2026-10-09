@@ -1,5 +1,3 @@
-// src/situazione.js
-//
 // Il punto di situazione: com'è messa l'emergenza adesso, su un foglio da
 // leggere al cambio turno o da mandare a chi coordina. Segnalazioni aperte
 // con il loro stato, quelle chiuse, le squadre e le ultime note di sala.

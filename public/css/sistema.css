@@ -291,8 +291,7 @@
 }
 
 /* Le finestre di conferma (ripristino, aggiornamento): sopra la pagina, al
-   centro dello schermo, con la X in alto a destra. Senza questi stili
-   finivano in fondo alla pagina e bisognava scorrere per trovarle. */
+   centro dello schermo, con la X in alto a destra. */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -336,7 +335,6 @@
     border-radius: 6px;
 }
 .modal-overlay .close-modal-btn:hover { color: var(--text-color); background: var(--secondary-bg-color); }
-
 
 .avviso-aggiornamento {
     margin: 12px 0 0 0;

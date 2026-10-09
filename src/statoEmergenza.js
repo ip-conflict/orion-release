@@ -1,5 +1,3 @@
-// src/statoEmergenza.js
-//
 // L'emergenza aperta, tenuta in memoria: la leggono quasi tutte le rotte.
 
 import logger from './logger.js';

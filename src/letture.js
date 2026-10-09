@@ -1,5 +1,3 @@
-// src/letture.js
-//
 // Fin dove ciascuno ha letto le segnalazioni dell'emergenza in corso, tenuto
 // sul server: ricaricando la pagina o cambiando postazione le novità non si
 // perdono. Per ogni segnalazione già aperta almeno una volta il centro

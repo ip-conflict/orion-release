@@ -1,5 +1,3 @@
-// src/avvisi.js
-//
 // Gli avvisi sul telefono anche ad app chiusa, senza servizi esterni. Il
 // telefono tiene un collegamento in ascolto con il server dell'associazione
 // e lo apre con il token degli avvisi: uno per telefono, buono solo per

@@ -1,5 +1,3 @@
-// src/permessi.js
-//
 // Chi può fare cosa. Ogni controllo chiede un permesso, non un ruolo: i
 // ruoli sono pacchetti di permessi già pronti, uguali in tutte le
 // associazioni, e l'amministratore può dare a una persona anche singoli

@@ -8,10 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!token || !userId) {
         form.innerHTML = `
-            <h2 style="color: #dc3545;">Accesso Negato</h2>
-            <p>Link di sicurezza non valido o incompleto. Assicurati di aver copiato l'intero link.</p>
+            <h2 style="color: #dc3545;">Collegamento non valido</h2>
+            <p>Il collegamento è incompleto: aprilo di nuovo dal messaggio o dal foglio ricevuto, tutto intero. Se non funziona, chiedi a chi ti ha iscritto di mandartene uno nuovo.</p>
             <br>
-            <a href="/" class="button-style" style="text-decoration: none;">Torna al Login</a>
+            <a href="/" class="button-style" style="text-decoration: none;">Vai all'accesso</a>
         `;
         return;
     }
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.textContent = "Salvataggio in corso...";
+        submitBtn.textContent = "Salvo la password…";
 
         try {
             const response = await fetch('/api/auth/reset-password', {
@@ -42,24 +42,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (response.ok) {
-                messageDiv.textContent = data.username
-                    ? `Password impostata. Il tuo nome utente è ${data.username}: ora entra con la password appena scelta.`
-                    : "Password impostata con successo! Reindirizzamento al login...";
-                messageDiv.style.color = "green";
-                // Il nome utente arriva già scritto nell'accesso.
+                // Il nome utente arriva già scritto nell'accesso: basta la password.
                 const verso = data.username ? `/?utente=${encodeURIComponent(data.username)}` : '/';
-                setTimeout(() => { window.location.href = verso; }, 2500);
+                messageDiv.textContent = data.username
+                    ? `Password salvata. Il tuo nome utente è ${data.username}: tienilo a mente. Fra un attimo si apre l'accesso, con il nome già scritto: metti la password appena scelta.`
+                    : "Password salvata. Fra un attimo si apre l'accesso.";
+                messageDiv.style.color = "green";
+                submitBtn.textContent = "Password salvata";
+                setTimeout(() => { window.location.href = verso; }, 4000);
             } else {
                 messageDiv.textContent = data.message || "Errore durante il salvataggio.";
                 messageDiv.style.color = "red";
                 submitBtn.disabled = false;
-                submitBtn.textContent = "Salva ed entra";
+                submitBtn.textContent = "Salva la password";
             }
         } catch (error) {
-            messageDiv.textContent = "Errore di connessione al server.";
+            messageDiv.textContent = "Il server non si raggiunge: controlla la connessione e riprova.";
             messageDiv.style.color = "red";
             submitBtn.disabled = false;
-            submitBtn.textContent = "Salva ed entra";
+            submitBtn.textContent = "Salva la password";
         }
     });
 });

@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (appAndroidInput) appAndroidInput.checked = settings.app_android_enabled !== 'false';
                 if (cardDistrictLabelInput) cardDistrictLabelInput.value = settings.card_district_label || '';
                 if (cardRegionalEntityNameInput) cardRegionalEntityNameInput.value = settings.card_regional_entity_name || '';
+                await caricaAllerta(settings);
 
                 document.title = `Pannello Amministrazione - ${settings.association_name || 'ORION'}`;
 
@@ -198,6 +199,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Il bollettino di allerta: la Regione accende tutto, poi il comune (o il
+    // centro della mappa) dice la zona.
+    const allertaRegione = document.getElementById('allerta-regione');
+    const allertaComune = document.getElementById('allerta-comune');
+    const allertaAvvisa = document.getElementById('allerta-avvisa-da');
+    const allertaZona = document.getElementById('allerta-zona');
+    const allertaEsito = document.getElementById('allerta-esito');
+    let centroMappaAllerta = null;
+
+    function scriviZonaAllerta() {
+        if (!allertaZona) return;
+        allertaZona.textContent = allertaComune.value
+            ? ''
+            : centroMappaAllerta
+                ? `Il centro della mappa cade nella zona ${centroMappaAllerta.codice} (${centroMappaAllerta.nome}).`
+                : 'Il centro della mappa non cade in una zona di questa Regione: scegli il comune.';
+    }
+
+    async function caricaComuniAllerta(regione, scelto = '') {
+        document.getElementById('allerta-dettagli').hidden = !regione;
+        allertaComune.replaceChildren(new Option('Dal centro della mappa', ''));
+        if (!regione) return;
+        const r = await fetchApi(`/api/allerta/regioni?regione=${encodeURIComponent(regione)}`);
+        (r.comuni || []).forEach(c => allertaComune.add(new Option(c, c)));
+        allertaComune.value = (r.comuni || []).includes(scelto) ? scelto : '';
+        centroMappaAllerta = r.centro_mappa;
+        scriviZonaAllerta();
+    }
+
+    async function caricaAllerta(settings) {
+        if (!allertaRegione) return;
+        try {
+            const r = await fetchApi('/api/allerta/regioni');
+            allertaRegione.replaceChildren(new Option('Spento', ''));
+            (r.regioni || []).forEach(x => allertaRegione.add(new Option(x.nome, x.codice)));
+            allertaRegione.value = settings.allerta_regione || '';
+            allertaAvvisa.value = settings.allerta_avvisa_da || 'arancione';
+            await caricaComuniAllerta(allertaRegione.value, settings.allerta_comune || '');
+        } catch (e) {
+            if (allertaEsito) allertaEsito.textContent = e.message;
+        }
+    }
+
+    function valoriAllerta() {
+        if (!allertaRegione) return {};
+        return {
+            allerta_regione: allertaRegione.value,
+            allerta_comune: allertaRegione.value ? allertaComune.value : '',
+            allerta_avvisa_da: allertaAvvisa.value
+        };
+    }
+
+    allertaRegione?.addEventListener('change', () => caricaComuniAllerta(allertaRegione.value).catch(e => { allertaEsito.textContent = e.message; }));
+    allertaComune?.addEventListener('change', scriviZonaAllerta);
+    document.getElementById('allerta-leggi')?.addEventListener('click', async (e) => {
+        const bottone = e.currentTarget;
+        bottone.disabled = true;
+        allertaEsito.textContent = 'Lettura in corso…';
+        try {
+            // Prima si salva la scelta, poi si legge: il bollettino è per la zona salvata.
+            await fetchApi('/api/branding/settings', { method: 'PUT', body: JSON.stringify(valoriAllerta()) });
+            const stato = await fetchApi('/api/allerta/controlla', { method: 'POST' });
+            const a = await fetchApi('/api/allerta');
+            const giorni = a.bollettino?.validi || [];
+            const nomi = { verde: 'nessuna allerta', gialla: 'gialla', arancione: 'arancione', rossa: 'rossa' };
+            allertaEsito.textContent = stato.errore
+                ? `Bollettino non letto: ${stato.errore}.`
+                : !a.zona ? 'Letto, ma manca la zona: scegli il comune.'
+                : giorni.length
+                    ? `Zona ${a.zona.codice}: ${giorni.map((g, i) => `${i ? 'domani' : 'oggi'} ${g.massimo ? nomi[g.massimo] : 'non trasmessa'}`).join(', ')} (${a.bollettino.titolo}).`
+                    : `Zona ${a.zona.codice}: nessun bollettino valido per oggi.`;
+        } catch (err) {
+            allertaEsito.textContent = err.message;
+        } finally {
+            bottone.disabled = false;
+        }
+    });
+
     async function handleSettingsSubmit(event) {
         event.preventDefault();
         const submitButton = settingsForm.querySelector('button[type="submit"]');
@@ -223,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             magazzino_enabled: enableMagBtn?.checked ? 'true' : 'false',
             funzioni_enabled: enableFunzioniBtn?.checked ? 'true' : 'false',
             ...(document.getElementById('enable-attivita') ? { attivita_enabled: document.getElementById('enable-attivita').checked ? 'true' : 'false' } : {}),
+            ...valoriAllerta(),
             card_district_label: cardDistrictLabelInput?.value?.trim() || '',
             card_regional_entity_name: cardRegionalEntityNameInput?.value?.trim() || '',
             segreteria_config: JSON.stringify({

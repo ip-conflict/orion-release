@@ -63,6 +63,10 @@
         <h2 id="att-titolo"></h2>
         <dl class="dati-attivita" id="att-dati"></dl>
         <p id="att-descrizione" class="descrizione"></p>
+        <section id="att-allegati" class="allegati-attivita" hidden>
+            <h3>Allegati</h3>
+            <ul id="att-allegati-elenco" class="elenco-allegati"></ul>
+        </section>
 
         <p id="att-conduci" class="nota nota-conduci" hidden></p>
         <section id="att-risposta" class="riquadro-risposta" hidden>
@@ -110,6 +114,7 @@
     <div class="contenuto-modale" role="dialog" aria-modal="true" aria-labelledby="form-titolo">
         <button class="chiudi-modale" type="button" data-chiudi aria-label="Chiudi">&times;</button>
         <h2 id="form-titolo">Nuova attività</h2>
+        <p class="riquadro-avviso" id="form-scenario" hidden></p>
         <form id="form-attivita">
             <div class="griglia-campi">
                 <label>Tipo <button type="button" class="link-piccolo" id="gestisci-tipi">gestisci i tipi</button>
@@ -130,6 +135,13 @@
                 <label class="campo-largo">Descrizione
                     <textarea id="f-descrizione" rows="3" maxlength="4000" placeholder="Cosa si fa, cosa portare, abbigliamento..."></textarea>
                 </label>
+                <div class="campo-largo campo-allegati">
+                    <span class="etichetta-campo">Allegati <span class="nota">programma, scheda, volantino: PDF, immagini, Word, Excel (fino a 25 MB l'uno)</span></span>
+                    <ul id="f-allegati" class="elenco-allegati"></ul>
+                    <label class="button-style button-secondary pulsante-allegato" for="f-file"><i class="fas fa-paperclip" aria-hidden="true"></i> Aggiungi un file</label>
+                    <input type="file" id="f-file" multiple hidden
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt">
+                </div>
                 <label>Responsabile
                     <select id="f-responsabile"></select>
                 </label>

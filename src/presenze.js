@@ -1,5 +1,3 @@
-// src/presenze.js
-//
 // Le presenze: chi c'era, quando e per quante ore, a un'attività del gruppo o
 // a un'emergenza. Finiscono nel libretto di ognuno, nel riepilogo annuale e
 // negli attestati (per il datore di lavoro, per esempio).

@@ -1,11 +1,9 @@
-// public/js/chiamata.js
-//
 // La risposta a una chiamata della sala, aperta dal collegamento dell'email
 // (/chiamata.html?id=N): arrivo, arrivo fra..., non posso; una volta in
 // sede, "Sono arrivato". Dall'app si risponde dalla notifica.
 document.addEventListener('DOMContentLoaded', async () => {
     const scheda = document.getElementById('scheda');
-    const id = Number(new URLSearchParams(location.search).get('id'));
+    let id = Number(new URLSearchParams(location.search).get('id'));
     const el = (tag, classe, testo) => {
         const e = document.createElement(tag);
         if (classe) e.className = classe;
@@ -61,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rispondi = (risposta, minuti) => fetchApi(`/api/chiamate/${id}/risposta`, { method: 'POST', body: JSON.stringify({ risposta, minuti }) });
         if (c.stato !== 'arrivato' && c.stato !== 'congedato') {
             risposte.append(
-                bottone('Arrivo', 'largo', () => rispondi('arrivo')),
+                bottone('Arrivo subito', 'largo', () => rispondi('arrivo')),
                 bottone('Fra 30 minuti', 'button-secondary', () => rispondi('ritardo', 30)),
                 bottone("Fra un'ora", 'button-secondary', () => rispondi('ritardo', 60)),
                 bottone('Fra due ore', 'button-secondary', () => rispondi('ritardo', 120)),
@@ -76,9 +74,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         scheda.appendChild(risposte);
     }
 
+    // Aperta senza numero (dal menu, da un segnalibro): la chiamata aperta più
+    // recente per questa persona, se c'è.
     if (!Number.isInteger(id) || id <= 0) {
-        scheda.replaceChildren(el('p', '', 'Manca il numero della chiamata.'));
-        return;
+        let mie = [];
+        try { mie = await fetchApi('/api/chiamate/mie'); } catch { /* si dice sotto */ }
+        const aperta = (mie || []).find(c => ['senza_risposta', 'in_arrivo', 'arrivato'].includes(c.stato));
+        if (!aperta) {
+            scheda.classList.add('chiusa');
+            scheda.replaceChildren(el('p', '', 'In questo momento la sala non ti sta chiamando. Quando lo fa, ti arriva un avviso nell\'app o un\'email con il collegamento a questa pagina.'));
+            return;
+        }
+        id = aperta.id;
     }
     carica();
 });

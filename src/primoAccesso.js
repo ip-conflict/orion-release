@@ -1,5 +1,3 @@
-// src/primoAccesso.js
-//
 // La configurazione iniziale: il primo amministratore si crea dalla pagina di
 // accesso, non da setup.sh. Finché nel database non c'è un amministratore, la
 // pagina di accesso mostra il modulo "Configurazione iniziale".

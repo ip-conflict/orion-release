@@ -1,5 +1,3 @@
-// copy-libs.js
-//
 // Copia in public/ le librerie front-end installate con npm.
 // Viene eseguito automaticamente dopo ogni "npm install" (script postinstall),
 // quindi setup.sh e update.sh le rigenerano da soli senza passaggi manuali.

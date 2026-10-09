@@ -1,5 +1,3 @@
-// public/js/regia-co.js
-//
 // La simulazione nel centro operativo:
 //   - per tutti, la fascia SIMULAZIONE sotto l'intestazione e lo stato
 //     viola: nessuno la scambia per un'emergenza vera;
@@ -24,10 +22,12 @@
     @keyframes com-entra { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
     #simulazione-btn { color: #6d28d9; border-color: #6d28d9; }
     @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) .com-sala .com-testa, :root:not([data-theme="light"]) #simulazione-btn { color: #c4b5fd; }
+        :root:not([data-theme="light"]) .com-sala .com-testa { color: #c4b5fd; }
+        :root:not([data-theme="light"]) #simulazione-btn { color: #ede9fe; border-color: #a78bfa; background: rgba(167, 139, 250, .18); }
         :root:not([data-theme="light"]) .com-sala { border-color: #8b5cf6; }
     }
-    :root[data-theme="dark"] .com-sala .com-testa, :root[data-theme="dark"] #simulazione-btn { color: #c4b5fd; }
+    :root[data-theme="dark"] .com-sala .com-testa { color: #c4b5fd; }
+    :root[data-theme="dark"] #simulazione-btn { color: #ede9fe; border-color: #a78bfa; background: rgba(167, 139, 250, .18); }
     :root[data-theme="dark"] .com-sala { border-color: #8b5cf6; }
     .sv-velo { position: fixed; inset: 0; z-index: 5000; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
     .sv-finestra { background: var(--surface-color, #fff); color: var(--text-color, #111); border-radius: 12px; border-top: 6px solid #6d28d9; width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
@@ -223,8 +223,9 @@
 
     // --- La simulazione al volo ------------------------------------------------------
     // Senza passare dal calendario: un addestramento (o un'esercitazione) che
-    // comincia adesso, con chi lo apre nella regia, il copione di una vecchia
-    // simulazione se si vuole, e la sala aperta subito.
+    // comincia adesso, con chi lo apre nella regia, il copione di uno scenario
+    // preparato (pagina Simulazioni) o di una vecchia simulazione se si vuole,
+    // e la sala aperta subito.
     async function apriAlVolo() {
         const velo = el('div', 'sv-velo');
         const f = el('form', 'sv-finestra');
@@ -267,18 +268,43 @@
         document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { chiudi(); document.removeEventListener('keydown', esc); } });
         document.body.appendChild(velo);
         titolo.focus();
-        try {
-            for (const c of await fetchApi('/api/simulazioni/copioni')) {
-                copione.appendChild(new Option(`${data(c.inizio).toLocaleDateString('it-IT')} · ${c.titolo} (${c.eventi} ${c.eventi === 1 ? 'evento' : 'eventi'})`, c.id));
-            }
-        } catch { /* si parte senza */ }
+        // Le scelte: "s:N" uno scenario, "a:N" il copione di un'attività.
+        const eventi = (n) => `${n} ${n === 1 ? 'evento' : 'eventi'}`;
+        const scenariPronti = new Map();
+        const [scenari, copioni] = await Promise.all([
+            fetchApi('/api/simulazioni/scenari').catch(() => []),
+            fetchApi('/api/simulazioni/copioni').catch(() => [])
+        ]);
+        if (scenari.length) {
+            const g = document.createElement('optgroup'); g.label = 'Scenari preparati';
+            for (const s of scenari) { scenariPronti.set(`s:${s.id}`, s); g.appendChild(new Option(`${s.titolo} (${eventi(s.eventi)})`, `s:${s.id}`)); }
+            copione.appendChild(g);
+        }
+        if (copioni.length) {
+            const g = document.createElement('optgroup'); g.label = 'Simulazioni già fatte';
+            for (const c of copioni) g.appendChild(new Option(`${data(c.inizio).toLocaleDateString('it-IT')} · ${c.titolo} (${eventi(c.eventi)})`, `a:${c.id}`));
+            copione.appendChild(g);
+        }
+        // Uno scenario porta con sé natura, durata e testo, se non sono già scritti.
+        copione.addEventListener('change', () => {
+            const s = scenariPronti.get(copione.value);
+            if (!s) return;
+            f.querySelector(`input[name="sv-natura"][value="${s.natura}"]`).checked = true;
+            const h = String(Math.min(s.durata_ore, 24));
+            if (![...ore.options].some(o => o.value === h)) ore.appendChild(new Option(`${h} ore`, h));
+            ore.value = h;
+            if (!titolo.value.trim()) titolo.value = s.titolo;
+            if (!scenario.value.trim()) scenario.value = s.scenario || '';
+        });
         f.addEventListener('submit', async (e) => {
             e.preventDefault();
             apri.disabled = true;
             try {
                 const r = await fetchApi('/api/simulazioni/al-volo', { method: 'POST', body: JSON.stringify({
                     natura: f.querySelector('input[name="sv-natura"]:checked')?.value,
-                    titolo: titolo.value, ore: Number(ore.value), copia_da: copione.value || null, scenario: scenario.value
+                    titolo: titolo.value, ore: Number(ore.value), scenario: scenario.value,
+                    copia_da: copione.value.startsWith('a:') ? Number(copione.value.slice(2)) : null,
+                    copia_scenario: copione.value.startsWith('s:') ? Number(copione.value.slice(2)) : null
                 }) });
                 chiudi();
                 notifica(`Simulazione ${r.emergency?.code || ''} aperta${r.copiati ? `, con ${r.copiati} eventi nel copione` : ''}: avvia lo scenario dalla regia quando la sala è pronta.`, 'successo');

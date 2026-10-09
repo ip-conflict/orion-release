@@ -1,5 +1,3 @@
-// public/js/fogli-attivazione.js
-//
 // I fogli di attivazione da stampare: uno per volontario, con nome, username,
 // il QR del suo link e tre righe di istruzioni. Per i gruppi senza posta
 // configurata, o per chi non ha un'email: si consegnano in mano alla prima

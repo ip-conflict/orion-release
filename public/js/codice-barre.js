@@ -1,5 +1,3 @@
-// public/js/codice-barre.js
-//
 // Il codice a barre Code 128 (set B) di un testo: lettere, cifre e
 // punteggiatura ASCII. Serve al retro del tesserino, per il codice fiscale:
 // 16 caratteri in 211 moduli, che ogni lettore di codici a barre legge.

@@ -1,10 +1,5 @@
-// src/statoInformativa.js
-//
-// La versione in vigore delle condizioni d'uso, tenuta in memoria: il
-// controllo d'accesso la confronta a ogni richiesta con quella accettata
-// dall'utente. Si legge all'avvio e cambia quando l'amministratore pubblica un
-// testo nuovo. (Il nome viene da quando c'era anche l'informativa sul
-// trattamento dei dati.)
+// La versione in vigore delle condizioni d'uso, tenuta in memoria: il controllo
+// d'accesso la confronta a ogni richiesta con quella accettata dall'utente.
 
 import logger from './logger.js';
 import { pool } from './db.js';

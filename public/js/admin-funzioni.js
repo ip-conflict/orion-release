@@ -1,5 +1,3 @@
-// public/js/admin-funzioni.js
-//
 // Funzioni di supporto, per l'amministratore: quali sono accese, come si
 // chiamano e chi ne fa parte (con il referente). La stessa pagina vale prima
 // di accendere il modulo: le funzioni si preparano in tempo di pace.
@@ -30,7 +28,7 @@
 
     async function carica() {
         try {
-            const [dati, tutti] = await Promise.all([fetchApi('/api/admin/funzioni'), fetchApi('/api/admin/users')]);
+            const [dati, tutti] = await Promise.all([fetchApi('/api/admin/funzioni'), fetchApi('/api/admin/funzioni/persone')]);
             document.getElementById('fz-spento').hidden = dati.attivo;
             funzioni = dati.funzioni;
             // Si propongono le persone attive: interne, esterne e temporanee.
@@ -51,7 +49,7 @@
         interruttore.addEventListener('change', () => salva(f, { ...f, attiva: interruttore.checked }));
         const membri = el('div', { class: 'fz-membri' },
             f.membri.length ? f.membri.map(m => chipMembro(f, m)) : el('span', { class: 'fz-vuoto', testo: 'Nessun membro.' }));
-        const casella = el('input', { type: 'text', list: 'fz-utenti', placeholder: 'Aggiungi una persona: scrivi nome, cognome o nome utente', 'aria-label': `Aggiungi un membro alla ${f.sigla}` });
+        const casella = el('input', { type: 'text', list: 'fz-utenti', placeholder: 'Scrivi un nome per aggiungerlo', 'aria-label': `Aggiungi un membro alla ${f.sigla}` });
         const aggiungi = el('button', { type: 'button', class: 'button-style button-small button-secondary', testo: 'Aggiungi', suClick: () => aggiungiMembro(f, casella) });
         casella.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); aggiungiMembro(f, casella); } });
         const scheda = el('div', { class: `fz-funzione${f.attiva ? '' : ' spenta'}` },

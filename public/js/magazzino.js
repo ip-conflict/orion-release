@@ -1,5 +1,3 @@
-// public/js/magazzino.js
-//
 // Le quattro cose che servono davvero: consegna, rientro, chi ha cosa, cosa
 // scade e cosa manca. Il resto (anagrafica, impostazioni) sta in una quinta
 // scheda che vede solo il magazziniere.
@@ -12,6 +10,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
 
+    // "1 pezzo", "3 pezzi": le altre unità (paia, litri, kit) restano come sono.
+    const unitaDi = (n, unita) => (Number(n) === 1 && unita === 'pezzi' ? 'pezzo' : unita || '');
     const ETICHETTE_FAMIGLIA = { dpi: 'DPI', attrezzatura: 'Attrezzatura', veicolo: 'Veicolo' };
     const GRUPPI_TAGLIA = { busto: 'taglie del busto', pantaloni: 'taglie dei pantaloni', scarpe: 'taglie delle scarpe' };
     const ETICHETTE_SCADENZA = {
@@ -77,14 +77,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let beneCorrente = null;
 
     // Servizio
-    // Con un'azione (per esempio "Stampa il verbale") l'avviso resta finché
-    // non si fa altro: sparendo da solo dopo sei secondi, il link si perdeva.
+    // Con un'azione (per esempio "Stampa il verbale") l'avviso resta finché non
+    // si fa altro, così il link non si perde.
     let timerAvviso = null;
     function avvisa(testo, genere = 'avviso', azione = null) {
         const box = $('avviso-magazzino');
         box.className = `avviso ${genere === 'avviso' ? '' : genere}`.trim();
         box.textContent = testo;
-        if (azione) {
+        if (azione && azione.fai) {
+            // Un'azione nella pagina (per esempio "Consegna questo"), non un collegamento.
+            const bottone = document.createElement('button');
+            bottone.type = 'button';
+            bottone.className = 'azione-avviso';
+            bottone.textContent = azione.testo;
+            bottone.addEventListener('click', azione.fai);
+            box.appendChild(bottone);
+        } else if (azione) {
             const link = document.createElement('a');
             link.className = 'azione-avviso';
             link.href = azione.href;
@@ -99,6 +107,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function nascondiAvviso() { $('avviso-magazzino').hidden = true; }
+
+    // La fotocamera di Android apre il QR dell'etichetta nel browser: se
+    // l'associazione distribuisce l'app, si offre di aprirlo lì. L'app sa da
+    // sola se mostrare la scheda o partire con la consegna.
+    async function offriApp(codice) {
+        if (!/Android/i.test(navigator.userAgent || '')) return;
+        try {
+            const offerta = await fetchApi('/api/app/offerta');
+            if (!offerta?.disponibile) return;
+        } catch { return; }
+        $('link-apri-in-app').href = `orionmobile://bene?server=${encodeURIComponent(window.location.origin)}&e=${encodeURIComponent(codice)}`;
+        $('apri-in-app').hidden = false;
+    }
 
     function dataBreve(valore) {
         if (!valore) return '';
@@ -197,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Il materiale si consegna a una persona.
     function riempiDestinatari() {
         const select = $('destinatario');
+        const prima = select.value;
         select.innerHTML = '';
         const voci = stato.persone.map(u => [u.id, u.etichetta]);
 
@@ -204,12 +226,16 @@ document.addEventListener('DOMContentLoaded', () => {
             select.innerHTML = '<option value="">(nessuno disponibile)</option>';
             return;
         }
+        // Nessuno scelto di partenza: chi ha fretta non deve consegnare per
+        // sbaglio alla prima persona dell'elenco.
+        select.innerHTML = '<option value="">Scegli la persona…</option>';
         voci.forEach(([id, testo]) => {
             const o = document.createElement('option');
             o.value = id;
             o.textContent = testo;
             select.appendChild(o);
         });
+        if (prima && voci.some(([id]) => String(id) === prima)) select.value = prima;
         aggiornaRigaVerbale();
         caricaTagliePersona();
     }
@@ -271,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         disegnaConsegnabili();
     }
     $('destinatario').addEventListener('change', caricaTagliePersona);
+    $('destinatario').addEventListener('change', () => aggiornaRiepilogoConsegna());
     // 'sua' se l'ha già ricevuta per questo DPI, 'probabile' se viene da un altro.
     const taglieUguali = (a, b) => String(a).trim().toUpperCase() === String(b).trim().toUpperCase();
     function suaTaglia(b) {
@@ -326,6 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
         quantita.min = quantita.step;
         quantita.max = String(quantitaDisponibile(bene));
         quantita.value = stato.scelti.get(bene.id) ?? 1;
+        // Sta dentro l'etichetta della spunta, che dà il nome solo a lei.
+        quantita.setAttribute('aria-label', `Quanti: ${bene.denominazione}${bene.taglia ? `, taglia ${bene.taglia}` : ''}`);
         quantita.addEventListener('click', e => e.preventDefault());
         quantita.addEventListener('input', () => {
             if (stato.scelti.has(bene.id)) stato.scelti.set(bene.id, Number(quantita.value));
@@ -347,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dettagli.innerHTML = '<span class="nome-bene"></span><span class="sottotesto"></span>';
         dettagli.querySelector('.nome-bene').textContent = primo.denominazione;
         dettagli.querySelector('.sottotesto').textContent =
-            [primo.categoria, `${totale} ${primo.unita_misura} disponibili`].filter(Boolean).join(' · ');
+            [primo.categoria, `${totale} ${unitaDi(totale, primo.unita_misura)} disponibili`].filter(Boolean).join(' · ');
         const famiglia = document.createElement('span');
         famiglia.className = 'etichetta-famiglia';
         famiglia.textContent = ETICHETTE_FAMIGLIA[primo.tipo] || primo.tipo;
@@ -363,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pulsante.type = 'button';
             pulsante.className = 'taglia-consegna' + (segno ? ` ${segno}` : '') + (stato.scelti.has(bene.id) ? ' scelta' : '');
             pulsante.setAttribute('aria-pressed', String(stato.scelti.has(bene.id)));
-            pulsante.title = `${quantitaDisponibile(bene)} ${bene.unita_misura} disponibili`;
+            pulsante.title = `${quantitaDisponibile(bene)} ${unitaDi(quantitaDisponibile(bene), bene.unita_misura)} disponibili`;
             pulsante.innerHTML = '<span></span><small></small>';
             pulsante.querySelector('span').textContent = bene.taglia;
             pulsante.querySelector('small').textContent = quantitaDisponibile(bene);
@@ -412,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dettagli = document.createElement('div');
         dettagli.className = 'dettagli';
         const disponibile = quantitaDisponibile(bene);
-        const quanti = bene.gestione === 'quantita' ? ` — ${disponibile} ${bene.unita_misura} disponibili` : '';
+        const quanti = bene.gestione === 'quantita' ? ` — ${disponibile} ${unitaDi(disponibile, bene.unita_misura)} disponibili` : '';
         dettagli.innerHTML = `<span class="nome-bene"></span><span class="sottotesto"></span>`;
         dettagli.querySelector('.nome-bene').textContent = bene.denominazione;
         dettagli.querySelector('.sottotesto').textContent = `${descriviBene(bene)}${quanti}`;
@@ -456,10 +485,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const righe = [...stato.scelti.entries()].map(([id, q]) => {
             const bene = stato.beni.find(b => b.id === id);
             if (!bene) return '';
-            return bene.gestione === 'quantita' ? `${nomeConTaglia(bene)} x${q} ${bene.unita_misura}` : nomeConTaglia(bene);
+            return bene.gestione === 'quantita' ? `${nomeConTaglia(bene)}, ${q} ${unitaDi(q, bene.unita_misura)}` : nomeConTaglia(bene);
         });
-        riepilogo.textContent = righe.join(', ');
-        $('btn-consegna').disabled = false;
+        const scelta = $('destinatario').selectedOptions[0];
+        const persona = scelta && scelta.value;
+        const a = persona ? `A ${scelta.textContent.trim()}: ` : 'Manca a chi va: ';
+        riepilogo.textContent = a + righe.filter(Boolean).join(' · ');
+        $('btn-consegna').disabled = !persona;
     }
 
     $('cerca-consegna').addEventListener('input', disegnaConsegnabili);
@@ -530,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('detentore-rientro').addEventListener('change', async () => {
         stato.rientranti.clear();
         $('btn-rientro').disabled = true;
+        $('riepilogo-rientro').textContent = 'Nessun oggetto scelto.';
         const scelta = $('detentore-rientro').value;
         const contenitore = $('elenco-rientro');
         // Come per la consegna, il verbale lo firma una persona: una squadra
@@ -570,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dettagli.innerHTML = `<span class="nome-bene"></span><span class="sottotesto"></span>`;
             dettagli.querySelector('.nome-bene').textContent = bene.denominazione;
             const quanti = bene.gestione === 'quantita'
-                ? `${Number(bene.quantita)} ${bene.unita_misura} usciti`
+                ? `${Number(bene.quantita)} ${unitaDi(Number(bene.quantita), bene.unita_misura)} usciti`
                 : (bene.matricola || '');
             dettagli.querySelector('.sottotesto').textContent =
                 `${quanti}${bene.da_quando ? ` · dal ${dataBreve(bene.da_quando)}` : ''}`;
@@ -587,6 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 quantita.step = passo(bene.unita_misura);
                 quantita.max = String(Number(bene.quantita));
                 quantita.value = Number(bene.quantita);
+                quantita.setAttribute('aria-label', `Quanti ne tornano: ${bene.denominazione}`);
                 quantita.addEventListener('click', e => e.preventDefault());
                 quantita.addEventListener('input', aggiornaRientranti);
                 riga.appendChild(quantita);
@@ -614,6 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 km.type = 'number';
                 km.min = '0';
                 km.placeholder = 'km';
+                km.setAttribute('aria-label', `Chilometri al rientro: ${bene.denominazione}`);
                 km.addEventListener('click', e => e.preventDefault());
                 km.addEventListener('input', aggiornaRientranti);
                 riga.appendChild(km);
@@ -644,7 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const scelto = resto.value;
                     const persona = $('detentore-rientro').value.startsWith('persona:');
                     resto.innerHTML = '';
-                    [['', `Il resto (${mancano} ${bene.unita_misura})…`],
+                    [['', `Il resto (${mancano} ${unitaDi(mancano, bene.unita_misura)})…`],
                      ['in_carico', persona ? 'restano a questa persona' : 'restano in carico'],
                      ['consumo', 'usati sul posto'],
                      ['perso', 'persi']].forEach(([valore, testo]) => {
@@ -666,7 +701,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 resto: resto && !resto.hidden ? resto.value || undefined : undefined
             });
         });
-        $('btn-rientro').disabled = stato.rientranti.size === 0 || mancaScelta;
+        const quanti = stato.rientranti.size;
+        $('riepilogo-rientro').textContent = !quanti ? 'Nessun oggetto scelto.'
+            : mancaScelta ? 'Scegli cosa ne è del materiale che non torna, nella riga in giallo.'
+            : quanti === 1 ? 'Torna 1 oggetto.' : `Tornano ${quanti} oggetti.`;
+        $('btn-rientro').disabled = quanti === 0 || mancaScelta;
         $('btn-rientro').title = mancaScelta ? 'Scegli cosa ne è del materiale che non torna' : '';
         aggiornaRigaVerbaleRientro();
     }
@@ -768,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const elenco = document.createElement('ul');
             cose.forEach(c => {
                 const li = document.createElement('li');
-                const quantita = c.gestione === 'quantita' ? ` x${Number(c.quantita)} ${c.unita_misura}` : '';
+                const quantita = c.gestione === 'quantita' ? ` x${Number(c.quantita)} ${unitaDi(Number(c.quantita), c.unita_misura)}` : '';
                 const matricola = c.matricola ? ` (${c.matricola})` : '';
                 // La taglia: è quella che serve per sostituirlo o riconsegnarne uno uguale.
                 const taglia = c.taglia && c.taglia !== 'Unica' ? ` · taglia ${c.taglia}` : '';
@@ -938,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dettagli.innerHTML = `<span class="nome-bene"></span><span class="sottotesto"></span>`;
             dettagli.querySelector('.nome-bene').textContent = bene.denominazione;
             const dove = bene.disponibile
-                ? (bene.gestione === 'quantita' ? `${Number(bene.in_magazzino)} ${bene.unita_misura} in magazzino` : 'in magazzino')
+                ? (bene.gestione === 'quantita' ? `${Number(bene.in_magazzino)} ${unitaDi(Number(bene.in_magazzino), bene.unita_misura)} in magazzino` : 'in magazzino')
                 : `presso ${bene.destinatario_nome || 'destinatario non indicato'}`;
             dettagli.querySelector('.sottotesto').textContent = `${descriviBene(bene)} — ${dove}`;
 
@@ -1021,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const fuori = m.varianti.reduce((t, v) => t + Number(v.fuori || 0), 0);
         const totale = document.createElement('div');
         totale.className = 'totale';
-        totale.textContent = `${numero(inCasa)} ${m.unita_misura}` + (fuori ? ` · ${numero(fuori)} fuori` : '');
+        totale.textContent = `${numero(inCasa)} ${unitaDi(numero(inCasa), m.unita_misura)}` + (fuori ? ` · ${numero(fuori)} fuori` : '');
         testa.append(titolo, totale);
 
         // Una casella per taglia, nell'ordine del modello. Toccandola si apre
@@ -1185,7 +1224,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const esito = await fetchApi(`/api/magazzino/modelli/${modello.id}/carico`, {
                     method: 'POST', body: JSON.stringify({ quantita, note: $('modello-nota').value.trim() || null })
                 });
-                return dopoModello(`${modello.nome}: caricati ${numero(esito.caricati)} ${modello.unita_misura}.`);
+                return dopoModello(`${modello.nome}: caricati ${numero(esito.caricati)} ${unitaDi(numero(esito.caricati), modello.unita_misura)}.`);
             }
             const corpo = {
                 nome: $('modello-nome').value.trim(),
@@ -1705,6 +1744,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mesi.min = '1';
             mesi.max = '120';
             mesi.placeholder = 'mesi';
+            mesi.setAttribute('aria-label', 'Ogni quanti mesi si ripete');
             mesi.dataset.periodicita = tipo;
             if (valori[tipo]?.periodicita_mesi) mesi.value = valori[tipo].periodicita_mesi;
 
@@ -1911,6 +1951,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const soloSfusi = b.dataset.movimento === 'rettifica' && bene.gestione !== 'quantita';
                     b.hidden = dismesso || soloSfusi;
                 });
+                $('btn-consegna-bene').hidden = !consegnabile(bene.id);
                 $('link-etichetta-bene').href = `/magazzino-etichette.html?ids=${bene.id}`;
                 $('link-etichetta-bene').hidden = dismesso || !bene.codice_etichetta;
                 if (dismesso) {
@@ -1927,6 +1968,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function chiudiModaleBene() { $('modale-bene').hidden = true; }
+
+    // "Consegna questo": dalla scheda di un bene, o dal QR della sua etichetta,
+    // la consegna si apre con il bene già scelto. Resta da dire a chi va.
+    function consegnabile(id) {
+        return consegnaERientra && stato.beni.some(b => b.id === id && b.disponibile && !b.dismesso_il && quantitaDisponibile(b) > 0);
+    }
+    function consegnaQuesto(id) {
+        const bene = stato.beni.find(b => b.id === id);
+        if (!consegnabile(id) || !bene) {
+            avvisa('Questo oggetto ora non è disponibile in magazzino: non si può consegnare.', 'errore');
+            return;
+        }
+        chiudiModaleBene();
+        apriScheda('consegna');
+        // Si consegna da qui: l'offerta di aprirlo nell'app non serve più.
+        $('apri-in-app').hidden = true;
+        $('cerca-consegna').value = '';
+        stato.scelti.set(id, 1);
+        disegnaConsegnabili();
+        aggiornaRiepilogoConsegna();
+        avvisa(`${nomeConTaglia(bene)} è già nella consegna: scegli a chi va e registra.`, 'fatto');
+        $('destinatario').focus();
+    }
+    $('btn-consegna-bene').addEventListener('click', () => {
+        const id = Number($('bene-id').value);
+        if (id) consegnaQuesto(id);
+    });
     $('chiudi-modale-bene').addEventListener('click', chiudiModaleBene);
     $('annulla-bene').addEventListener('click', chiudiModaleBene);
 
@@ -1975,11 +2043,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Movimenti sulla scheda di un bene
-    // Queste operazioni avevano l'API ma nessun pulsante: il magazziniere non
-    // aveva modo di buttare un DPI scaduto, mandare una motosega in officina o
-    // correggere una giacenza dopo un inventario. Stanno tutte qui, sulla
-    // scheda del bene, perché è lì che uno le pensa.
+    // Movimenti sulla scheda di un bene: dismissione, manutenzione,
+    // smarrimento, rettifica.
     const MOVIMENTI = {
         carico: {
             titolo: 'Quante unità entrano in magazzino',
@@ -2210,6 +2275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const codice = parametri.get('e');
         const idDiretto = parseInt(parametri.get('bene'), 10);
+        if (codice && (sonoMagazziniere || consegnaERientra)) offriApp(codice);
         if (codice || idDiretto) {
             try {
                 const id = idDiretto || (await fetchApi(`/api/magazzino/etichetta/${encodeURIComponent(codice)}`)).id;
@@ -2225,7 +2291,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const dove = bene.disponibile
                         ? 'in magazzino'
                         : `presso ${bene.destinatario_nome || 'un detentore non indicato'}`;
-                    avvisa(`${bene.denominazione}${bene.matricola ? ` (${bene.matricola})` : ''} — ${dove}.`);
+                    avvisa(`${bene.denominazione}${bene.matricola ? ` (${bene.matricola})` : ''} — ${dove}.`, 'avviso',
+                        consegnabile(id) ? { testo: 'Consegna questo', fai: () => consegnaQuesto(id) } : null);
                     // E il suo libretto, che è l'altra cosa che si cerca col bene in mano.
                     $('documenti-qr').hidden = !(await disegnaDocumentiBene(bene.id, $('documenti-qr')));
                 }

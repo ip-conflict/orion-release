@@ -1,5 +1,3 @@
-// src/resoconto.js
-//
 // Il resoconto testuale di un'emergenza, scritto alla chiusura.
 
 import './config.js';
@@ -117,7 +115,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             WHERE r.emergency_id = $1 GROUP BY i.report_id`, [emergencyId]),
         pool.query(`
             SELECT d.original_filename, d.description, d.uploaded_at,
-                   CONCAT(u.nome, ' ', u.cognome) AS autore
+                   COALESCE(NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), ''), 'ORION') AS autore
             FROM emergency_documents d LEFT JOIN users u ON d.uploader_user_id = u.id
             WHERE d.emergency_id = $1 ORDER BY d.uploaded_at ASC`, [emergencyId]),
         // Le operazioni fra apertura e chiusura, senza quelle sui DPI: sono la

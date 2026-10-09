@@ -1,5 +1,3 @@
-// public/js/primo-accesso.js
-//
 // La configurazione iniziale nella pagina di accesso: finché il server non ha
 // un amministratore, al posto dell'accesso compare il modulo per crearlo.
 

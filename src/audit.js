@@ -1,5 +1,3 @@
-// src/audit.js
-//
 // Il registro delle operazioni: chi ha modificato o eliminato dati condivisi.
 // Se la scrittura fallisce lo si annota nel log, ma l'operazione dell'utente,
 // già fatta, non fallisce per questo.

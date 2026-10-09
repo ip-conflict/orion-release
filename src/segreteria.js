@@ -1,5 +1,3 @@
-// src/segreteria.js
-//
 // Il fascicolo dei volontari: visite, corsi, cataloghi, tesserino.
 
 import crypto from 'crypto';
@@ -200,8 +198,13 @@ export function registraRotteSegreteria(app) {
         }
     });
 
+    // Prima del caricamento: con un indirizzo sbagliato il file non va salvato.
+    const idPersonaValido = (req, res, next) => (/^[1-9]\d{0,9}$/.test(req.params.userId)
+        ? next() : res.status(400).json({ message: 'Persona non valida.' }));
+
     app.post('/api/admin/users/:userId/medical-records', 
         checkSegreteriaAccess, 
+        idPersonaValido,
         uploadCertificate.single('document'), 
         async (req, res) => {
             if (!(await verifyCertificateUpload(req, res))) return;
@@ -242,6 +245,7 @@ export function registraRotteSegreteria(app) {
 
     app.post('/api/admin/users/:userId/courses', 
         checkSegreteriaAccess, 
+        idPersonaValido,
         uploadCertificate.single('document'),
         async (req, res) => {
             if (!(await verifyCertificateUpload(req, res))) return;

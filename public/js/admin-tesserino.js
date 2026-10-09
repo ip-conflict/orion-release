@@ -1,5 +1,3 @@
-// public/js/admin-tesserino.js
-//
 // Impostazioni › Aspetto del tesserino: il configuratore. L'anteprima è
 // disegnata dallo stesso motore della stampa (tesserino.js), con dati di
 // esempio e i loghi veri; si trascinano gli elementi, si cambiano misure,

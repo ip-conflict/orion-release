@@ -1,5 +1,3 @@
-// src/allineaMigrazioni.js
-//
 // Dalla 1.0 le 37 migrazioni della numerazione interna 3.x sono una sola,
 // la base della 1.0 (BASE_1_0 qui sotto). Un database nato prima (un'installazione di prova, un
 // backup vecchio) ha ancora le 37 righe in pgmigrations: se c'e' l'ultima,

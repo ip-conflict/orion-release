@@ -123,7 +123,7 @@
                                 </div>
                                 <label class="option-card" style="cursor: pointer;">
                                     <div style="display: flex; flex-direction: column; gap: 4px; padding-right: 20px;">
-                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Report Mensile Segreteria</span>
+                                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color);">Riepilogo mensile della segreteria</span>
                                         <span style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">Invia ad amministratori e segreteria un riepilogo ogni 1° del mese con lo storico (-3 mesi) e le previsioni (+3 mesi).</span>
                                     </div>
                                     <div class="modern-toggle">
@@ -273,7 +273,7 @@
                                 Tesserino di Riconoscimento
                             </h3>
                             <p style="margin: 0 0 14px 0; font-size: 0.85rem; color: var(--text-muted);">Dati usati per impaginare il tesserino fisico (formato CR80) stampabile dalla scheda del volontario in Segreteria.</p>
-                            <a href="/admin/tesserino.html" class="button-style button-secondary" style="display: inline-flex; gap: 8px; align-items: center; text-decoration: none; margin-bottom: 20px;"><i class="fas fa-palette"></i> Personalizza l'aspetto: colori, posizioni, misure</a>
+                            <a href="/admin/tesserino.html" class="button-style button-secondary" style="display: inline-flex; gap: 8px; align-items: center; text-decoration: none; margin-bottom: 20px; max-width: 100%; white-space: normal; box-sizing: border-box;"><i class="fas fa-palette"></i> Personalizza l'aspetto: colori, posizioni, misure</a>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                                 <div>
@@ -333,6 +333,40 @@
 
                         <hr style="margin: 30px 0; border-color: var(--border-light-color);">
 
+                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Bollettino di allerta</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Il colore dell'allerta meteo-idro di oggi e domani nella zona del Comune, nel centro operativo. Con un'emergenza aperta ogni versione del bollettino entra da sola nei documenti dell'emergenza. Finché non scegli la Regione ORION non lo legge.</p>
+
+                        <div class="form-group">
+                            <label for="allerta-regione" style="color: var(--text-color); font-weight: 600;">Regione</label>
+                            <select id="allerta-regione" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                <option value="">Spento</option>
+                            </select>
+                        </div>
+                        <div id="allerta-dettagli" hidden>
+                            <div class="form-group">
+                                <label for="allerta-comune" style="color: var(--text-color); font-weight: 600;">Comune di riferimento</label>
+                                <select id="allerta-comune" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                    <option value="">Dal centro della mappa</option>
+                                </select>
+                                <small id="allerta-zona" style="display: block; margin-top: 6px; color: var(--text-muted); font-size: 0.85rem;"></small>
+                            </div>
+                            <div class="form-group">
+                                <label for="allerta-avvisa-da" style="color: var(--text-color); font-weight: 600;">Avvisa chi apre le emergenze</label>
+                                <select id="allerta-avvisa-da" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                    <option value="arancione">Da allerta arancione</option>
+                                    <option value="gialla">Da allerta gialla</option>
+                                    <option value="mai">Mai</option>
+                                </select>
+                                <small style="display: block; margin-top: 6px; color: var(--text-muted); font-size: 0.85rem;">Una notifica nell'app quando un bollettino nuovo porta la zona a questo livello, oggi o domani.</small>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <button type="button" id="allerta-leggi" class="button-style button-secondary">Leggi il bollettino ora</button>
+                                <small id="allerta-esito" style="color: var(--text-muted); font-size: 0.85rem;"></small>
+                            </div>
+                        </div>
+
+                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
+
                         <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Configurazione Email (SMTP)</h3>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Serve per le email di attivazione degli account, il recupero della password e gli avvisi delle scadenze.</p>
 
@@ -366,7 +400,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="smtp-user">Email Mittente / Username</label>
+                            <label for="smtp-user">Email del mittente (o nome utente del server di posta)</label>
                             <input type="email" id="smtp-user" name="smtp_user" placeholder="Es. associazione@dominio.it" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
                         </div>
 
@@ -403,7 +437,7 @@
                     <details id="privacy-testi" style="margin-bottom: 16px;">
                         <summary style="cursor: pointer; font-weight: 600;">Riscrivere il testo</summary>
                         <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Lasciate vuoto il campo per usare il testo proposto da ORION. Formato: una riga che inizia con «# » è il titolo, con «## » un capitolo, una riga vuota separa i paragrafi.</p>
-                        <textarea id="privacy-testo-condizioni" rows="14" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font: 0.85rem/1.5 ui-monospace, monospace;"></textarea>
+                        <textarea id="privacy-testo-condizioni" aria-label="Testo delle condizioni d'uso" rows="14" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font: 0.85rem/1.5 ui-monospace, monospace;"></textarea>
                         <button type="button" class="button-style button-secondary" id="privacy-usa-predefinite" style="margin-top: 6px;">Parti dal testo proposto</button>
                     </details>
                     <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
@@ -422,7 +456,7 @@
                     <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Livelli del piano sulla mappa</h2>
                     <p style="margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Zone di pericolosità e aree d'emergenza del piano comunale, sempre visibili nel centro operativo come livelli da accendere e spegnere. Da QGIS: tasto destro sul livello, <em>Esporta › Salva elementi come…</em>, formato <strong>GeoJSON</strong> (o KML) e sistema di riferimento <strong>EPSG:4326 - WGS 84</strong>. Un file per tipo: per esempio tutte le aree a pericolosità idraulica in un file, le aree di attesa in un altro. Si possono anche disegnare a mano dalla mappa del centro operativo.</p>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                        <input type="file" id="piano-file" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml">
+                        <input type="file" id="piano-file" aria-label="File delle zone del piano di emergenza" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml">
                     </div>
                     <div id="piano-anteprima" hidden style="margin-top: 14px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-color);">
                         <p id="piano-letto" style="margin: 0 0 10px; font-weight: 600;"></p>
@@ -449,7 +483,7 @@
                     <p style="margin: 0 0 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Le mappe stradale e satellite arrivano da internet: se la linea cade, la mappa resta grigia anche se il server si raggiunge. Caricate qui la cartografia del vostro territorio in un file <strong>MBTiles</strong> a tasselli raster (PNG, JPG o WEBP) e le mappe di ORION la useranno come fondo «Territorio (dal server)», passandoci da sole quando internet non risponde. Da QGIS: <em>Processing › Strumenti › Genera tasselli raster XYZ (MBTiles)</em>, sull'estensione del comune, zoom da 10 a 17 (fino a 18 per i centri abitati). Non si scaricano in blocco i tasselli di OpenStreetMap: lo vietano le regole dei loro server.</p>
                     <div id="carto-stato" style="font-size: 0.9rem; margin-bottom: 10px;"></div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                        <input type="file" id="carto-file" accept=".mbtiles">
+                        <input type="file" id="carto-file" aria-label="File della cartografia del territorio" accept=".mbtiles">
                         <button type="button" id="carto-togli" class="button-style button-secondary" hidden>Togli la cartografia</button>
                     </div>
                     <div id="carto-avanzamento" hidden style="margin-top: 10px;">
@@ -470,7 +504,7 @@
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px;">
                         <input type="text" id="audit-filter-username" placeholder="Filtra per utente..."
                                style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); min-width: 200px;">
-                        <select id="audit-filter-action"
+                        <select id="audit-filter-action" aria-label="Filtra per azione"
                                style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
                             <option value="">Tutte le operazioni</option>
                             <option value="squadra.creata">Squadra creata</option>

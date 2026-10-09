@@ -1,6 +1,3 @@
-// src/db.js
-//
-// La connessione a PostgreSQL.
 
 import './config.js';
 import logger from './logger.js';
@@ -8,9 +5,8 @@ import pg from 'pg';
 
 const { Pool, types } = pg;
 
-// Date e orari restano testo, come li scrive PostgreSQL. Per le date senza ora
-// è necessario: un oggetto Date a mezzanotte italiana diventa in JSON il giorno
-// prima alle 22:00 UTC, e il web mostrava la scadenza sbagliata di un giorno.
+// Date e orari restano testo, come li scrive PostgreSQL: un Date a mezzanotte
+// italiana in JSON diventerebbe il giorno prima alle 22:00 UTC.
 types.setTypeParser(types.builtins.TIMESTAMPTZ, (val) => val);
 types.setTypeParser(types.builtins.DATE, (val) => val);
 

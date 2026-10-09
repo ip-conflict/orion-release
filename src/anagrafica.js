@@ -1,5 +1,3 @@
-// src/anagrafica.js
-//
 // Nomi utente, password temporanee e importazione dei volontari da un foglio.
 
 import ExcelJS from 'exceljs';

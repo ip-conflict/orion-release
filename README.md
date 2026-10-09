@@ -545,8 +545,9 @@ Il dettaglio delle scelte è in `docs/manutenzione-backup-e-aggiornamenti.md`.
 
 ### Documentazione
 
-Il manuale d'uso operativo, per chi usa ORION ogni giorno, è in
-`docs/manuale-uso.md`. Il manuale tecnico, per chi installa, mantiene e
+I manuali d'uso, per chi usa ORION ogni giorno, sono due: `docs/manuale-web.md`
+per il browser e `docs/manuale-app.md` per l'app Android, con le immagini in
+`docs/immagini`. Il manuale tecnico, per chi installa, mantiene e
 sviluppa, è in `docs/manuale-tecnico.md`. La lista delle prove da fare su
 telefoni veri prima di una messa in produzione è in `docs/collaudo.md`.
 

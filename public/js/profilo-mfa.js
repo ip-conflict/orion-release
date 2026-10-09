@@ -1,5 +1,3 @@
-// public/js/profilo-mfa.js
-//
 // La verifica in due passaggi nel profilo, sezione Sicurezza: attivarla,
 // passare a un telefono nuovo, rifare i codici di riserva, toglierla (solo chi
 // non è amministratore). Ogni operazione chiede prima la password.

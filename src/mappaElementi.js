@@ -1,5 +1,3 @@
-// src/mappaElementi.js
-//
 // Le zone e le strade disegnate sulla mappa.
 //   Del piano (emergency_id NULL): zone di pericolosità, aree di attesa, di
 //   accoglienza, di ammassamento. Restano fra un'emergenza e l'altra; le

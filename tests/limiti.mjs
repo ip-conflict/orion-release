@@ -22,7 +22,8 @@ function verifica(descrizione, condizione, dettaglio = '') {
 // Stesso ordine di server.js: guardia per rete, autenticazione, limite per persona.
 const app = express();
 app.set('trust proxy', 1);
-app.post('/login', passwordLimiter, (req, res) => res.json({ ok: true }));
+// Il login finto: la password giusta è "giusta".
+app.post('/login', express.json(), passwordLimiter, (req, res) => req.body?.password === 'giusta' ? res.json({ ok: true }) : res.status(401).json({ message: 'Credenziali non valide.' }));
 app.use('/api/', limitePerRete);
 app.use((req, res, next) => {
     const utente = req.get('X-Utente-Finto');
@@ -81,14 +82,18 @@ try {
     verifica('più posizioni del limite, di fila, passano tutte', posizioni.every(s => s === 200), `${posizioni.filter(s => s !== 200).length} rifiutate`);
     verifica('e il limite della persona e\' intatto', (await chiedi('/api/qualcosa', { utente: 3 })) === 200);
 
-    console.log('\n[5] Il login si conta per rete, anche IPv6');
+    console.log('\n[5] Il login si conta per rete, anche IPv6, e solo quando sbaglia');
+    const accedi = (ip, password) => fetch(`${base}/login`, { method: 'POST', headers: { 'X-Forwarded-For': ip, 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const giusti = [];
+    for (let i = 0; i < 150; i++) giusti.push((await accedi(`2001:db8:ee:ff::${(i + 1).toString(16)}`, 'giusta')).status);
+    verifica('centocinquanta accessi giusti dalla stessa rete passano tutti (una sala che entra insieme)', giusti.every(s => s === 200), giusti.filter(s => s !== 200).length);
     const tentativi = [];
-    for (let i = 0; i < 100; i++) {
-        tentativi.push((await fetch(`${base}/login`, { method: 'POST', headers: { 'X-Forwarded-For': `2001:db8:cc:dd::${(i + 1).toString(16)}` } })).status);
-    }
-    const oltre = (await fetch(`${base}/login`, { method: 'POST', headers: { 'X-Forwarded-For': '2001:db8:cc:dd::abcd' } })).status;
-    verifica('cento tentativi da indirizzi diversi della stessa rete, poi stop',
-        tentativi.every(s => s === 200) && oltre === 429, `ultimo ${oltre}`);
+    for (let i = 0; i < 100; i++) tentativi.push((await accedi(`2001:db8:cc:dd::${(i + 1).toString(16)}`, 'sbagliata')).status);
+    const r = await accedi('2001:db8:cc:dd::abcd', 'giusta');
+    const corpo = await r.json().catch(() => null);
+    verifica('cento tentativi sbagliati da indirizzi diversi della stessa rete, poi stop',
+        tentativi.every(s => s === 401) && r.status === 429, `ultimo ${r.status}`);
+    verifica('il blocco dice il motivo in JSON', /aspetta/.test(corpo?.message || ''), JSON.stringify(corpo));
 } finally {
     server.close();
 }

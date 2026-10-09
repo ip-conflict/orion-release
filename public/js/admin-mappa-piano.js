@@ -1,5 +1,3 @@
-// public/js/admin-mappa-piano.js
-//
 // Impostazioni › Livelli del piano sulla mappa: importare da QGIS le zone di
 // pericolosità e le aree d'emergenza (GeoJSON o KML in WGS84), e vedere o
 // togliere quelle già caricate. Il file si legge qui nel browser; al server

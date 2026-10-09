@@ -1,4 +1,3 @@
-// src/authHelper.js 
 import jwt from 'jsonwebtoken';
 
 function verifyJwtToken(token) {

@@ -1,5 +1,3 @@
-// public/js/magazzino-verbale.js
-//
 // Il verbale di consegna (o di rientro) da stampare e far firmare. Lo apre il
 // magazziniere subito dopo la consegna (o dall'elenco dei verbali) e il
 // volontario dal suo profilo: il server decide chi può leggere quale.
@@ -107,7 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const quanti = tr.insertCell();
         quanti.className = 'numero';
         const n = Number(r.quantita);
-        quanti.textContent = `${Number.isInteger(n) ? n : n.toLocaleString('it-IT')} ${r.unita_misura || ''}`.trim();
+        quanti.textContent = `${Number.isInteger(n) ? n : n.toLocaleString('it-IT')} ${n === 1 && r.unita_misura === 'pezzi' ? 'pezzo' : r.unita_misura || ''}`.trim();
     });
 
     if (verbale.note) {

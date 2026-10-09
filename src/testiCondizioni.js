@@ -1,5 +1,3 @@
-// src/testiCondizioni.js
-//
 // Il testo predefinito delle condizioni d'uso, che chi usa ORION legge e
 // accetta al primo accesso e ogni volta che cambiano. Tutela chi lo usa e chi
 // l'ha scritto: dice chi risponde dell'installazione e dei dati, che il

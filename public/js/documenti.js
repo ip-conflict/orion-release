@@ -1,5 +1,3 @@
-// public/js/documenti.js
-//
 // L'archivio dei documenti del gruppo (src/documenti.js). Tutti gli interni lo
 // consultano: cartelle, ricerca, apertura del file, versioni vecchie. Chi ha
 // il permesso gruppo.documenti carica, cambia, sostituisce con una versione

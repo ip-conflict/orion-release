@@ -1,5 +1,3 @@
-// src/beniInUscita.js
-//
 // Il materiale in carico a una squadra o a un volontario che sta per sparire.
 // Non può sparire con lui: l'operazione si ferma e chiede riga per riga se è
 // rientrato, perso o da recuperare, e ogni scelta diventa un movimento con il

@@ -1,5 +1,3 @@
-// src/manutenzione.js
-//
 // Backup, ripristino e aggiornamenti dalla pagina Sistema, senza SSH. Tre
 // scelte reggono tutto: il ripristino è una transazione sola (o entra tutto o
 // niente); prima di toccare qualcosa si fa un backup di sicurezza, e se non
@@ -478,6 +476,19 @@ export function registraRotteManutenzione(app, ctx) {
         }
     });
 
+    // "Ho capito": l'esito si mette da parte e la pagina non lo ripropone più.
+    // Il file resta (ultimo-ripristino-visto.json) per chi volesse rileggerlo.
+    app.delete('/api/sistema/operazione', soloAdmin, async (req, res) => {
+        if (operazione && !operazione.finita) return res.status(409).json({ message: "L'operazione è ancora in corso." });
+        operazione = null;
+        try {
+            await fs.promises.rename(FILE_ESITO, FILE_ESITO.replace(/\.json$/, '-visto.json'));
+        } catch (e) {
+            if (e.code !== 'ENOENT') logger.error('[Manutenzione] Esito non messo da parte:', { error: e.message });
+        }
+        res.json({ message: 'Fatto.' });
+    });
+
     // Il ripristino vero e proprio
     app.post('/api/sistema/ripristino', soloAdmin, async (req, res) => {
         const { cartella, nome, password, conferma, ripristina_file } = req.body || {};
@@ -575,7 +586,6 @@ export function registraRotteManutenzione(app, ctx) {
                 logger.error('[Manutenzione] Copia dei file caricati non riuscita:', { error: e.message });
             }
         }
-
 
         const sottoPm2 = process.env.pm_id !== undefined || process.env.PM2_HOME;
         if (sottoPm2) {
@@ -809,13 +819,18 @@ export function registraRotteManutenzione(app, ctx) {
             });
             return trovata;
         } catch (e) {
+            // fetch senza rete dice solo "fetch failed": all'amministratore
+            // serve sapere che è il server a non arrivare a internet.
+            const errore = e instanceof TypeError
+                ? 'Il server non riesce a raggiungere internet: controllate la sua connessione (o il proxy) e riprovate.'
+                : e.message;
             await scriviImpostazione('aggiornamenti_stato', {
                 controllato_il: new Date().toISOString(),
                 versione: null, note: null, pubblicata_il: null,
-                errore: e.message,
+                errore,
                 avvisata: precedente.avvisata || null
             });
-            throw e;
+            throw new Error(errore);
         }
     }
 
@@ -993,7 +1008,7 @@ export function registraRotteManutenzione(app, ctx) {
         }
 
         // 6. Copia di sicurezza del codice attuale: il database ha i suoi
-        //    backup, il codice fino a ieri non aveva niente.
+        // backup, il codice no.
         passo('Copia di sicurezza della versione attuale');
         const copiaCodice = await archiviaCodice();
         ultimoPasso(copiaCodice ? 'fatto' : 'errore');

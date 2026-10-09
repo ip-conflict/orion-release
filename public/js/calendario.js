@@ -1,5 +1,3 @@
-// public/js/calendario.js
-//
 // Il calendario del gruppo (src/attivita.js): il mese con le attività, le
 // emergenze e le scadenze; la scheda di un'attività con la risposta ("Ci
 // sono", "Non posso"); per chi organizza la creazione, le convocazioni, chi
@@ -20,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let corsi = null;
     let aperta = null;
     let inModifica = null;
+    let daScenario = null;   // lo scenario della biblioteca che si sta pianificando
     let spenti = new Set();
     try { spenti = new Set(JSON.parse(localStorage.getItem(CHIAVE_FILTRI) || '[]')); } catch { /* niente */ }
 
@@ -163,24 +162,54 @@ document.addEventListener('DOMContentLoaded', () => {
         GIORNI.forEach(g => griglia.appendChild(el('div', 'intestazione-giorno', g)));
         const agenda = $('agenda');
         agenda.replaceChildren();
+        // Sul telefono, nel mese in corso, i giorni già passati stanno chiusi in
+        // cima: l'elenco comincia da oggi, che è quello che si cerca.
+        const passati = el('details', 'giorni-passati');
+        const titoloPassati = el('summary', '', '');
+        passati.appendChild(titoloPassati);
+        let quantiPassati = 0;
         for (let i = 0; i < 42; i++) {
             const d = new Date(inizio); d.setDate(inizio.getDate() + i);
             const g = chiaveGiorno(d);
             const fuori = d.getMonth() !== mese.getMonth();
-            const cella = el('div', `giorno${fuori ? ' fuori-mese' : ''}${g === oggi ? ' oggi' : ''}`);
+            const cella = el('div', `giorno${fuori ? ' fuori-mese' : ''}${g === oggi ? ' oggi' : ''}${dati?.organizza ? ' cliccabile' : ''}`);
             cella.appendChild(el('span', 'numero-giorno', String(d.getDate())));
+            // Chi organizza tocca il giorno (non una voce) e l'attività nuova è già lì.
+            if (dati?.organizza) {
+                const quel = new Date(d);
+                cella.title = `Nuova attività ${quel.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+                cella.addEventListener('click', (e) => { if (!e.target.closest('button, a')) apriForm(null, quel); });
+            }
             const voci = vociDel(g);
-            voci.forEach(v => cella.appendChild(chip(v)));
+            // Un giorno pieno non allunga tutta la settimana: le prime voci e "+N altre".
+            const MASSIMO = 5;
+            const visibili = voci.length > MASSIMO ? voci.slice(0, MASSIMO - 1) : voci;
+            visibili.forEach(v => cella.appendChild(chip(v)));
+            if (visibili.length < voci.length) {
+                const altre = el('button', 'altre-voci', `+${voci.length - visibili.length} altre`);
+                altre.type = 'button';
+                altre.addEventListener('click', () => {
+                    altre.remove();
+                    voci.slice(visibili.length).forEach(v => cella.appendChild(chip(v)));
+                });
+                cella.appendChild(altre);
+            }
             griglia.appendChild(cella);
             // L'elenco per il telefono: solo i giorni del mese con qualcosa.
             if (!fuori && voci.length) {
                 const riga = el('section', `giorno-agenda${g === oggi ? ' oggi' : ''}`);
-                riga.appendChild(el('h3', '', d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })));
+                const data = d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+                riga.appendChild(el('h3', '', g === oggi ? `Oggi, ${data}` : data));
                 voci.forEach(v => riga.appendChild(chip(v)));
-                agenda.appendChild(riga);
+                if (g < oggi) { passati.appendChild(riga); quantiPassati++; } else agenda.appendChild(riga);
             }
         }
+        if (quantiPassati) {
+            titoloPassati.textContent = quantiPassati === 1 ? 'Un giorno già passato' : `${quantiPassati} giorni già passati`;
+            agenda.prepend(passati);
+        }
         if (!agenda.children.length) agenda.appendChild(el('p', 'nota', 'Niente in calendario questo mese.'));
+        else if (agenda.children.length === 1 && quantiPassati) agenda.appendChild(el('p', 'nota', 'Da oggi alla fine del mese non c\'è niente in calendario.'));
         agenda.hidden = false;
     }
 
@@ -239,6 +268,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (a.sala) riga(dl, 'Sala', `${a.sala.codice}${a.sala.aperta ? ', aperta adesso' : a.sala.interrotta ? ', interrotta da un\'emergenza vera' : ', chiusa'}`);
         $('att-descrizione').textContent = a.descrizione || '';
         $('att-descrizione').hidden = !a.descrizione;
+        const allegati = a.allegati || [];
+        $('att-allegati').hidden = !allegati.length;
+        $('att-allegati-elenco').replaceChildren(...allegati.map(x => rigaAllegato(x.nome_originale, pesoLeggibile(x.dimensione), {
+            href: `/api/attivita/${a.id}/allegati/${x.id}`, tipo: x.tipo })));
 
         // La propria risposta.
         const risposta = $('att-risposta');
@@ -474,8 +507,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function contaScelti() { $('conta-scelti').textContent = scelti.size === 1 ? '1 persona scelta' : `${scelti.size} persone scelte`; }
     $('cerca-persone').addEventListener('input', disegnaScelta);
 
-    async function apriForm(a = null) {
+    // L'orario dell'ultima attività creata da questo browser: chi fa sempre le
+    // riunioni alle 21 non deve correggerlo ogni volta. La prima volta, sera.
+    const CHIAVE_ORARIO = 'orion.attivita.orario';
+    function orarioProposto() {
+        try {
+            const o = JSON.parse(localStorage.getItem(CHIAVE_ORARIO));
+            if (/^\d{2}:\d{2}$/.test(o?.ora) && o.minuti > 0 && o.minuti <= 24 * 60 * 7) return o;
+        } catch { /* niente di salvato */ }
+        return { ora: '20:30', minuti: 120 };
+    }
+    function ricordaOrario(inizio, fine) {
+        const i = new Date(inizio), f = new Date(fine);
+        if (Number.isNaN(i.getTime()) || !(f > i)) return;
+        try { localStorage.setItem(CHIAVE_ORARIO, JSON.stringify({ ora: `${String(i.getHours()).padStart(2, '0')}:${String(i.getMinutes()).padStart(2, '0')}`, minuti: Math.round((f - i) / 60000) })); } catch { /* pazienza */ }
+    }
+
+    async function apriForm(a = null, giorno = null, scenario = null) {
         inModifica = a;
+        daScenario = a ? null : scenario;
         try {
             [tipi, corsi] = await Promise.all([fetchApi('/api/attivita/tipi'), corsi ? corsi : fetchApi('/api/attivita/corsi').catch(() => [])]);
             await personeInterne();
@@ -499,11 +549,14 @@ document.addEventListener('DOMContentLoaded', () => {
             $('f-inizio').value = perInput(a.inizio);
             $('f-fine').value = perInput(a.fine);
         } else {
-            // Di partenza: domani sera, due ore.
-            const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(20, 30, 0, 0);
+            // Di partenza il giorno toccato (o domani), all'orario dell'ultima volta.
+            const { ora, minuti } = orarioProposto();
+            const d = giorno ? new Date(giorno) : new Date();
+            if (!giorno) d.setDate(d.getDate() + 1);
+            const [h, m] = ora.split(':').map(Number);
+            d.setHours(h, m, 0, 0);
             $('f-inizio').value = perInput(d);
-            d.setHours(22, 30);
-            $('f-fine').value = perInput(d);
+            $('f-fine').value = perInput(new Date(d.getTime() + minuti * 60000));
         }
         document.querySelector(`input[name="convocazione"][value="${a?.convocazione || 'tutti'}"]`).checked = true;
         $('f-posti').value = a?.posti || '';
@@ -521,9 +574,99 @@ document.addEventListener('DOMContentLoaded', () => {
         regiaScelta = new Set((a?.regia || []).map(p => p.id));
         disegnaRegia();
         aggiornaSimulazione();
+        allegatiNuovi = [];
+        allegatiEsistenti = a?.allegati ? [...a.allegati] : [];
+        disegnaAllegatiForm();
+        if (daScenario) riempiDaScenario(daScenario);
+        $('form-scenario').hidden = !daScenario;
         $('gestisci-tipi').hidden = !dati?.organizza;
         $('modale-form').hidden = false;
         $('f-titolo').focus();
+    }
+
+    // Gli allegati: quelli già caricati (in modifica) si tolgono subito, quelli
+    // nuovi partono dopo il salvataggio dell'attività.
+    let allegatiNuovi = [];
+    let allegatiEsistenti = [];
+    const MB_ALLEGATO = 25;
+    const pesoLeggibile = (b) => b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} kB` : `${(b / 1048576).toLocaleString('it-IT', { maximumFractionDigits: 1 })} MB`;
+    const iconaFile = (nome, tipo) => /pdf$/i.test(tipo || nome) ? 'fa-file-pdf' : /^image\//.test(tipo || '') || /\.(jpe?g|png|webp)$/i.test(nome) ? 'fa-file-image'
+        : /\.(xlsx?|ods)$/i.test(nome) ? 'fa-file-excel' : /\.(docx?|odt)$/i.test(nome) ? 'fa-file-word' : 'fa-file';
+    function rigaAllegato(nome, dettaglio, { href, tipo, togli, inAttesa } = {}) {
+        const li = el('li', inAttesa ? 'in-attesa' : '');
+        const icona = document.createElement('i');
+        icona.className = `fas ${iconaFile(nome, tipo)}`;
+        icona.setAttribute('aria-hidden', 'true');
+        li.appendChild(icona);
+        if (href) {
+            const a = el('a', 'nome-allegato', nome);
+            a.href = href; a.target = '_blank'; a.rel = 'noopener';
+            li.appendChild(a);
+        } else li.appendChild(el('span', 'nome-allegato', nome));
+        if (dettaglio) li.appendChild(el('small', '', dettaglio));
+        if (togli) {
+            const b = el('button', 'button-style button-secondary button-small', 'Togli');
+            b.type = 'button';
+            b.addEventListener('click', togli);
+            li.appendChild(b);
+        }
+        return li;
+    }
+    function disegnaAllegatiForm() {
+        const ul = $('f-allegati');
+        ul.replaceChildren(
+            ...allegatiEsistenti.map(x => rigaAllegato(x.nome_originale, pesoLeggibile(x.dimensione), {
+                href: `/api/attivita/${inModifica.id}/allegati/${x.id}`, tipo: x.tipo,
+                togli: async () => {
+                    try {
+                        await fetchApi(`/api/attivita/${inModifica.id}/allegati/${x.id}`, { method: 'DELETE' });
+                        allegatiEsistenti = allegatiEsistenti.filter(y => y.id !== x.id);
+                        disegnaAllegatiForm();
+                    } catch (e) { notifica(e.message, 'errore'); }
+                }
+            })),
+            ...allegatiNuovi.map((f, i) => rigaAllegato(f.name, `${pesoLeggibile(f.size)}, si carica al salvataggio`, {
+                inAttesa: true, togli: () => { allegatiNuovi.splice(i, 1); disegnaAllegatiForm(); }
+            }))
+        );
+    }
+    $('f-file').addEventListener('change', () => {
+        for (const f of $('f-file').files) {
+            if (f.size > MB_ALLEGATO * 1024 * 1024) { notifica(`"${f.name}" supera i ${MB_ALLEGATO} MB.`, 'attenzione'); continue; }
+            allegatiNuovi.push(f);
+        }
+        $('f-file').value = '';
+        disegnaAllegatiForm();
+    });
+    // Dopo il salvataggio: uno per volta; quello che non passa si dice e non ferma gli altri.
+    async function caricaAllegati(id) {
+        const falliti = [];
+        for (const f of allegatiNuovi) {
+            const fd = new FormData();
+            fd.append('file', f);
+            try { await fetchApi(`/api/attivita/${id}/allegati`, { method: 'POST', body: fd }); }
+            catch (e) { falliti.push(`${f.name}: ${e.message}`); }
+        }
+        allegatiNuovi = [];
+        if (falliti.length) notifica(`Non allegati:\n${falliti.join('\n')}`, 'errore', 12000);
+    }
+
+    // Pianificare uno scenario della biblioteca (/calendario.html?scenario=N,
+    // dalla pagina Simulazioni): tipo, titolo, testi e durata vengono dallo
+    // scenario, la simulazione è in sala; il copione lo copia il server.
+    function riempiDaScenario(sc) {
+        const tipo = tipi.find(t => t.attivo && t.natura === sc.natura && t.nome.toLowerCase() === sc.natura)
+            || tipi.find(t => t.attivo && t.natura === sc.natura);
+        if (tipo) $('f-tipo').value = tipo.id;
+        $('f-titolo').value = sc.titolo;
+        const inizio = new Date(daInput($('f-inizio').value));
+        $('f-fine').value = perInput(new Date(inizio.getTime() + sc.durata_ore * 3600000));
+        document.querySelector('input[name="simulazione"][value="sala"]').checked = true;
+        $('f-scenario').value = sc.scenario || '';
+        $('f-obiettivi').value = sc.obiettivi || '';
+        $('f-enti').value = sc.enti || '';
+        $('form-scenario').textContent = `Dallo scenario "${sc.titolo}": il suo copione (${sc.eventi === 1 ? '1 evento' : `${sc.eventi} eventi`}) si copia nell'attività, e la regia lo può ritoccare senza cambiare lo scenario.`;
+        aggiornaSimulazione();
     }
 
     // La simulazione si sceglie solo per addestramenti ed esercitazioni.
@@ -649,7 +792,8 @@ document.addEventListener('DOMContentLoaded', () => {
             scenario: $('f-scenario').value.trim(),
             obiettivi: $('f-obiettivi').value.trim(),
             enti: $('f-enti').value.trim(),
-            regia: [...regiaScelta]
+            regia: [...regiaScelta],
+            scenario_id: daScenario?.id ?? null
         };
         const pulsante = $('salva-attivita');
         pulsante.disabled = true;
@@ -657,6 +801,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const a = inModifica
                 ? await fetchApi(`/api/attivita/${inModifica.id}`, { method: 'PUT', body: JSON.stringify(corpo) })
                 : await fetchApi('/api/attivita', { method: 'POST', body: JSON.stringify(corpo) });
+            if (!inModifica) ricordaOrario(corpo.inizio, corpo.fine);
+            if (allegatiNuovi.length) {
+                pulsante.textContent = 'Carico gli allegati…';
+                await caricaAllegati(a.id);
+            }
             chiudi($('modale-form'));
             notifica(inModifica ? 'Attività salvata.' : (corpo.avviso_app || corpo.avviso_email ? 'Attività creata: le convocazioni partono.' : 'Attività creata.'), 'successo');
             const g = data(a.inizio);
@@ -934,7 +1083,12 @@ document.addEventListener('DOMContentLoaded', () => {
     (async () => {
         await carica();
         caricaDaRispondere();
-        const chiesta = parseInt(new URLSearchParams(window.location.search).get('attivita'), 10);
+        const parametri = new URLSearchParams(window.location.search);
+        const chiesta = parseInt(parametri.get('attivita'), 10);
         if (chiesta) apriAttivita(chiesta);
+        const scenario = parseInt(parametri.get('scenario'), 10);
+        if (scenario && dati?.organizza) {
+            try { apriForm(null, null, await fetchApi(`/api/scenari/${scenario}`)); } catch (e) { notifica(e.message, 'errore'); }
+        }
     })();
 });

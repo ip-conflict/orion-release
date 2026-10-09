@@ -1,5 +1,3 @@
-// public/js/mfa-comune.js
-//
 // I pezzi della verifica in due passaggi che servono sia alla pagina d'accesso
 // sia al profilo: il QR da inquadrare con l'app e i codici di riserva da
 // mettere da parte.

@@ -103,7 +103,7 @@
                             <option value="temporanei">Solo temporanei</option>
                             <option value="permanenti">Solo permanenti</option>
                         </select>
-                        <input type="search" id="cerca-utenti" class="gu-filtro" placeholder="Cerca nome, username, email, ente" aria-label="Cerca utenti">
+                        <input type="search" id="cerca-utenti" class="gu-filtro" placeholder="Cerca per nome, email o ente" aria-label="Cerca utenti">
                     </div>
                 </div>
                 <p class="gu-nota" id="nota-esterni" hidden>Gli esterni <strong>temporanei</strong> entrano con il QR creato dal centro operativo durante un'emergenza e si gestiscono da lì, in «Accesso esterno»: il loro accesso finisce da solo alla chiusura dell'emergenza. Qui si possono solo eliminare. Gli esterni <strong>permanenti</strong> hanno nome utente e password, come gli interni.</p>
@@ -128,7 +128,7 @@
                 <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">Carica un file <code>.xlsx</code> o <code>.csv</code> (anche quello dell'Excel italiano, con il punto e virgola) per inserire più volontari in una volta. Nella prima riga servono le colonne <strong>Nome</strong> e <strong>Cognome</strong>; se ci sono, si leggono anche <strong>Email</strong>, <strong>Telefono</strong> (o Cellulare) e <strong>Codice fiscale</strong>. Chi è già in ORION non viene creato di nuovo, quindi lo stesso foglio si può ricaricare.</p>
                 
                 <div class="import-container" style="display: flex; gap: 15px; align-items: center; background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px dashed var(--border-color);">
-                    <input type="file" id="import-file-input" accept=".xlsx, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv" style="flex-grow: 1;">
+                    <input type="file" id="import-file-input" aria-label="File Excel o CSV con i volontari" accept=".xlsx, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv" style="flex-grow: 1;">
                     <button id="import-users-btn" class="button-style button-secondary" style="white-space: nowrap">
                         Importa da file
                     </button>
@@ -280,10 +280,10 @@
             <p style="color: var(--text-color); line-height: 1.5; font-size: 0.95rem;">Il sistema non ha potuto inviare l'email in automatico.<br><strong>Copia e invia privatamente questo link all'utente</strong> per permettergli di accedere.</p>
             
             <div style="background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin: 20px 0; text-align: left;">
-                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Username Volontario:</strong></p>
+                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Nome utente del volontario:</strong></p>
                 <p id="new-user-username" style="margin: 0 0 15px 0; font-weight: bold; font-size: 1.1rem; color: var(--text-color);"></p>
                 
-                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Link Attivazione:</strong></p>
+                <p style="margin: 5px 0; color: var(--text-muted); font-size: 0.85rem;"><strong>Collegamento per scegliere la password:</strong></p>
                 <div style="background: var(--surface-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); word-break: break-all;">
                     <code id="new-user-password" style="user-select: all; font-family: monospace; font-size: 0.9rem; color: var(--info-text);"></code>
                 </div>

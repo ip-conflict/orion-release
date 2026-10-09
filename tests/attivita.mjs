@@ -78,6 +78,35 @@ try {
     verifica('un volontario non crea attività -> 403',
         (await crea(a.token, { titolo: 'No', inizio: fra(24), fine: fra(26) })).stato === 403);
 
+    // Gli allegati: li carica chi organizza, li apre chi vede l'attività.
+    {
+        const conAllegati = (await crea(org.token, { titolo: `Con allegati ${suffisso}`, inizio: fra(30), fine: fra(32), convocazione: 'scelti', persone: [a.id] })).corpo;
+        const allega = (token, nome, contenuto, tipo) => {
+            const fd = new FormData();
+            fd.append('file', new Blob([contenuto], { type: tipo }), nome);
+            return fetch(`${BASE}/api/attivita/${conAllegati.id}/allegati`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+                .then(async r => ({ stato: r.status, corpo: await r.json().catch(() => null) }));
+        };
+        const pdf = '%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n';
+        const caricato = await allega(org.token, 'programma.pdf', pdf, 'application/pdf');
+        verifica('chi organizza allega un PDF', caricato.stato === 201 && caricato.corpo?.nome_originale === 'programma.pdf' && caricato.corpo?.tipo === 'application/pdf', caricato);
+        verifica('un convocato non allega -> 404', (await allega(a.token, 'mio.pdf', pdf, 'application/pdf')).stato === 404);
+        verifica('un contenuto che non è quello del nome -> 400', (await allega(org.token, 'finto.pdf', 'testo qualunque', 'application/pdf')).stato === 400);
+        verifica('un formato non ammesso -> 400', (await allega(org.token, 'script.exe', 'MZ', 'application/octet-stream')).stato === 400);
+        const scheda = (await chiama(`/api/attivita/${conAllegati.id}`, { token: a.token })).corpo;
+        verifica('il convocato vede gli allegati nella scheda', scheda?.allegati?.length === 1 && scheda.allegati[0].nome_originale === 'programma.pdf', scheda?.allegati);
+        const file = await fetch(`${BASE}/api/attivita/${conAllegati.id}/allegati/${caricato.corpo.id}`, { headers: { Authorization: `Bearer ${a.token}` } });
+        const testo = await file.text();
+        verifica('e lo apre: il contenuto è quello caricato', file.status === 200 && testo === pdf && /inline/.test(file.headers.get('content-disposition') || ''), file.status);
+        verifica('chi non è convocato non lo apre -> 404',
+            (await fetch(`${BASE}/api/attivita/${conAllegati.id}/allegati/${caricato.corpo.id}`, { headers: { Authorization: `Bearer ${b.token}` } })).status === 404);
+        verifica('un esterno nemmeno -> 403',
+            (await fetch(`${BASE}/api/attivita/${conAllegati.id}/allegati/${caricato.corpo.id}`, { headers: { Authorization: `Bearer ${est.token}` } })).status === 403);
+        verifica('il convocato non lo toglie -> 404', (await chiama(`/api/attivita/${conAllegati.id}/allegati/${caricato.corpo.id}`, { method: 'DELETE', token: a.token })).stato === 404);
+        verifica('chi organizza lo toglie', (await chiama(`/api/attivita/${conAllegati.id}/allegati/${caricato.corpo.id}`, { method: 'DELETE', token: org.token })).stato === 200);
+        verifica('e non c\'è più', ((await chiama(`/api/attivita/${conAllegati.id}`, { token: a.token })).corpo?.allegati || []).length === 0);
+    }
+
     // Convocati scelti.
     const riunione = await crea(org.token, {
         tipo_id: tipo('Riunione'), titolo: `Riunione squadra ${suffisso}`, luogo: 'Sede', inizio: fra(48), fine: fra(50),

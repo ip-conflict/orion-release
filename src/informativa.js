@@ -1,5 +1,3 @@
-// src/informativa.js
-//
 // Le condizioni d'uso: chi usa ORION le accetta al primo accesso e ogni volta
 // che cambiano (il controllo sta in authenticateToken). L'amministratore può
 // riscriverle; pubblicandole ne nasce una versione nuova. Ogni accettazione

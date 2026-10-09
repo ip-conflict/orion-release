@@ -1,5 +1,3 @@
-// src/segnalazioni.js
-//
 // Le segnalazioni, il loro diario, le squadre assegnate, le immagini e la
 // posizione delle squadre.
 
@@ -7,7 +5,7 @@ import fs from 'fs';
 import logger from './logger.js';
 import multer from 'multer';
 import path from 'path';
-import { authenticateToken, haRuolo, puoVedereEmergenza, ruoliDi } from './autenticazione.js';
+import { authenticateToken, haRuolo, nomeUtente, puoVedereEmergenza, ruoliDi } from './autenticazione.js';
 import { haPermesso } from './permessi.js';
 import { uploadImageMulter, verifyMultipleUploadedImages } from './caricamenti.js';
 import { ACTIVE_REPORT_STATUSES_BACKEND, ETICHETTA_PRIORITA, ETICHETTA_STATO, MOTIVI_SENZA_SQUADRA, TERMINAL_REPORT_STATUSES_BACKEND, VALID_REPORT_STATUSES, erroreConflitto, erroreNonTrovato, erroreRichiesta } from './costanti.js';
@@ -660,7 +658,8 @@ export function registraRotteSegnalazioni(app) {
             const updatedReport = updatedReportResult.rows[0];
             logger.debug('[DB Query Log] UPDATE reports completato. Report aggiornato:', updatedReport);
 
-            const logText = `Coordinate aggiornate a (${latNum.toFixed(5)}, ${lonNum.toFixed(5)}) da utente ${req.user.username}.`;
+            // Nel diario lo leggono la sala e la squadra: il nome della persona, non il nome utente.
+            const logText = `Posizione corretta sulla mappa da ${nomeUtente(req.user)} (${latNum.toFixed(5)}, ${lonNum.toFixed(5)}).`;
             const insertLogQueryString = `
             WITH inserted AS (
                 INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) 

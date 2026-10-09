@@ -209,9 +209,9 @@ rsync -a --exclude 'node_modules' --exclude '.git' --exclude '/.env' --exclude '
     "$SOURCE_DIR/" "$APP_DIR/"
 
 # 3. IMPOSTAZIONE PERMESSI
-# node_modules resta fuori: a un secondo giro dello script c'e' gia', con
-# decine di migliaia di file (un chmod per file durava minuti), e il 644 toglieva
-# il permesso di esecuzione ai programmi di npm (node-pg-migrate compreso).
+# node_modules resta fuori: a un secondo giro ha decine di migliaia di file (un
+# chmod per file dura minuti), e il 644 toglierebbe il permesso di esecuzione ai
+# programmi di npm (node-pg-migrate compreso).
 chown -R $APP_USER:$APP_USER $APP_DIR
 find $APP_DIR -path "$APP_DIR/node_modules" -prune -o -type d -exec chmod 755 {} +
 find $APP_DIR -path "$APP_DIR/node_modules" -prune -o -type f -exec chmod 644 {} +
@@ -220,8 +220,8 @@ find $APP_DIR -path "$APP_DIR/node_modules" -prune -o -type f -exec chmod 644 {}
 chmod 600 $APP_DIR/.env
 # ------------------------------------------
 
-# Certificati medici, documenti, foto e log: li legge solo il programma. Il
-# 644 generale sopra li lasciava leggibili a ogni utente della macchina.
+# Certificati medici, documenti, foto e log: li legge solo il programma, non gli
+# altri utenti della macchina.
 for cartella in protected_uploads uploads logs; do
     mkdir -p "$APP_DIR/$cartella"
     chown -R $APP_USER:$APP_USER "$APP_DIR/$cartella"
@@ -235,10 +235,9 @@ print_success "Proprietario, permessi e file .env sicuri impostati."
 # 7. ESECUZIONE MIGRAZIONI E PULIZIA DIPENDENZE
 # ==============================================================================
 print_info "Installazione delle dipendenze (incluso node-pg-migrate e file-type)..."
-# npm ci e non npm install: riparte da zero, esattamente dal package-lock. Se
-# lo script viene rilanciato, un node_modules lasciato a meta' o rovinato (per
-# esempio da una versione precedente di questo script, che gli toglieva il
-# permesso di esecuzione) non viene preso per buono.
+# npm ci e non npm install: riparte da zero, esattamente dal package-lock. Se lo
+# script viene rilanciato, un node_modules lasciato a meta' o rovinato non viene
+# preso per buono.
 sudo -u $APP_USER bash -c "cd $APP_DIR && npm ci" || {
     print_error "npm ci è fallito in $APP_DIR. Controlla i log di npm (es. $APP_DIR/.npm/_logs/) e la connettività verso il registry npm, poi rilancia lo script."
     exit 1
@@ -312,8 +311,8 @@ server { listen 80; server_name $DOMAIN_NAME; location / { return 301 https://\$
 EOF
     ln -s -f $NGINX_CONF_PATH /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
-    # Prima di chiedere il certificato nginx deve funzionare: prima un errore
-    # qui passava inosservato e si scopriva solo dal messaggio di certbot.
+    # Prima di chiedere il certificato nginx deve funzionare: un errore qui si
+    # scoprirebbe solo dal messaggio di certbot.
     if ! nginx -t; then
         print_error "nginx non accetta la configurazione (vedi sopra): il certificato non si puo' chiedere. Correggi e rilancia lo script."
         exit 1

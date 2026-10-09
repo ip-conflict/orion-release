@@ -1,5 +1,3 @@
-// src/integrita.js
-//
 // Lo storico inalterabile, lato applicazione (il resto è nel database: vedi
 // la migrazione storico-inalterabile).
 //

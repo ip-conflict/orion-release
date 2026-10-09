@@ -1,5 +1,3 @@
-// public/js/funzioni-co.js
-//
 // Le funzioni di supporto nel centro operativo:
 //   - nel dettaglio di una segnalazione, gli incarichi alle funzioni, con
 //     "Assegna a una funzione" (motivazione), "Prendo in carico", "Concludi"

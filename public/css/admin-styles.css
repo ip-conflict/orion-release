@@ -130,7 +130,6 @@ hr.admin-hr {
  }
  #user-table button.delete-user-btn:hover { background-color: #bb2d3b; }
 
-
 /* Stili Sezione Import */
 .import-container {
     display: flex;
@@ -161,7 +160,7 @@ hr.admin-hr {
     margin-top: 0;
     margin-bottom: 15px;
     font-size: 1.4em;
-    text-align: center;
+    text-align: left;
     color: var(--text-color);
 }
 .modal-content hr {
@@ -182,7 +181,6 @@ hr.admin-hr {
     border: none;
 }
 .modal-content .close:hover { color: var(--status-error-color, #dc3545); }
-
 
 /* Layout Form nei Modali */
 .form-row {
@@ -207,6 +205,11 @@ hr.admin-hr {
 .modal-content input[type="text"],
 .modal-content input[type="email"],
 .modal-content input[type="password"],
+.modal-content input[type="number"],
+.modal-content input[type="tel"],
+.modal-content input[type="date"],
+.modal-content input[type="datetime-local"],
+.modal-content input[type="search"],
 .modal-content select,
 .modal-content textarea { /* Stili comuni input/select/textarea */
     width: 100%;
@@ -239,23 +242,6 @@ hr.admin-hr {
     margin-left: 10px;
     font-size: 1em;
 }
- /* Stile bottone Annulla (usa button[type=button]) */
- .modal-actions button[type="button"] {
-     background-color: var(--button-cancel-bg);
-     color: #ffffff; /* bianco sul grigio, in entrambi i temi */
- }
- .modal-actions button[type="button"]:hover {
-     background-color: var(--button-cancel-hover-bg);
- }
- /* Stile bottone Submit (usa button[type=submit]) */
- .modal-actions button[type="submit"] {
-      background-color: var(--button-bg);
-      color: var(--button-text);
-  }
- .modal-actions button[type="submit"]:hover {
-      background-color: var(--button-hover-bg);
-  }
-
 
 /* Override Dark Mode per Admin Styles (se non coperti da variabili) */
  @media (prefers-color-scheme: dark) {
@@ -423,10 +409,7 @@ hr.admin-hr {
 .form-group input[type="file"] { border: 1px dashed var(--border-color); padding: 8px; cursor: pointer; }
 
 /* Tasti Modale (Chiusura e Cestino) */
-.close-modal, .close-modal-courses, .close-edit-modal {
-    color: var(--text-color); float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; opacity: 0.6;
-}
-.close-modal:hover, .close-modal-courses:hover, .close-edit-modal:hover { opacity: 1; color: #ef4444; }
+/* La crocetta delle finestre: lo stile comune è in componenti.css. */
 
 .btn-delete-record { color: #ef4444; cursor: pointer; margin-left: 10px; border: none; background: none; font-size: 1.1rem; }
 .btn-delete-record:hover { color: #b91c1c; }
@@ -447,14 +430,9 @@ hr.admin-hr {
     background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
-
-/* Pulsanti dentro alle tabelle.
- *
- * Erano pillole maiuscole con gradiente e ombra colorata, una tinta diversa
- * per ogni azione: in una riga di elenco quattro pastiglie colorate fanno più
- * rumore del dato che dovrebbero accompagnare. Ora sono quadrati con il
- * contorno: si vedono, non urlano, e il colore torna a voler dire qualcosa
- * quando compare (il rosso dell'eliminare). */
+/* Pulsanti dentro alle tabelle: quadrati con il contorno, che si vedono senza
+   coprire il dato. Il colore compare solo quando vuol dire qualcosa (il rosso
+   dell'eliminare). */
 .admin-table .button-small,
 #user-table .button-style.button-small {
     display: inline-flex;
@@ -508,7 +486,6 @@ hr.admin-hr {
     .admin-table .button-small:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
 }
 
-
 .btn-icon-action {
     background: none !important;
     border: none !important;
@@ -556,10 +533,8 @@ hr.admin-hr {
 /* =========================================
    PULSANTI DELLE FINESTRE
    =========================================
-   L'aspetto lo decide componenti.css. Qui restano solo due regole: quella
-   che chiude una finestra pesa come l'azione che conclude, quella che
-   annulla no. Prima erano due pillole maiuscole, una verde e una grigia,
-   che pesavano uguale: chi guardava non sapeva quale premere. */
+   L'aspetto lo decide componenti.css. Qui solo il peso: il pulsante che
+   conclude spicca, quello che annulla no. */
 
 .modal-content .gruppo-azioni,
 .modal-content .azioni-modale {
@@ -674,10 +649,9 @@ hr.admin-hr {
     background: var(--border-color);
 }
 
-/* Sul telefono la barra laterale diventa una fila in cima che scorre di lato:
- * affiancata al contenuto gli lasciava metà dello schermo, e le pagine (il
- * magazzino per primo, che si usa soprattutto dal telefono) diventavano una
- * colonna di parole una sotto l'altra. */
+/* Sul telefono la barra laterale diventa un riquadro di voci in cima, così il
+   contenuto ha tutta la larghezza. Le voci vanno a capo invece di scorrere di
+   lato, perché si vedano tutte. */
 @media (max-width: 800px) {
     .admin-layout {
         display: block !important;
@@ -695,18 +669,13 @@ hr.admin-hr {
     .admin-sidebar .sidebar-header h2 { font-size: 1.1rem; }
     .sidebar-menu {
         display: flex;
+        flex-wrap: wrap;
         gap: 4px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 4px;
+        padding-bottom: 2px;
     }
     .sidebar-menu li { margin: 0 !important; flex: 0 0 auto; }
-    .sidebar-menu a { white-space: nowrap; padding: 8px 10px; }
-    .sidebar-menu .separatore-menu {
-        width: 1px;
-        height: auto;
-        margin: 6px 4px;
-    }
+    .sidebar-menu a { white-space: nowrap; padding: 7px 9px; font-size: 0.92rem; }
+    .sidebar-menu .separatore-menu { display: none; }
     .admin-content {
         padding: 16px !important;
         min-width: 0;
@@ -718,8 +687,8 @@ hr.admin-hr {
 .stella-caposquadra.scelto, .stella-caposquadra:hover, .stella-caposquadra:focus-visible { color: #d97706; outline: none; }
 .bollino-caposquadra { font-size: 0.65rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 5px; color: #92400e; background: #fef3c7; text-transform: uppercase; letter-spacing: 0.03em; }
 
-/* Il menu laterale si mostra quando menu-laterale.js l'ha composto: prima
-   c'è quello scritto nella pagina, e lo scambio si vedeva come un lampeggio. */
+/* Il menu laterale si mostra quando menu-laterale.js l'ha composto, senza il
+   lampeggio dello scambio. */
 .admin-sidebar .sidebar-menu:not(.pronto) { visibility: hidden; }
 
 /* Segreteria: la stessa visita o lo stesso corso a più volontari. */
@@ -729,7 +698,7 @@ hr.admin-hr {
 .azioni-multiple[hidden] { display: none; }
 .azioni-multiple #quanti-scelti { font-weight: 600; margin-right: auto; }
 .nota-multipla { font-size: 0.85rem; color: var(--text-muted); margin: 8px 2px 0; }
-dialog.finestra-multipla { max-width: 480px; width: calc(100% - 32px); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px; background: var(--surface-color, var(--bg-color)); color: var(--text-color); }
+dialog.finestra-multipla { box-sizing: border-box; max-width: 480px; width: calc(100% - 32px); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px; background: var(--surface-color, var(--bg-color)); color: var(--text-color); }
 dialog.finestra-multipla::backdrop { background: rgba(0, 0, 0, 0.45); }
 dialog.finestra-multipla h2 { margin: 0 0 6px; font-size: 1.2rem; }
 dialog.finestra-multipla label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-weight: 600; font-size: 0.9rem; }
@@ -738,3 +707,129 @@ dialog.finestra-multipla input, dialog.finestra-multipla select { padding: 9px 1
 dialog.finestra-multipla small { font-weight: 400; color: var(--text-muted); }
 dialog.finestra-multipla .spiega-multipla { font-size: 0.88rem; color: var(--text-muted); margin: 0 0 12px; }
 dialog.finestra-multipla .azioni-finestra { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* Tutti i modali allo stesso modo: alti quanto il contenuto (il velo è un flex
+   e li stirerebbe), con lo scorrimento dentro quando sono lunghi, il titolo a
+   sinistra. */
+.modal > .modal-content { align-self: flex-start; max-height: calc(100vh - 40px); overflow-y: auto; box-sizing: border-box; }
+.modal-content > h2 { text-align: left; padding-right: 32px; }
+/* I pulsanti in fondo a un modale: a destra, Annulla prima del pulsante principale. */
+.modal-content .azioni-finestra { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+
+/* Gestione utenti sul telefono: ogni persona è una scheda, con il nome di
+   ogni dato e i pulsanti con il loro nome, invece di una tabella che
+   nasconde a destra ruoli, stato e azioni. */
+@media (max-width: 700px) {
+    #user-table thead { display: none; }
+    #user-table, #user-table tbody { display: block; width: 100%; }
+    #user-table tbody tr {
+        display: block; margin-bottom: 10px; padding: 10px 12px;
+        border: 1px solid var(--border-color); border-radius: 10px;
+        background: var(--surface-color);
+    }
+    #user-table tbody tr:nth-child(even) { background: var(--surface-color); }
+    #user-table td {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 3px 0; border: none; text-align: right !important;
+    }
+    #user-table td:first-child { display: block; text-align: left !important; padding-bottom: 6px; white-space: normal; }
+    #user-table td[colspan] { display: block; text-align: center !important; }
+    #user-table td[data-etichetta]:not(:first-child):not(.action-buttons)::before {
+        content: attr(data-etichetta); color: var(--text-muted); font-size: 0.85rem; text-align: left;
+    }
+    #user-table td.action-buttons {
+        justify-content: flex-start; flex-wrap: wrap; gap: 6px; width: auto; white-space: normal;
+        padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--border-color);
+    }
+    #user-table .action-buttons .button-style.button-small { margin-left: 0; }
+    #user-table .action-buttons .button-style[data-breve]::after { content: attr(data-breve); }
+}
+
+/* Le tabelle trasformate in schede sul telefono (menu-laterale.js). */
+@media (max-width: 700px) {
+    table.admin-table.a-schede thead { display: none; }
+    table.admin-table.a-schede, table.admin-table.a-schede tbody { display: block; width: 100%; }
+    table.admin-table.a-schede tbody tr {
+        display: block; margin-bottom: 10px; padding: 10px 12px;
+        border: 1px solid var(--border-color); border-radius: 10px;
+        background: var(--surface-color);
+    }
+    table.admin-table.a-schede td {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 3px 0; border: none; text-align: right !important; white-space: normal; width: auto;
+    }
+    table.admin-table.a-schede td:first-child { display: block; text-align: left !important; font-weight: 600; padding-bottom: 6px; }
+    table.admin-table.a-schede td[colspan] { display: block; text-align: center !important; }
+    table.admin-table.a-schede td[data-etichetta]:not(:first-child)::before {
+        content: attr(data-etichetta); color: var(--text-muted); font-size: 0.85rem; text-align: left; font-weight: 400;
+    }
+    table.admin-table.a-schede td:last-child:has(button, a) { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
+    table.admin-table.a-schede td:last-child:has(button, a)::before { display: none; }
+}
+
+/* Fascicolo in segreteria: le azioni su visite e corsi sono pulsanti con il
+   nome (Certificato, Rinnova, Modifica, Elimina), sotto i dati, invece di
+   quattro icone colorate da indovinare. */
+#detail-medical-list li, #detail-courses-list li { flex-wrap: wrap; row-gap: 8px; }
+#detail-medical-list li > div:last-child, #detail-courses-list li > div:last-child { flex-basis: 100%; flex-wrap: wrap; }
+#detail-medical-list .btn-icon-action, #detail-courses-list .btn-icon-action {
+    gap: 6px; padding: 5px 10px; min-height: 32px; font-size: 0.85rem; font-weight: 600;
+    border: 1px solid var(--border-color) !important; border-radius: 8px;
+    color: var(--text-color) !important; background: transparent !important;
+}
+#detail-medical-list .btn-icon-action:hover, #detail-courses-list .btn-icon-action:hover {
+    transform: none; background: var(--list-item-hover-bg) !important;
+}
+#detail-medical-list .btn-delete-record, #detail-courses-list .btn-delete-record { color: var(--danger-text, #dc2626) !important; }
+
+/* Fascicolo in segreteria, la parte alta: chi è (con i dati e "Modifica i
+   dati") e il tesserino con le stampe. */
+.fascicolo-testa { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+.fascicolo-testa .card {
+    padding: 20px; background: var(--surface-color); border-radius: 12px;
+    border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);
+}
+.fascicolo-ruolo {
+    display: inline-block; padding: 3px 10px; border-radius: 50px;
+    background: var(--primary-color); color: var(--button-text, #fff);
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+}
+.fascicolo-dati { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 18px 0; }
+.fascicolo-dati dt { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; align-self: center; }
+.fascicolo-dati dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.fascicolo-tesserino { text-align: center; }
+.fascicolo-tesserino h3 { margin: 0 0 12px; font-size: 1.05rem; color: var(--text-color); }
+.fascicolo-stampe { display: grid; gap: 8px; margin-bottom: 12px; }
+.bottone-testo {
+    background: none; border: none; padding: 6px; cursor: pointer;
+    color: var(--link-color, var(--primary-color)); font: inherit; font-size: 0.88rem; text-decoration: underline;
+}
+
+/* Elenco della segreteria: i nomi lunghi vanno a capo invece di allargare la
+   tabella oltre lo schermo del telefono. */
+#segreteria-users-table td { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+    #segreteria-users-table td, .no-schede th { padding: 10px 6px; }
+    dialog.finestra-multipla { padding: 18px 16px; }
+}
+
+/* Il pulsante "Menu" del telefono (menu-laterale.js): sul computer non c'è. */
+.apri-menu { display: none; }
+@media (max-width: 800px) {
+    .admin-sidebar .sidebar-header { margin-bottom: 0 !important; }
+    .admin-sidebar.menu-aperto .sidebar-header { margin-bottom: 10px !important; }
+    .apri-menu {
+        display: inline-flex; align-items: center; gap: 8px; margin-left: auto;
+        padding: 8px 14px; min-height: 40px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color);
+        font: inherit; font-weight: 600;
+    }
+    .admin-sidebar:not(.menu-aperto) .sidebar-menu { display: none; }
+}
+.fascicolo-persona label[for="detail-photo-upload"] { text-align: center; }
+#segreteria-users-table .status-badge { white-space: nowrap; }
+@media (max-width: 700px) {
+    /* La freccina in fondo alla riga: sul telefono ruba lo spazio allo stato. */
+    #segreteria-users-table td:last-child:not(:first-child), .no-schede thead th:last-child { display: none; }
+    #segreteria-users-table .status-badge { font-size: 0.75rem; padding: 3px 8px; }
+}

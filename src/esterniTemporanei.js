@@ -1,5 +1,3 @@
-// src/esterniTemporanei.js
-//
 // Gli esterni temporanei: chi si presenta al COC durante un'emergenza senza
 // essere dell'associazione (un'ambulanza, un tecnico del Comune). Basta un
 // nome: ORION crea un esterno e un codice da inquadrare come QR o da mandare

@@ -1,5 +1,3 @@
-// src/utenti.js
-//
 // Profilo personale e gestione degli utenti.
 
 import bcrypt from 'bcrypt';
@@ -21,7 +19,6 @@ import { proteggiCaricati } from './cifratura.js';
 import { cancellaFile, fileDaIndirizzi, fileDellaPersona, pseudonimizza } from './eliminazionePersona.js';
 
 export function registraRotteUtenti(app) {
-
 
     app.get('/api/users', checkAdminOrSegreteriaRole, async (req, res) => {
         try {
@@ -56,7 +53,6 @@ export function registraRotteUtenti(app) {
         }
     });
 
-
     app.get('/api/users/me', authenticateToken, async (req, res) => {
         try {
             const result = await pool.query(
@@ -73,9 +69,8 @@ export function registraRotteUtenti(app) {
         } catch (error) { res.status(500).json({ message: 'Errore server' }); }
     });
 
-
     app.put('/api/users/me/anagrafica', authenticateToken, async (req, res) => {
-        // Solo i campi inviati: prima uno mancante veniva cancellato.
+        // Solo i campi inviati: quelli mancanti restano come sono.
         const { valori, errore } = leggiCampiAnagrafici(req.body, ['indirizzo', 'citta', 'cap', 'telefono', 'codice_fiscale']);
         if (errore) return res.status(400).json({ message: errore });
         const campi = Object.keys(valori);
@@ -92,7 +87,6 @@ export function registraRotteUtenti(app) {
             res.status(500).json({ message: 'Errore nel salvataggio.' });
         }
     });
-
 
     app.post('/api/users/me/photo', authenticateToken, uploadPhoto.single('photo'), async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'Nessuna immagine caricata.' });
@@ -118,7 +112,6 @@ export function registraRotteUtenti(app) {
         const userId = req.user.id;
         const { currentPassword, newPassword, confirmPassword } = req.body;
 
-
         if (!currentPassword || !newPassword || !confirmPassword) {
             return res.status(400).json({ message: "Tutti i campi password sono richiesti." });
         }
@@ -129,12 +122,10 @@ export function registraRotteUtenti(app) {
              return res.status(400).json({ message: "La nuova password non può essere uguale a quella attuale." });
          }
 
-
          const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|\\;:'",.<>\/?~]).{12,}$/;
          if (newPassword.length < 12 || !passwordRegex.test(newPassword)) {
              return res.status(400).json({ message: "La nuova password non rispetta i criteri di complessità minimi (min. 12 caratteri, maiuscola, minuscola, numero, carattere speciale)." });
          }
-
 
           const forbiddenPasswordsExamples = [
               "Pr0t3z10n3C1v1l3!",
@@ -161,7 +152,6 @@ export function registraRotteUtenti(app) {
                 return res.status(401).json({ message: "La password attuale inserita non è corretta." });
             }
 
-
             const newPasswordHash = await bcrypt.hash(newPassword, COSTO_BCRYPT); 
 
             // Le altre sessioni si chiudono (la password poteva essere rubata);
@@ -178,7 +168,6 @@ export function registraRotteUtenti(app) {
              res.status(500).json({ message: "Errore interno durante l'aggiornamento della password." });
         }
     });
-
 
     app.get('/api/admin/users', checkAdminOrSegreteriaRole, async (req, res) => {
         try {
@@ -254,7 +243,6 @@ export function registraRotteUtenti(app) {
             return res.status(403).json({ message: "Puoi iscrivere solo volontari: gli altri ruoli li assegna l'amministratore." });
         }
 
-
         if (!nome || !cognome || ruoliRichiesti.length === 0) {
             return res.status(400).json({ message: 'Nome, Cognome e Ruolo sono obbligatori.' });
         }
@@ -280,7 +268,6 @@ export function registraRotteUtenti(app) {
             const tokenHash = await bcrypt.hash(resetToken, 10);
             const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
 
-
             const result = await client.query(
                 'INSERT INTO users (nome, cognome, username, email, role, reset_token, reset_token_expires) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, nome, cognome, email, role',
                 [cleanNomeTrimmed, cleanCognomeTrimmed, finalUsername, sanitizedEmail, role, tokenHash, expireDate]
@@ -291,10 +278,8 @@ export function registraRotteUtenti(app) {
             await client.query('COMMIT');
             const newUser = { ...result.rows[0], ruoli: ruoliRichiesti };
             
-
             const magicLink = `https://${domainName}/reset-password.html?token=${resetToken}&id=${newUser.id}`;
             
-
             let emailSent = false;
             let emailError = null;
 
@@ -310,7 +295,6 @@ export function registraRotteUtenti(app) {
             
             logger.info(`Utente ${newUser.username} (ID: ${newUser.id}) creato. Email inviata: ${emailSent}`);
             
-
             res.status(201).json({ ...newUser, magicLink, emailSent, emailError });
             registraAudit(req, 'utente.creato', { tipo: 'utente', id: newUser.id, dettagli: { username: newUser.username, ruoli: ruoliRichiesti.join(', ') } });
 
@@ -363,7 +347,6 @@ export function registraRotteUtenti(app) {
         try {
             await client.query('BEGIN');
 
-
             if (sanitizedEmail) {
                 const currentUserEmailCheck = await client.query('SELECT email FROM users WHERE id = $1', [userId]);
                 if (currentUserEmailCheck.rowCount > 0 && currentUserEmailCheck.rows[0].email !== sanitizedEmail) {
@@ -409,14 +392,12 @@ export function registraRotteUtenti(app) {
         }
     });
 
-
     app.delete('/api/users/:id', adminLimiter, checkAdminRole, async (req, res) => {
         const userIdToDelete = parseInt(req.params.id, 10);
         
         if (isNaN(userIdToDelete)) {
             return res.status(400).json({ message: 'ID Utente non valido.' });
         }
-
 
         if (userIdToDelete === req.user.id) {
             return res.status(403).json({ message: 'Non puoi eliminare il tuo stesso account. Usa un altro account admin.' });
@@ -471,7 +452,6 @@ export function registraRotteUtenti(app) {
 
             logger.error(`Errore DELETE /api/users/${userIdToDelete}:`, error);
 
-
             if (error.message === 'Utente non trovato.') {
                 return res.status(404).json({ message: 'Utente non trovato.' });
             }
@@ -499,7 +479,6 @@ export function registraRotteUtenti(app) {
             const resetToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = await bcrypt.hash(resetToken, 10);
             const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
-
 
             const result = await pool.query(
                 'UPDATE users SET password = NULL, reset_token = $1, reset_token_expires = $2 WHERE id = $3 RETURNING id, username, email', 

@@ -1,5 +1,3 @@
-// src/squadre.js
-//
 // Le squadre e il loro registro durante un'emergenza.
 
 import logger from './logger.js';
@@ -273,9 +271,9 @@ async function validateTeamMembers(client, usernames) {
 
     for (const user of res.rows) {
         if (config.block_on_medical && !user.medical_ok) {
-            invalidUsers.push(`${user.nome} ${user.cognome} (Visita)`);
+            invalidUsers.push(`${user.nome} ${user.cognome} (manca la visita di idoneità valida)`);
         } else if (config.block_on_course && !user.course_ok) {
-            invalidUsers.push(`${user.nome} ${user.cognome} (Corso)`);
+            invalidUsers.push(`${user.nome} ${user.cognome} (manca il corso base valido)`);
         }
     }
 
@@ -338,7 +336,7 @@ export function registraRotteSquadre(app) {
             res.status(200).json(result.rows);
         } catch (err) {
             logger.error('Errore GET /api/squadre:', err);
-            res.status(500).json({ error: `Errore recupero squadre: ${err.message}` });
+            res.status(500).json({ message: 'Errore nel leggere le squadre.' });
         }
     });
 
@@ -437,7 +435,7 @@ export function registraRotteSquadre(app) {
             const membriRisolti = await risolviMembriSquadra(client, membri, null);
             const invalidMembers = await validateTeamMembers(client, membriRisolti.map(m => m.username));
             if (invalidMembers.length > 0) {
-                 throw erroreRichiesta(`Vincoli operativi di sicurezza non rispettati per: ${invalidMembers.join(', ')}`);
+                 throw erroreRichiesta(`Non può entrare in squadra finché la segreteria non registra quello che manca: ${invalidMembers.join('; ')}.`);
             }
             const capo = caposquadraRichiesto(req.body, membriRisolti, null);
             const insertMembroQuery = `INSERT INTO squadra_membri (squadra_id, username, nome, cognome) VALUES ($1, $2, $3, $4)`;
@@ -531,7 +529,7 @@ export function registraRotteSquadre(app) {
             if (!coc && membri && membri.length > 0) {
                 const invalidMembers = await validateTeamMembers(client, membri.map(m => m.username));
                 if (invalidMembers.length > 0) {
-                     throw erroreRichiesta(`Vincoli operativi di sicurezza non rispettati per: ${invalidMembers.join(', ')}`);
+                     throw erroreRichiesta(`Non può entrare in squadra finché la segreteria non registra quello che manca: ${invalidMembers.join('; ')}.`);
                 }
             }
 

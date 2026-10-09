@@ -1,5 +1,3 @@
-// src/cartografia.js
-//
 // La cartografia del territorio sul server. Le mappe di OpenStreetMap e il
 // satellite arrivano da internet: se in sala la linea cade ma la rete locale
 // verso il server regge (o il server è in sala), la mappa resta grigia.

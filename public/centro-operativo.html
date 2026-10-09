@@ -69,9 +69,9 @@
                     <a href="/admin/squadre.html" id="manage-teams-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a>
                     <!-- Chi arriva al COC da fuori (Croce Rossa, 118...): un nome e un QR. Solo a emergenza aperta. -->
                     <a href="#" id="esterni-temporanei-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-id-badge" style="width: 20px;"></i> Accesso esterno</a>
-                    <a href="/profile.html" id="profile-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-user-circle" style="width: 20px;"></i> Mio Profilo</a>
+                    <a href="/profile.html" id="profile-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-user-circle" style="width: 20px;"></i> Il mio profilo</a>
                     
-                    <a href="#" id="logout-button" style="display: block; padding: 12px 15px; color: var(--danger-text); text-decoration: none; font-weight: 600;"><i class="fas fa-sign-out-alt" style="width: 20px;"></i> Logout</a>
+                    <a href="#" id="logout-button" style="display: block; padding: 12px 15px; color: var(--danger-text); text-decoration: none; font-weight: 600;"><i class="fas fa-sign-out-alt" style="width: 20px;"></i> Esci</a>
                 </div>
             </div>
         </div>
@@ -152,7 +152,7 @@
             <div id="report-detail-side-panel" data-copre-mappa style="position: absolute; top: 0; left: -100%; width: 100%; max-width: 550px; height: 100%; background: var(--surface-color); box-shadow: 5px 0 20px rgba(0,0,0,0.15); border-right: 1px solid var(--border-color); z-index: 1050; transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
                 <div class="panel-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-color);">
                     <h3 style="margin: 0; font-size: 1.1rem; color: var(--info-text);">Segnalazione #<span id="bottom-detail-report-id"></span></h3>
-                    <button id="close-side-panel-btn" class="button-style button-secondary" style="width: 32px"><i class="fas fa-times"></i></button>
+                    <button id="close-side-panel-btn" class="button-style button-secondary" style="width: 32px" title="Chiudi il dettaglio" aria-label="Chiudi il dettaglio"><i class="fas fa-times"></i></button>
                 </div>
                 
                 <div id="bottom-detail-main" style="padding: 12px 15px 0 15px; display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; overflow-y: auto; border-bottom: 1px solid var(--border-color);">
@@ -355,7 +355,7 @@
                 <p>Inserisci il codice dell'emergenza</p>
                 <div>
                     <label for="emergency-external-code">Codice Emergenza:</label>
-                    <input type="text" id="emergency-external-code" required placeholder="Es. PIAVE2025-01">
+                    <input type="text" id="emergency-external-code" required placeholder="Es. ALLUVIONE-2026-01">
                 </div>
                 <div id="blocco-squadre-esistenti" hidden>
                     <p id="testo-squadre-esistenti"></p>
@@ -463,6 +463,7 @@
     <script src="/js/funzioni-co.js"></script>
     <script src="/js/chiamata-co.js"></script>
     <script src="/js/regia-co.js"></script>
+    <script src="/js/allerta-co.js"></script>
     <script src="/websocket.js"></script>
     <script type="module" src="/js/centro-operativo.js"></script>
 </body>

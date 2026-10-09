@@ -1,5 +1,3 @@
-// src/config.js
-//
 // La configurazione letta dall'ambiente (.env) e la versione installata.
 // Va importato prima di tutto ciò che legge process.env.
 

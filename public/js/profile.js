@@ -356,16 +356,19 @@ async function caricaDaConfermare() {
 function setupPhotoUpload() {
     const photoInput = document.getElementById('photo-upload');
     photoInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (file.size > 5 * 1024 * 1024) {
-            notifica('La foto non può superare i 5MB.', 'errore');
+        const scelta = e.target.files[0];
+        e.target.value = '';
+        if (!scelta) return;
+        if (scelta.size > 25 * 1024 * 1024) {
+            notifica('La foto è troppo grande (più di 25 MB).', 'errore');
             return;
         }
+        // Prima si inquadra: ne esce un JPEG piccolo, con il viso al centro.
+        const file = await window.ritagliaFoto(scelta);
+        if (!file) return;
 
         const formData = new FormData();
-        formData.append('photo', file);
+        formData.append('photo', file, 'foto.jpg');
 
         try {
             document.getElementById('profile-fullname').textContent = "Caricamento foto...";

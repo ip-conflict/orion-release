@@ -20,9 +20,7 @@ body {
     box-sizing: border-box;
 }
 
-/* L'aspetto dei pulsanti sta in componenti.css, condiviso da tutte le pagine.
-   Stava qui, ed era il motivo per cui lo stesso <button class="button-style">
-   si vedeva in tre modi diversi a seconda di quale pagina lo mostrava. */
+/* L'aspetto dei pulsanti sta in componenti.css, condiviso da tutte le pagine. */
 button:disabled {
     cursor: not-allowed;
     opacity: 0.65;
@@ -57,7 +55,7 @@ hr {
 /* ==========================================================================
    2. Layout Principale
    ========================================================================== */
-header {
+body > header {
     flex-shrink: 0;
     padding: 5px 15px;
     background-color: var(--header-bg);
@@ -69,9 +67,9 @@ header {
     gap: 15px;
 }
 
-header span[style*="margin: 0 15px;"] { margin: 0 !important; }
+body > header span[style*="margin: 0 15px;"] { margin: 0 !important; }
 
-header h1 {
+body > header h1 {
     margin: 0;
     font-size: 1.3em;
 }
@@ -93,7 +91,6 @@ header h1 {
     flex-direction: column; 
     min-width: 0; */
     /* L'altezza è determinata dal flex-grow del genitore .layout-container */
-
 
 /* Colonna Mappa */
 #map-container {
@@ -646,7 +643,6 @@ header h1 {
 }
 /* #team-status-content::-webkit-scrollbar { display: none; } Chrome/Safari/Opera */
 
-
 /* Stile per singolo elemento squadra nella barra */
 .team-status-item {
     display: inline-block; /* O flex se vuoi più controllo interno */
@@ -705,7 +701,6 @@ body {
      /* ... */
      z-index: 1051;
 }
-
 
 /* ==========================================================================
    4.2. Pannello Documenti Emergenza
@@ -885,14 +880,7 @@ body {
 .modal-content form div[style*="text-align: right"] button {
     padding: 10px 20px; margin-left: 10px;
 }
-.modal-content form button[type="button"]:not(#enableEditBtn) { /* Stile bottone 'Annulla' */
-     background-color: var(--button-cancel-bg);
-     color: #ffffff;
- }
- .modal-content form button[type="button"]:not(#enableEditBtn):hover {
-     background-color: var(--button-cancel-hover-bg);
- }
-
+/* "Annulla" come negli altri modali: il pulsante secondario di componenti.css. */
 
 /* ==========================================================================
    6. Stili Specifici Modale Assegnazione Squadre
@@ -993,7 +981,6 @@ body {
     .team-assignment-list .assign-team-btn:hover { background-color: #19692c; }
     .team-assignment-list .assign-team-btn:disabled { background-color: #557e60; }
 
-
    #team-status-panel {
         background-color: var(--secondary-bg-color, #2c2c2c);
         border-top-color: var(--border-color, #444);
@@ -1054,10 +1041,6 @@ body {
     }
 }
 
-
-
-
-
 /* ==========================================================================
    9. Blink Animation
    ========================================================================== */
@@ -1096,7 +1079,7 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
    ========================================================================== */
 @media print {
     @page { size: A4 landscape; margin: 10mm; }
-    header, .modal, #top-menu-content { display: none !important; }
+    body > header, .modal, #top-menu-content { display: none !important; }
 }
 
 .actions-panel a.button-secondary {
@@ -1627,9 +1610,8 @@ body.eventi-aperti #contenitore-avvisi {
     font-weight: 600;
     font-size: 0.95rem;
     color: var(--text-color);
-    /* Due righe invece di una sola troncata: "Persona dispersa - Torrente
-       Ardo" diventava "Persona dispersa - Torrente ...", cioè spariva proprio
-       il luogo, che è quello che distingue una segnalazione dall'altra. */
+    /* Due righe invece di una troncata: la fine del titolo è spesso il luogo,
+       che distingue una segnalazione dall'altra. */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -1762,24 +1744,23 @@ body.eventi-aperti #contenitore-avvisi {
 #lista-eventi li.evento-sala { border-left-color: var(--warning-color, #e0a800); }
 
 /* ==========================================================================
-   Telefono: la mappa in alto, le segnalazioni sotto. La colonna fissa di
-   360px del desktop spingeva la mappa fuori dallo schermo. Gli stili della
-   pagina sono in linea, da qui gli !important.
+   Telefono: la mappa in alto, le segnalazioni sotto. Gli stili della pagina
+   sono in linea, da qui gli !important.
    ========================================================================== */
 @media (max-width: 760px) {
     body { height: 100dvh !important; }
-    header {
+    body > header {
         height: auto !important;
         min-height: 52px;
         padding: 6px 10px !important;
         flex-wrap: wrap;
         gap: 6px;
     }
-    header { flex-wrap: nowrap; }
-    header > div:first-child { gap: 6px !important; min-width: 0; flex: 1 1 auto; }
+    body > header { flex-wrap: nowrap; }
+    body > header > div:first-child { gap: 6px !important; min-width: 0; flex: 1 1 auto; }
     /* Del titolo resta il logo: la scritta ORION non ci sta. */
-    header h1 { font-size: 0 !important; gap: 0 !important; flex-shrink: 0; }
-    header h1 img { height: 26px !important; }
+    body > header h1 { font-size: 0 !important; gap: 0 !important; flex-shrink: 0; }
+    body > header h1 img { height: 26px !important; }
     #emergency-status-display {
         font-size: 0.75rem !important;
         padding: 4px 8px !important;
@@ -1796,8 +1777,20 @@ body.eventi-aperti #contenitore-avvisi {
         white-space: nowrap;
         flex-shrink: 0;
     }
-    header > div:last-child { gap: 0 !important; flex-shrink: 0; }
+    body > header > div:last-child { gap: 0 !important; flex-shrink: 0; }
     .leaflet-control-logo img { max-width: 44px !important; }
+
+    /* Due righe: in alto logo, stato dell'emergenza e Menu; sotto i comandi. */
+    body > header { flex-wrap: wrap !important; justify-content: flex-start !important; row-gap: 6px !important; column-gap: 6px !important; }
+    body > header > div { display: contents !important; }
+    body > header h1 { order: 1; }
+    #emergency-status-display { order: 2; flex: 1 1 0 !important; }
+    body > header .top-menu-dropdown { order: 3; position: relative; margin-left: auto; }
+    body > header::before { content: ''; order: 4; flex-basis: 100%; height: 0; }
+    body > header > div > :not(h1):not(#emergency-status-display):not(.top-menu-dropdown) { order: 5; }
+    body > header > div > button { padding: 6px 10px !important; font-size: 0.82rem !important; white-space: nowrap; }
+    /* Gli avvisi sotto l'intestazione a due righe, non sopra i suoi pulsanti. */
+    #contenitore-avvisi { top: calc(var(--fondo-testata, 112px) + 6px) !important; right: 8px !important; left: 8px; max-width: none !important; }
 
     #area-lavoro { flex-direction: column; }
     #map-container {
@@ -2004,7 +1997,6 @@ body.eventi-aperti #contenitore-avvisi {
     #team-status-panel { max-width: none !important; }
 }
 
-
 /* Le sigle delle funzioni di supporto al lavoro sulla segnalazione. */
 .inbox-funzioni { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
 
@@ -2043,8 +2035,7 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 .squadra-assegnata { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .squadra-assegnata-capo { font-size: 0.85rem; }
 
-/* Il menu in alto a destra: una voce per riga, sempre (una voce in linea
-   affiancava la successiva e apriva una seconda colonna). */
+/* Il menu in alto a destra: una voce per riga, sempre. */
 #top-menu-content > a { width: 100%; box-sizing: border-box; white-space: nowrap; }
 
 /* ==========================================================================
@@ -2161,10 +2152,18 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 }
 .avvisi-chiudi-tutti:hover { background: var(--list-item-hover-bg); }
 
-/* Con molti pulsanti nell'intestazione, sugli schermi più stretti restano le
-   icone (il nome è nel suggerimento): lo stato dell'emergenza non si schiaccia. */
+/* Con molti pulsanti nell'intestazione, sotto i 1440 pixel il nome va sotto
+   l'icona, piccolo: le icone da sole non dicono niente a chi non le conosce,
+   e lo stato dell'emergenza non si schiaccia. */
 @media (max-width: 1440px) {
-    header .etichetta-testata { display: none; }
+    body > header .etichetta-testata { display: none; }
+    body > header button:has(> .etichetta-testata) {
+        display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 2px; padding: 5px 6px; min-width: 58px;
+    }
+    body > header button:not([hidden]):not([style*="display: none"]) > .etichetta-testata {
+        display: block; font-size: 0.6rem; font-weight: 600; line-height: 1.1; white-space: nowrap;
+    }
 }
 
 /* Rete scarsa: la fascia che dice che il server non risponde, cosa si sta
@@ -2194,3 +2193,12 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 }
 #rete-scarsa .rete-elenco li small { opacity: .8; }
 #rete-scarsa .rete-elenco li button { margin-left: auto; }
+
+/* Fra telefono e schermo largo i comandi, con il nome sotto l'icona, non
+   stanno sulla riga del logo e dello stato dell'emergenza: vanno a capo,
+   allineati a destra, invece di uscire dallo schermo. */
+@media (min-width: 761px) and (max-width: 1180px) {
+    body > header { height: auto !important; min-height: 60px; flex-wrap: wrap !important; row-gap: 6px; padding: 6px 20px !important; }
+    body > header > div:last-child { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+    #contenitore-avvisi { top: calc(var(--fondo-testata, 112px) + 6px) !important; }
+}

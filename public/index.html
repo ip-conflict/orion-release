@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login</title>
+  <title>Accesso - ORION</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="/css/theme.css">
     <link rel="stylesheet" href="/css/componenti.css">
@@ -16,9 +16,12 @@
     <div class="login-box">
       <form id="login-form">
         <img id="login-logo" src="" alt="Logo" style="display: none; max-width: 150px; margin: 0 auto 1rem auto;">
-        <h2 id="association-name-display">Login</h2>
-        <input type="text" id="username" placeholder="Username o Email" required />
-        <input type="password" id="password" placeholder="Password" required />
+        <h2 id="association-name-display">Accesso</h2>
+        <label for="username" class="etichetta-accesso">Nome utente o email</label>
+        <input type="text" id="username" placeholder="per esempio mario.rossi" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        <p class="non-sei-tu" id="non-sei-tu" hidden>Non sei tu? <a href="#" id="cambia-utente">Scrivi il tuo nome</a></p>
+        <label for="password" class="etichetta-accesso">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required />
         <button class="button-style" type="submit">Accedi</button>
         
         <div style="margin-top: 15px;">
@@ -77,7 +80,7 @@
           <div><label for="pa-nome">Nome</label><input type="text" id="pa-nome" autocomplete="given-name" required /></div>
           <div><label for="pa-cognome">Cognome</label><input type="text" id="pa-cognome" autocomplete="family-name" required /></div>
         </div>
-        <label for="pa-username">Username</label>
+        <label for="pa-username">Nome utente</label>
         <input type="text" id="pa-username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi" required />
         <label for="pa-email">Email <span class="pa-facoltativo">(per recuperare la password)</span></label>
         <input type="email" id="pa-email" autocomplete="email" />
@@ -91,13 +94,14 @@
       </form>
 
       <form id="forgot-password-form" style="display: none;">
-        <h2>Recupero Password</h2>
-        <p style="margin-bottom: 15px; font-size: 0.9em;">Inserisci il tuo username o la tua email. Ti invieremo un link per reimpostare la password.</p>
-        <input type="text" id="forgot-identificativo" placeholder="Username o Email" required />
+        <h2>Password dimenticata</h2>
+        <p style="margin-bottom: 15px; font-size: 0.9em;">Scrivi il tuo nome utente o la tua email: ti arriva per email un collegamento per sceglierne una nuova. Se non hai un'email in ORION, chiedi a chi ti ha iscritto.</p>
+        <label for="forgot-identificativo" class="etichetta-accesso">Nome utente o email</label>
+        <input type="text" id="forgot-identificativo" autocapitalize="none" spellcheck="false" required />
         <button class="button-style" type="submit">Invia il link</button>
         
         <div style="margin-top: 15px;">
-            <a href="#" id="show-login" style="color: var(--link-color); font-size: 0.9em; text-decoration: none;">Torna al Login</a>
+            <a href="#" id="show-login" style="color: var(--link-color); font-size: 0.9em; text-decoration: none;">Torna all'accesso</a>
         </div>
         <p id="forgot-message" style="margin-top: 15px; font-weight: bold;"></p>
       </form>

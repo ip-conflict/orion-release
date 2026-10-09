@@ -34,18 +34,18 @@
             
             <div id="main-dashboard-view">
                 <header class="content-header">
-                    <h1>Segreteria e Libretto Volontari</h1>
+                    <h1>Segreteria</h1>
                 </header>
 
                 <section class="dashboard-alerts" id="alerts-container"></section>
 
                 <section class="admin-panel">
                     <div class="panel-header">
-                        <h2>Fascicoli Volontari</h2>
+                        <h2>Fascicoli dei volontari</h2>
                         <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                             <div class="search-bar">
                                 <input type="text" id="search-volunteer" placeholder="Cerca volontario...">
-                                <button id="btn-search" class="button-style primary"><i class="fas fa-search"></i></button>
+                                <button id="btn-search" class="button-style primary" title="Cerca" aria-label="Cerca"><i class="fas fa-search"></i></button>
                             </div>
                         </div>
                     </div>
@@ -55,15 +55,16 @@
                         <span id="quanti-scelti"></span>
                         <button type="button" id="btn-visita-multipla" class="button-style primary">Registra una visita</button>
                         <button type="button" id="btn-corso-multiplo" class="button-style primary">Registra un corso</button>
+                        <button type="button" id="btn-stampa-fascicoli" class="button-style button-secondary"><i class="fas fa-print" aria-hidden="true"></i> Stampa i fascicoli</button>
                         <button type="button" id="btn-annulla-scelta" class="button-style button-secondary">Deseleziona</button>
                     </div>
                     <div class="table-container">
-                        <table class="admin-table" style="width: 100%;">
+                        <table class="admin-table no-schede" style="width: 100%;">
                             <thead>
                                 <tr>
                                     <th class="col-scelta"><input type="checkbox" id="scegli-tutti" title="Seleziona tutti quelli in elenco" aria-label="Seleziona tutti"></th>
                                     <th>Volontario</th>
-                                    <th>Stato Operativo</th>
+                                    <th>Stato</th>
                                     <th></th> </tr>
                             </thead>
                             <tbody id="segreteria-users-table">
@@ -80,74 +81,47 @@
                         <button id="btn-back-to-list" class="button-style button-secondary">
                             Torna all’elenco
                         </button>
-                        <h1 style="margin: 0; font-size: 1.8rem;">Fascicolo Volontario</h1>
+                        <h1 style="margin: 0; font-size: 1.8rem;">Fascicolo del volontario</h1>
                     </div>
                 </header>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
-                    
-                    <div class="card" style="text-align: center; padding: 20px; background: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light);">
-                        
-                        <div style="position: relative; width: 140px; height: 140px; margin: 0 auto 15px auto; border-radius: 50%; overflow: hidden; border: 4px solid var(--primary-color); background-color: var(--bg-color);">
+                <!-- In alto la persona: a sinistra chi è e i suoi dati, a destra il
+                     tesserino e le stampe. -->
+                <div class="fascicolo-testa">
+                    <div class="card fascicolo-persona">
+                        <div style="position: relative; width: 140px; height: 140px; margin: 0 auto 12px auto; border-radius: 50%; overflow: hidden; border: 4px solid var(--primary-color); background-color: var(--bg-color);">
                             <label for="detail-photo-upload" title="Cambia la foto del volontario" style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; cursor: pointer; padding: 6px 0; font-size: 0.8rem; font-weight: bold;">Cambia</label>
                             <input type="file" id="detail-photo-upload" accept="image/jpeg, image/png, image/webp" style="display: none;">
                             <img id="detail-user-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cbd5e1'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>" alt="Foto Profilo" style="width: 100%; height: 100%; object-fit: cover;">
                         </div>
                         
-                        <h2 id="detail-user-name" style="margin: 10px 0 5px 0; color: var(--text-color);">Nome Volontario</h2>
-                        <span id="detail-user-role" style="background: var(--primary-color); color: white; padding: 3px 10px; border-radius: 50px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase;">Ruolo</span>
-
-                        <hr style="margin: 20px 0; border-color: var(--border-light-color);">
-
-                        <div id="blocco-qr-dettaglio">
-                        <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--text-color);">Tesserino Elettronico</h3>
-                        
-                        <div id="detail-qrcode-container" style="background: white; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 15px; border: 1px solid #ddd; min-width: 150px; min-height: 150px;">
-                        </div>
-                        
-                        <br>
-                        </div>
-                        <button id="btn-print-id-card" class="button-style primary button-secondary" style="width: 100%; margin-top: 15px">
-                            Tesserino da divisa
-                        </button>
-                        <button id="btn-print-user-badge" class="button-style primary button-secondary" style="width: 100%; margin-top: 15px">
-                            Fascicolo in PDF
-                        </button>
-                        <button id="btn-print-status-card" class="button-style primary button-secondary" style="width: 100%; margin-top: 15px">
-                            Scheda riassuntiva
-                        </button>
-                        <button id="btn-rigenera-qr" class="button-style button-secondary" style="width: 100%; margin-top: 15px">
-                            Rigenera QR (tesserino perso)
+                        <h2 id="detail-user-name" style="margin: 6px 0 6px 0; color: var(--text-color); text-align: center;">Nome Volontario</h2>
+                        <div style="text-align: center;"><span id="detail-user-role" class="fascicolo-ruolo">Ruolo</span></div>
+                        <dl class="fascicolo-dati">
+                            <dt>Nome utente</dt><dd id="detail-user-username"></dd>
+                            <dt>Codice fiscale</dt><dd id="detail-user-cf" style="font-family: monospace;">Non inserito</dd>
+                            <dt>Telefono</dt><dd id="detail-user-phone">Non inserito</dd>
+                        </dl>
+                        <button id="btn-edit-anagrafica" class="button-style button-secondary" style="width: 100%;">
+                            Modifica i dati
                         </button>
                     </div>
 
-                    <div class="card" style="padding: 20px; background: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light); display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <h3 style="margin-top: 0; border-bottom: 2px solid var(--border-light-color); padding-bottom: 10px;">
-                                Dati Anagrafici
-                            </h3>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 15px;">
-                                <div>
-                                    <span style="display: block; font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">Username</span>
-                                    <span id="detail-user-username" style="font-weight: 500; font-size: 1.05rem;"></span>
-                                </div>
-                                <div>
-                                    <span style="display: block; font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">Codice Fiscale</span>
-                                    <span id="detail-user-cf" style="font-weight: 500; font-family: monospace; font-size: 1.05rem;">Non inserito</span>
-                                </div>
-                                <div>
-                                    <span style="display: block; font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">Telefono / Cellulare</span>
-                                    <span id="detail-user-phone" style="font-weight: 500; font-size: 1.05rem;">Non inserito</span>
-                                </div>
+                    <div class="card fascicolo-tesserino">
+                        <div id="blocco-qr-dettaglio">
+                            <h3>Tesserino elettronico</h3>
+                            <div id="detail-qrcode-container" style="background: white; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 12px; border: 1px solid #ddd; min-width: 150px; min-height: 150px;">
                             </div>
                         </div>
-                        
-                        <div style="text-align: right; margin-top: 20px;">
-                            <button id="btn-edit-anagrafica" class="button-style button-secondary">
-                                Modifica
-                            </button>
+                        <h3>Stampe</h3>
+                        <div class="fascicolo-stampe">
+                            <button id="btn-print-id-card" class="button-style button-secondary">Tesserino da divisa</button>
+                            <button id="btn-print-user-badge" class="button-style button-secondary">Fascicolo in PDF</button>
+                            <button id="btn-print-status-card" class="button-style button-secondary">Scheda riassuntiva</button>
                         </div>
+                        <button id="btn-rigenera-qr" class="bottone-testo">
+                            Tesserino perso? Rigenera il QR
+                        </button>
                     </div>
                 </div>
 
@@ -156,7 +130,7 @@
                         <div class="alert-card-header" style="justify-content: space-between;">
                             <div style="display: flex; align-items: center; gap: 15px;">
                                 <div class="alert-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-text);"><i class="fas fa-heartbeat"></i></div>
-                                <div class="alert-info"><h3 style="color: var(--text-color);">Visite Mediche</h3></div>
+                                <div class="alert-info"><h3 style="color: var(--text-color);">Visite mediche</h3></div>
                             </div>
                             <button id="btn-add-medical" class="button-style button-small primary">Aggiungi</button>
                         </div>
@@ -168,9 +142,9 @@
                         <div class="alert-card-header" style="justify-content: space-between;">
                             <div style="display: flex; align-items: center; gap: 15px;">
                                 <div class="alert-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;"><i class="fas fa-graduation-cap"></i></div>
-                                <div class="alert-info"><h3 style="color: var(--text-color);">Corsi e Attestati</h3></div>
+                                <div class="alert-info"><h3 style="color: var(--text-color);">Corsi e attestati</h3></div>
                             </div>
-                            <button id="btn-add-course" class="button-style button-small">Aggiungi</button>
+                            <button id="btn-add-course" class="button-style button-small primary">Aggiungi</button>
                         </div>
                         <ul id="detail-courses-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;">
                         </ul>
@@ -208,83 +182,85 @@
     <div id="medical-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close-modal">&times;</span>
-            <h2>Fascicolo Sanitario</h2>
-            <h3 id="medical-user-name"></h3>
+            <h2>Visite mediche</h2>
+            <p class="sottotitolo-finestra" id="medical-user-name"></p>
 
             <div id="current-medical-list" style="margin-bottom: 20px; background: var(--bg-color, #f8fafc); padding: 10px; border-radius: 5px; border: 1px solid var(--border-color, #e2e8f0);">
-                <h4 style="margin-top:0;">Storico Visite Mediche:</h4>
+                <h4 style="margin-top:0;">Visite già registrate</h4>
                 <ul id="user-medical-ul" style="margin: 0; padding-left: 20px;"></ul>
             </div>
 
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-
             <form id="medical-form" enctype="multipart/form-data">
                 <input type="hidden" id="medical-user-id">
-                <h4 style="margin-top:0;">Registra Nuova Visita</h4>
-                
+
                 <div class="form-group">
-                    <label>Tipo di Visita</label>
+                    <label for="visit_type_id">Tipo di visita</label>
                     <select id="visit_type_id" required>
                         <option value="">Caricamento catalogo...</option>
                     </select>
                 </div>
 
-                <div class="form-group"><label>Data Visita</label><input type="date" id="last_visit_date" required></div>
+                <div class="form-group"><label for="last_visit_date">Data della visita</label><input type="date" id="last_visit_date" required></div>
                 <div class="form-group">
-                    <label>Data Scadenza</label>
+                    <label for="expiry_date">Scadenza</label>
                     <input type="date" id="expiry_date" required>
-                    <small style="color: var(--text-muted);">Calcolata in automatico, ma modificabile a mano.</small>
+                    <small style="color: var(--text-muted);">Si calcola da sola dalla data della visita; si può cambiare.</small>
                 </div>
                 <div class="form-group">
-                    <label>Esito (Stato)</label>
+                    <label for="medical_status">Esito</label>
                     <select id="medical_status" required>
                         <option value="Idoneo">Idoneo</option>
-                        <option value="Non Idoneo">Non Idoneo</option>
+                        <option value="Non Idoneo">Non idoneo</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Carica Certificato (Solo PDF/Immagini, Max 50MB)</label>
+                    <label for="medical_document">Certificato (facoltativo)</label>
                     <input type="file" id="medical_document" accept=".pdf, image/jpeg, image/png, image/webp">
+                    <small style="color: var(--text-muted);">Un PDF o una foto, fino a 50 MB.</small>
                 </div>
-                <button type="submit" id="medical-submit-btn" class="button-style primary">Salva</button>
+                <div class="azioni-finestra">
+                    <button type="button" class="button-style button-secondary annulla-finestra">Annulla</button>
+                    <button type="submit" id="medical-submit-btn" class="button-style primary">Registra la visita</button>
+                </div>
             </form>
         </div>
     </div>
 
     <div id="medical-edit-modal" class="modal" style="display: none; z-index: 1050;">
-        <div class="modal-content" style="border-top: 5px solid var(--primary-color, #3b82f6);">
-            <span class="close-edit-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
-            <h2>Modifica Visita</h2>
-            <h3 id="medical-edit-user-name" style="color: var(--text-muted, #666); font-size: 1rem;"></h3>
+        <div class="modal-content">
+            <span class="close-edit-modal">&times;</span>
+            <h2>Correggi la visita</h2>
+            <p class="sottotitolo-finestra" id="medical-edit-user-name"></p>
 
             <form id="medical-edit-form" enctype="multipart/form-data">
                 <input type="hidden" id="edit-medical-user-id">
                 <input type="hidden" id="edit-medical-record-id">
                 <div class="form-group">
-                    <label>Tipo di Visita</label>
+                    <label for="edit_visit_type_id">Tipo di visita</label>
                     <select id="edit_visit_type_id" required>
                         <option value="">Caricamento catalogo...</option>
                     </select>
                 </div>
 
                 <div class="form-group">
-                    <label>Data Visita</label>
+                    <label for="edit_last_visit_date">Data della visita</label>
                     <input type="date" id="edit_last_visit_date" required>
                 </div>
                 <div class="form-group">
-                    <label>Data Scadenza</label>
+                    <label for="edit_expiry_date">Scadenza</label>
                     <input type="date" id="edit_expiry_date" required>
                 </div>
                 <div class="form-group">
-                    <label>Esito (Stato)</label>
+                    <label for="edit_medical_status">Esito</label>
                     <select id="edit_medical_status" required>
                         <option value="Idoneo">Idoneo</option>
-                        <option value="Non Idoneo">Non Idoneo</option>
+                        <option value="Non Idoneo">Non idoneo</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Aggiorna Certificato <small>(Lascia vuoto per mantenere l'attuale)</small></label>
+                    <label for="edit_medical_document">Certificato nuovo (facoltativo)</label>
                     <input type="file" id="edit_medical_document" accept=".pdf, image/jpeg, image/png, image/webp">
+                    <small style="color: var(--text-muted);">Se non scegli niente, resta quello di prima.</small>
                     
                     <div id="edit-delete-doc-container" style="display: none;">
                         <label class="checkbox-danger-label">
@@ -294,9 +270,9 @@
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <div class="azioni-finestra">
+                    <button type="button" id="medical-edit-cancel-btn" class="button-style button-secondary">Annulla</button>
                     <button type="submit" id="medical-edit-submit-btn" class="button-style primary">Salva</button>
-                    <button type="button" id="medical-edit-cancel-btn" class="button-style btn-discreto">Annulla</button>
                 </div>
             </form>
         </div>
@@ -305,54 +281,56 @@
     
     <div id="courses-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close-modal-courses" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
-            <h2>Gestione Corsi e Attestati</h2>
-            <h3 id="courses-user-name"></h3>
+            <span class="close-modal-courses">&times;</span>
+            <h2>Corsi e attestati</h2>
+            <p class="sottotitolo-finestra" id="courses-user-name"></p>
 
             <div id="current-courses-list" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; background-color: var(--bg-color); border: 1px solid var(--border-color);">
-                <h4 style="margin-top:0; color: var(--text-color);">Corsi già registrati:</h4>
+                <h4 style="margin-top:0; color: var(--text-color);">Corsi già registrati</h4>
                 <ul id="user-courses-ul" style="margin: 0; padding: 0; list-style: none;">
                     </ul>
             </div>
-
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
 
             <form id="course-form" enctype="multipart/form-data">
                 <input type="hidden" id="course-user-id">
                 
                 <div class="form-group">
-                    <label>Tipo di Corso</label>
+                    <label for="course_id">Corso</label>
                     <select id="course_id" required>
                         <option value="">Caricamento catalogo...</option>
                         </select>
                 </div>
                 <div class="form-group">
-                    <label>Data di Acquisizione</label>
+                    <label for="acquisition_date">Data del corso</label>
                     <input type="date" id="acquisition_date" required>
                 </div>
                 <div class="form-group">
-                    <label>Data Scadenza (Opzionale)</label>
-                    <input type="date" id="course_expiry_date" placeholder="Lascia vuoto se non scade">
-                    <small style="color: var(--text-muted);">Se il corso non ha una scadenza, lascia questo campo vuoto.</small>
+                    <label for="course_expiry_date">Scadenza (facoltativa)</label>
+                    <input type="date" id="course_expiry_date">
+                    <small style="color: var(--text-muted);">Vuota se il corso non scade.</small>
                 </div>
                 <div class="form-group">
-                    <label>Carica Attestato (Solo PDF/Immagini, Max 50MB)</label>
+                    <label for="course_document">Attestato (facoltativo)</label>
                     <input type="file" id="course_document" accept=".pdf, image/jpeg, image/png, image/webp">
+                    <small style="color: var(--text-muted);">Un PDF o una foto, fino a 50 MB.</small>
                 </div>
-                <button type="submit" class="button-style primary">Registra il corso</button>
+                <div class="azioni-finestra">
+                    <button type="button" class="button-style button-secondary annulla-finestra">Annulla</button>
+                    <button type="submit" class="button-style primary">Registra il corso</button>
+                </div>
             </form>
         </div>
     </div>
 
     <div id="catalog-modal" class="modal" style="display: none; z-index: 1060;">
         <div class="modal-content" style="max-width: 500px;">
-            <span class="close-catalog-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-color); opacity: 0.6;">&times;</span>
-            <h2>Catalogo Corsi</h2>
-            <p style="color: var(--text-muted, #64748b); font-size: 0.9rem; margin-top: 0;">Aggiungi o rimuovi le tipologie di corso disponibili per l'assegnazione.</p>
+            <span class="close-catalog-modal">&times;</span>
+            <h2>Catalogo dei corsi</h2>
+            <p class="sottotitolo-finestra">I corsi che si possono registrare ai volontari.</p>
 
             <form id="catalog-add-form" style="background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
                 <h4 style="margin-top: 0; margin-bottom: 15px; font-size: 1rem; color: var(--text-color); border-bottom: 1px solid var(--border-light-color); padding-bottom: 8px;">
-                    Aggiungi Nuovo Corso
+                    Nuovo corso
                 </h4>
                 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
@@ -361,16 +339,16 @@
                         <input type="text" id="new_course_code" placeholder="Es. AIB" style="width: 100%; margin: 0; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box;">
                     </div>
                     <div style="flex: 2; min-width: 160px;">
-                        <label for="new_course_name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Nome del Corso <span class="obbligatorio">*</span></label>
+                        <label for="new_course_name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Nome del corso <span class="obbligatorio">*</span></label>
                         <input type="text" id="new_course_name" placeholder="Es. Corso BLSD..." required style="width: 100%; margin: 0; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box;">
                     </div>
                     <div style="flex: 1; min-width: 100px;">
-                        <label for="new_course_validity" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Validità (Mesi)</label>
+                        <label for="new_course_validity" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Vale per (mesi)</label>
                         <input type="number" id="new_course_validity" placeholder="Es. 24" style="width: 100%; margin: 0; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box;">
                     </div>
                 </div>
                 
-                <div style="text-align: right;">
+                <div class="azioni-finestra">
                     <button type="submit" class="button-style primary">
                         Salva
                     </button>
@@ -383,30 +361,30 @@
     </div>
 
     <div id="catalog-edit-modal" class="modal" style="display: none; z-index: 1070;">
-        <div class="modal-content" style="max-width: 500px; border-top: 5px solid #f59e0b;">
-            <span class="close-catalog-edit-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-color); opacity: 0.6;">&times;</span>
-            <h2>Modifica Corso</h2>
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-catalog-edit-modal">&times;</span>
+            <h2>Modifica il corso del catalogo</h2>
             
             <form id="catalog-edit-form">
                 <input type="hidden" id="edit_catalog_course_id">
                 
                 <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="edit_catalog_course_name" style="font-weight: 600;">Nome del Corso</label>
+                    <label for="edit_catalog_course_name" style="font-weight: 600;">Nome del corso</label>
                     <input type="text" id="edit_catalog_course_name" required style="box-sizing: border-box; width: 100%;">
                 </div>
                 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 120px;">
-                        <label for="edit_catalog_course_code" style="font-weight: 600;">Codice Corso</label>
+                        <label for="edit_catalog_course_code" style="font-weight: 600;">Codice</label>
                         <input type="text" id="edit_catalog_course_code" placeholder="Es. AIB-01" style="box-sizing: border-box; width: 100%; text-transform: uppercase;">
                     </div>
                     <div style="flex: 1; min-width: 120px;">
-                        <label for="edit_catalog_course_validity" style="font-weight: 600;">Validità (Mesi)</label>
+                        <label for="edit_catalog_course_validity" style="font-weight: 600;">Vale per (mesi)</label>
                         <input type="number" id="edit_catalog_course_validity" placeholder="Vuoto = illimitata" style="box-sizing: border-box; width: 100%; background: var(--form-input-bg); color: var(--text-color); border: 1px solid var(--form-input-border);">
                     </div>
                 </div>
                 
-                <div style="text-align: right; margin-top: 20px;">
+                <div class="azioni-finestra">
                     <button type="submit" class="button-style primary">
                         Salva
                     </button>
@@ -416,30 +394,31 @@
     </div>
 
     <div id="course-edit-modal" class="modal" style="display: none; z-index: 1050;">
-        <div class="modal-content" style="border-top: 5px solid #8b5cf6;">
-            <span class="close-edit-course-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-color); opacity: 0.6;">&times;</span>
-            <h2>Modifica Corso</h2>
-            <h3 id="course-edit-user-name" style="color: var(--text-muted, #666); font-size: 1rem;"></h3>
+        <div class="modal-content">
+            <span class="close-edit-course-modal">&times;</span>
+            <h2>Correggi il corso</h2>
+            <p class="sottotitolo-finestra" id="course-edit-user-name"></p>
 
             <form id="course-edit-form" enctype="multipart/form-data">
                 <input type="hidden" id="edit-course-user-id">
                 <input type="hidden" id="edit-course-record-id">
 
                 <div class="form-group">
-                    <label>Tipo di Corso</label>
+                    <label for="edit_course_name">Corso</label>
                     <input type="text" id="edit_course_name" readonly style="background-color: var(--bg-color); opacity: 0.7; cursor: not-allowed;" title="Il tipo di corso non può essere modificato.">
                 </div>
                 <div class="form-group">
-                    <label>Data di Acquisizione</label>
+                    <label for="edit_acquisition_date">Data del corso</label>
                     <input type="date" id="edit_acquisition_date" required>
                 </div>
                 <div class="form-group">
-                    <label>Data Scadenza (Opzionale)</label>
+                    <label for="edit_course_expiry_date">Scadenza (facoltativa)</label>
                     <input type="date" id="edit_course_expiry_date">
                 </div>
                 <div class="form-group">
-                    <label>Aggiorna Attestato <small>(Lascia vuoto per mantenere l'attuale)</small></label>
+                    <label for="edit_course_document">Attestato nuovo (facoltativo)</label>
                     <input type="file" id="edit_course_document" accept=".pdf, image/jpeg, image/png, image/webp">
+                    <small style="color: var(--text-muted);">Se non scegli niente, resta quello di prima.</small>
                     
                     <div id="edit-delete-course-doc-container" style="display: none;">
                         <label class="checkbox-danger-label">
@@ -449,37 +428,37 @@
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <div class="azioni-finestra">
+                    <button type="button" id="course-edit-cancel-btn" class="button-style button-secondary">Annulla</button>
                     <button type="submit" id="course-edit-submit-btn" class="button-style primary">Salva</button>
-                    <button type="button" id="course-edit-cancel-btn" class="button-style btn-discreto">Annulla</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div id="medical-catalog-modal" class="modal" style="display: none; z-index: 1060;">
-        <div class="modal-content" style="max-width: 500px; border-top: 5px solid #10b981;">
-            <span class="close-medical-catalog-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-color); opacity: 0.6;">&times;</span>
-            <h2>Catalogo Visite Mediche</h2>
-            <p style="color: var(--text-muted, #64748b); font-size: 0.9rem; margin-top: 0;">Gestisci le tipologie di visite e la loro validità predefinita in mesi.</p>
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-medical-catalog-modal">&times;</span>
+            <h2>Catalogo delle visite</h2>
+            <p class="sottotitolo-finestra">I tipi di visita medica e per quanti mesi valgono.</p>
 
             <form id="medical-catalog-add-form" style="background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
                 <h4 style="margin-top: 0; margin-bottom: 15px; font-size: 1rem; color: var(--text-color); border-bottom: 1px solid var(--border-light-color); padding-bottom: 8px;">
-                    Aggiungi Nuova Visita
+                    Nuovo tipo di visita
                 </h4>
                 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                     <div style="flex: 2; min-width: 180px;">
-                        <label for="new_visit_name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Tipo di Visita Medica <span class="obbligatorio">*</span></label>
+                        <label for="new_visit_name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Nome della visita <span class="obbligatorio">*</span></label>
                         <input type="text" id="new_visit_name" placeholder="Es. Visita Specialistica..." required style="width: 100%; margin: 0; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box;">
                     </div>
                     <div style="flex: 1; min-width: 120px;">
-                        <label for="new_visit_validity" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Validità (Mesi) <span class="obbligatorio">*</span></label>
+                        <label for="new_visit_validity" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; display: block; color: var(--text-color);">Vale per (mesi) <span class="obbligatorio">*</span></label>
                         <input type="number" id="new_visit_validity" placeholder="Es. 24" required style="width: 100%; margin: 0; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); box-sizing: border-box;">
                     </div>
                 </div>
                 
-                <div style="text-align: right;">
+                <div class="azioni-finestra">
                     <button type="submit" class="button-style primary">
                         Salva
                     </button>
@@ -506,7 +485,7 @@
                 <small>Calcolata dalla validità; vuota se non scade.</small>
             </label>
             <label id="riga-esito-multipla">Esito
-                <select id="multipla-esito"><option value="Idoneo">Idoneo</option><option value="Non Idoneo">Non Idoneo</option></select>
+                <select id="multipla-esito"><option value="Idoneo">Idoneo</option><option value="Non Idoneo">Non idoneo</option></select>
             </label>
             <p id="esito-multipla" class="spiega-multipla" role="status"></p>
             <div class="azioni-finestra">
@@ -517,22 +496,23 @@
     </dialog>
 
     <div id="anagrafica-modal" class="modal" style="display: none; z-index: 1050;">
-        <div class="modal-content" style="max-width: 450px; border-top: 5px solid #3b82f6;">
-            <span class="close-anagrafica-modal" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-color); opacity: 0.6;">&times;</span>
-            <h2>Dati Anagrafici</h2>
-            <h3 id="anagrafica-user-name" style="color: var(--text-muted); font-size: 1rem; margin-top: 0;"></h3>
+        <div class="modal-content" style="max-width: 450px;">
+            <span class="close-anagrafica-modal">&times;</span>
+            <h2>Dati anagrafici</h2>
+            <p class="sottotitolo-finestra" id="anagrafica-user-name"></p>
 
             <form id="anagrafica-form">
                 <div class="form-group">
-                    <label>Codice Fiscale</label>
-                    <input type="text" id="edit_cf" placeholder="16 caratteri alfanumerici" maxlength="16" style="text-transform: uppercase; font-family: monospace;">
+                    <label for="edit_cf">Codice fiscale</label>
+                    <input type="text" id="edit_cf" placeholder="Es. RSSMRA80A01H501U" maxlength="16" style="text-transform: uppercase; font-family: monospace;">
                 </div>
                 <div class="form-group">
-                    <label>Telefono</label>
+                    <label for="edit_telefono">Telefono</label>
                     <input type="text" id="edit_telefono" placeholder="Es. 333 1234567">
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" id="anagrafica-submit-btn" class="button-style primary" style="width: 100%">Salva</button>
+                <div class="azioni-finestra">
+                    <button type="button" class="button-style button-secondary annulla-finestra">Annulla</button>
+                    <button type="submit" id="anagrafica-submit-btn" class="button-style primary">Salva</button>
                 </div>
             </form>
         </div>
@@ -547,6 +527,7 @@
     <script src="/js/menu-laterale.js"></script>
     <script src="/js/codice-barre.js"></script>
     <script src="/js/tesserino.js"></script>
+    <script src="/js/ritaglio-foto.js"></script>
     <script src="/js/admin-segreteria.js"></script>
 </body>
 </html>

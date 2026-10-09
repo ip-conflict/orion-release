@@ -1,4 +1,3 @@
-// create-admin.js
 import pg from 'pg';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';

@@ -4,13 +4,6 @@
    Pulsanti, pastiglie di stato e schede: un aspetto solo per tutta
    l'applicazione.
 
-   Prima di questo file l'aspetto base dei pulsanti stava in
-   centro-operativo.css, che però non tutte le pagine caricano: il risultato
-   era che lo stesso <button class="button-style"> si vedeva in tre modi
-   diversi a seconda della pagina, e chi ne aggiungeva uno nuovo lo
-   riverniciava a mano nell'HTML. Da lì i quaranta pulsanti con lo stile
-   scritto dentro l'attributo style, i gradienti sparsi e i raggi a pillola.
-
    CRITERI, in ordine di importanza:
 
    1. SOBRIO. Niente gradienti, niente ombre colorate, niente pulsanti a
@@ -287,3 +280,16 @@ button:focus-visible {
 .bollino.spento { background: var(--secondary-bg-color); color: var(--text-muted); }
 .bollino.piccolo { padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase; }
 
+/* Il codice fiscale si scrive in maiuscolo, l'esempio grigio resta normale. */
+#prof_cf::placeholder { text-transform: none; font-family: inherit; }
+
+/* Le finestre della segreteria: un titolo, sotto il nome della persona in
+   grigio, la crocetta sempre uguale in alto a destra. */
+.modal-content .sottotitolo-finestra { margin: -6px 0 18px; color: var(--text-muted); font-weight: 600; font-size: 0.95rem; }
+.modal-content > span[class*="close"] {
+    float: right; margin: -4px -6px 0 8px; padding: 2px 8px;
+    font-size: 28px; font-weight: 700; line-height: 1;
+    color: var(--text-muted); cursor: pointer; border-radius: 8px;
+}
+.modal-content > span[class*="close"]:hover { color: var(--text-color); background: var(--list-item-hover-bg); }
+.modal-content .form-group small { display: block; margin-top: 4px; }

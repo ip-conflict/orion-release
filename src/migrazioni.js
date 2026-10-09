@@ -1,5 +1,3 @@
-// src/migrazioni.js
-//
 // All'avvio si applicano le migrazioni che mancano. Di solito non ce n'è
 // nessuna: setup.sh, update.sh e l'aggiornamento dalla pagina Sistema le
 // applicano già. Servono dopo un ripristino: un backup fatto con una versione

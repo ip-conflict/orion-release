@@ -48,7 +48,10 @@ async function fetchApi(url, options = {}) {
             } catch (jsonError) {
                 // Se non è JSON, usa lo statusText se disponibile
                 console.warn(`API Helper: Impossibile parsare risposta errore come JSON per ${url}. Status: ${response.status}`);
-                errorMsg = response.statusText || `Errore ${response.status}`;
+                // statusText è in inglese ("Bad Gateway"): si dice in italiano cosa succede.
+                errorMsg = response.status === 429 ? 'Troppe richieste in poco tempo: aspetta qualche minuto e riprova.'
+                    : response.status >= 500 ? `Il server non ha risposto come doveva (errore ${response.status}): riprova fra poco.`
+                    : `Richiesta non riuscita (errore ${response.status}).`;
                 // Non tentare response.text() qui, il body è già stato consumato
             }
 
@@ -92,7 +95,14 @@ async function fetchApi(url, options = {}) {
 
     } catch (networkError) {
         console.error(`API Helper: Errore durante chiamata a ${url}:`, networkError);
-        // Rilancia l'errore per essere gestito dal chiamante
+        // Senza rete il browser dice "Failed to fetch": chi chiama mostra il
+        // messaggio così com'è, quindi lo si dice in italiano.
+        if (networkError instanceof TypeError && !networkError.status) {
+            const senzaRete = new Error('Il server non si raggiunge: controlla la connessione e riprova.');
+            senzaRete.rete = true;
+            senzaRete.cause = networkError;
+            throw senzaRete;
+        }
         throw networkError;
     }
 }
@@ -172,7 +182,6 @@ function loadReadStatusFromStorage() {
     if (!(window.reportLastViewedLogTimestamp instanceof Map)) {
         console.error("[ReadStatus] ERRORE CRITICO: La mappa globale 'window.reportLastViewedLogTimestamp' non è stata inizializzata correttamente prima di chiamare loadReadStatusFromStorage!");
         window.reportLastViewedLogTimestamp = new Map();
-        // return; // Potrebbe essere meglio uscire se la mappa non era pronta
     }
     window.reportLastViewedLogTimestamp.clear();
     console.log("[ReadStatus] Mappa in memoria svuotata prima del caricamento.");

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mio Profilo</title>
+    <title>Il mio profilo - ORION</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/theme.css">
     <link rel="stylesheet" href="/css/componenti.css">
@@ -18,8 +18,9 @@
     <div class="admin-layout" style="max-width: 100%; margin: 0; min-height: 100vh;">
         
         <nav class="admin-sidebar">
-            <div class="sidebar-header" style="margin-bottom: 30px;">
-                <h2>Profilo</h2>
+            <div class="sidebar-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                <img id="main-app-logo" src="/logo.png" alt="Logo" style="height: 32px; width: auto; object-fit: contain;">
+                <h2 style="margin: 0;">ORION</h2>
             </div>
             <ul class="sidebar-menu">
                 <li>
@@ -44,7 +45,7 @@
             
             <section id="section-libretto" style="border: none; padding-bottom: 0;">
                 <header class="content-header" style="margin-bottom: 30px;">
-                    <h1 style="margin-top: 0; font-size: 2rem;">Il Mio Fascicolo</h1>
+                    <h1 style="margin-top: 0; font-size: 2rem;">Il mio profilo</h1>
                 </header>
 
                 <!-- Le consegne da confermare stanno in cima: sono l'unica cosa
@@ -93,7 +94,7 @@
                         <form id="profile-anagrafica-form">
                             <div class="form-group">
                                 <label>Codice Fiscale</label>
-                                <input type="text" id="prof_cf" placeholder="16 caratteri alfanumerici" maxlength="16" style="text-transform: uppercase; font-family: monospace;">
+                                <input type="text" id="prof_cf" placeholder="Es. RSSMRA80A01H501U" maxlength="16" style="text-transform: uppercase; font-family: monospace;">
                             </div>
                             <div class="form-group">
                                 <label>Telefono / Cellulare</label>
@@ -106,11 +107,11 @@
                             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px;">
                                 <div class="form-group">
                                     <label>Città</label>
-                                    <input type="text" id="prof_citta" placeholder="Città">
+                                    <input type="text" id="prof_citta">
                                 </div>
                                 <div class="form-group">
                                     <label>CAP</label>
-                                    <input type="text" id="prof_cap" placeholder="32100" maxlength="5">
+                                    <input type="text" id="prof_cap" placeholder="Es. 00100" maxlength="5">
                                 </div>
                             </div>
                             
@@ -252,6 +253,7 @@
     
     <script src="/js/apiHelper.js"></script>
     <script src="/js/menu-laterale.js"></script>
+    <script src="/js/ritaglio-foto.js"></script>
     <script src="/js/profile.js" defer></script>
     <script src="/js/mfa-comune.js" defer></script>
     <script src="/js/profilo-mfa.js" defer></script>

@@ -1,5 +1,3 @@
-// src/formatoCifrato.js
-//
 // Il formato dei dati cifrati di ORION, senza database e senza stato: lo usa
 // il server (cifratura.js) e lo usano gli script lanciati a mano o dal backup
 // notturno (scripts/cifra-backup.mjs, scripts/decifra-backup.mjs).
@@ -32,7 +30,6 @@ export function decifraCon(chiave, buf) {
     return Buffer.concat([d.update(buf.subarray(TESTA, buf.length - LUNGHEZZA_TAG)), d.final()]);
 }
 
-// Cifra un flusso: testa, dati, e il tag in coda.
 export function flussoCifratoCon(chiave) {
     const iv = crypto.randomBytes(LUNGHEZZA_IV);
     const c = crypto.createCipheriv('aes-256-gcm', chiave, iv);
@@ -95,7 +92,6 @@ export function leggiChiaveDiRecupero(testo) {
     return Buffer.from(byte);
 }
 
-// La chiave dal suo file (base64 su una riga), o null.
 export function leggiFileChiaveDa(percorso) {
     try {
         const k = Buffer.from(fs.readFileSync(percorso, 'utf8').trim(), 'base64');

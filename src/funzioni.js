@@ -1,5 +1,3 @@
-// src/funzioni.js
-//
 // Le funzioni di supporto del COC (metodo Augustus). Si accendono dalle
 // impostazioni (funzioni_enabled); spente, le rotte rispondono 404 e le
 // pagine non mostrano niente.
@@ -145,6 +143,21 @@ export function registraRotteFunzioni(app, ctx) {
         } catch (e) {
             logger.error('Errore GET /api/admin/funzioni:', e);
             res.status(500).json({ message: 'Errore nel leggere le funzioni.' });
+        }
+    });
+
+    // Le persone da mettere nelle funzioni: solo nome, nome utente ed ente.
+    // Chi gestisce le funzioni non ha per forza l'anagrafica (/api/admin/users).
+    app.get('/api/admin/funzioni/persone', richiedePermesso('emergenze.funzioni'), async (req, res) => {
+        try {
+            const { rows } = await pool.query(`
+                SELECT id, username, nome, cognome, ente, temporaneo, is_active
+                  FROM users WHERE eliminato_il IS NULL AND COALESCE(is_active, true)
+                 ORDER BY cognome, nome`);
+            res.json(rows);
+        } catch (e) {
+            logger.error('Errore GET /api/admin/funzioni/persone:', e);
+            res.status(500).json({ message: 'Errore nel leggere le persone.' });
         }
     });
 
