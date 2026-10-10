@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 
 // Carica le variabili d'ambiente (per le credenziali DB)
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const { Pool } = pg;
 

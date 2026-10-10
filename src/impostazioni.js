@@ -10,6 +10,7 @@ import { pool } from './db.js';
 import { inviaEmailProva } from './email.js';
 import { wss } from './tempoReale.js';
 import { cifraTesto } from './cifratura.js';
+import { CHIAVI_FIREBASE } from './firebase.js';
 import { ModelloNonValido, validaModelloTesserino } from './modelloTesserino.js';
 import { controlla as controllaAllerta, controllaImpostazioniAllerta } from './allerta.js';
 
@@ -91,6 +92,8 @@ export function registraRotteImpostazioni(app) {
             // c'è. Un campo lasciato vuoto al salvataggio la lascia com'è.
             settings.smtp_pass_impostata = !!settings.smtp_pass;
             delete settings.smtp_pass;
+            // Firebase ha la sua pagina: la chiave non esce mai.
+            for (const k of CHIAVI_FIREBASE) delete settings[k];
             res.status(200).json(settings);
         } catch (error) {
             logger.error("Errore durante il recupero delle impostazioni complete di branding:", error);
@@ -102,7 +105,7 @@ export function registraRotteImpostazioni(app) {
     // l'indirizzo del pacchetto e la sua impronta, e si cambia solo dalla pagina
     // Sistema, che li verifica.
     const CHIAVI_INTERNE = new Set(['aggiornamenti_config', 'aggiornamenti_stato', 'cifratura_impronta', 'cifratura_recupero_salvata',
-        'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il']);
+        'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il', ...CHIAVI_FIREBASE]);
 
     app.put('/api/branding/settings', checkAdminRole, async (req, res) => {
         const settingsToUpdate = req.body;

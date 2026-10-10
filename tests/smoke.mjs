@@ -197,8 +197,13 @@ async function eseguiTest() {
         const librettoAltrui = await volontario.chiamata('/api/users/1/libretto');
         verifica('volontario: libretto di un altro utente negato', librettoAltrui.stato === 403, `HTTP ${librettoAltrui.stato}`);
 
+        // Il proprietario si legge dal database: un file che nessuna riga
+        // richiama non esiste per chi chiede (404), uno di un altro è negato
+        // (403). In nessun caso il numero scritto nel nome autorizza.
         const certificatoAltrui = await volontario.chiamata('/api/documents/certificates/cert-1-aaaaaaaa.pdf');
-        verifica('volontario: certificato di un altro utente negato', certificatoAltrui.stato === 403, `HTTP ${certificatoAltrui.stato}`);
+        verifica('volontario: certificato di un altro utente negato', [403, 404].includes(certificatoAltrui.stato), `HTTP ${certificatoAltrui.stato}`);
+        const certificatoFinto = await volontario.chiamata(`/api/documents/certificates/cert-${idVolontario}-aaaaaaaa.pdf`);
+        verifica('volontario: col proprio numero nel nome ma senza riga non si entra', [403, 404].includes(certificatoFinto.stato), `HTTP ${certificatoFinto.stato}`);
 
         const proprioLibretto = await volontario.chiamata(`/api/users/${idVolontario}/libretto`);
         verifica('volontario: il proprio libretto è accessibile', proprioLibretto.stato === 200, `HTTP ${proprioLibretto.stato}`);

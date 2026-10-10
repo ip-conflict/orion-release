@@ -10,6 +10,8 @@ import bcrypt from 'bcrypt';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { applicaMigrazioniMancanti } from './migrazioni.js';
+import { runner } from 'node-pg-migrate';
+import { connessioneDb as connessionePg } from './db.js';
 import { allineaMigrazioni } from './allineaMigrazioni.js';
 import readline from 'readline';
 import { PassThrough, Transform } from 'stream';
@@ -980,6 +982,7 @@ export function registraRotteManutenzione(app, ctx) {
                 return;
             }
         }
+        await allineaNumeroVersione(radice, descrizione, stato.versione);
         ultimoPasso('fatto');
 
         // 4. Le dipendenze si installano nella cartella di lavoro, accanto al
@@ -1053,6 +1056,301 @@ export function registraRotteManutenzione(app, ctx) {
             iniziata: new Date().toISOString(),
             riavvio_manuale: true
         });
+    }
+
+    // --- Tornare a una versione precedente ------------------------------------
+    // Ogni aggiornamento dalla pagina Sistema lascia due cose: il backup del
+    // database fatto prima (db_..._pre-aggiornamento) e il codice della
+    // versione lasciata (codice_..._v<versione>.tar.gz). Con quelle si torna
+    // indietro: il codice di allora, con le sue dipendenze, e a scelta anche
+    // i dati di allora. Prima si mettono da parte database e codice attuali,
+    // e il ritorno lascia a sua volta le stesse due cose: si può tornare avanti.
+    const NOME_CODICE_VALIDO = /^codice_(\d{8})_(\d{6})_v([0-9A-Za-z.+-]{1,40})\.tar\.gz$/;
+    const NOME_DB_PRIMA = /^db_(\d{8})_(\d{6})_(pre-aggiornamento|pre-ritorno)\.sql\.gz$/;
+    const PAROLA_RITORNO = 'TORNA';
+    const versioniLette = new Map(); // nome -> { mtime, versione }
+
+    const istanteDa = (giorno, ora) =>
+        Date.UTC(+giorno.slice(0, 4), +giorno.slice(4, 6) - 1, +giorno.slice(6, 8), +ora.slice(0, 2), +ora.slice(2, 4), +ora.slice(4, 6));
+
+    // La versione scritta nel package.json dell'archivio: quella nel nome
+    // potrebbe essere sbagliata (un pacchetto che non aggiornava il numero).
+    async function versioneDellArchivio(percorso, nome, mtime) {
+        const memo = versioniLette.get(nome);
+        if (memo && memo.mtime === mtime) return memo.versione;
+        let versione = null;
+        try {
+            const testo = await eseguiComando('tar', ['-xzOf', percorso, './package.json'], {}, 60 * 1000);
+            versione = JSON.parse(testo).version || null;
+        } catch { /* archivio senza package.json leggibile: vale il nome */ }
+        versioniLette.set(nome, { mtime, versione });
+        return versione;
+    }
+
+    // Le migrazioni di un archivio, dai nomi dei file in migrations/.
+    const migrazioniLette = new Map(); // nome -> { mtime, nomi }
+    async function migrazioniDellArchivio(percorso, nome, mtime) {
+        const memo = migrazioniLette.get(nome);
+        if (memo && memo.mtime === mtime) return memo.nomi;
+        let nomi = null;
+        try {
+            const elenco = await eseguiComando('tar', ['-tzf', percorso], {}, 60 * 1000);
+            nomi = elenco.split('\n').map(r => r.match(/^\.?\/?migrations\/([^/]+)\.c?js$/)?.[1]).filter(Boolean);
+        } catch { /* si saprà al momento del ritorno */ }
+        migrazioniLette.set(nome, { mtime, nomi });
+        return nomi;
+    }
+
+    // Le modifiche al database che la versione scelta non conosce: le hanno
+    // fatte le versioni successive. Tenendo i dati si annullano, dalla più
+    // recente, con il "down" delle migrazioni della versione installata.
+    async function modificheDaAnnullare(nomiVecchi) {
+        const { rows } = await pool.query('SELECT name FROM pgmigrations ORDER BY run_on DESC, id DESC');
+        const vecchie = new Set(nomiVecchi);
+        const extra = rows.map(r => r.name).filter(n => !vecchie.has(n));
+        const ultime = rows.slice(0, extra.length).map(r => r.name);
+        const inCoda = extra.every(n => ultime.includes(n));
+        const conFile = extra.every(n => fs.existsSync(path.join(cartellaApplicazione, 'migrations', `${n}.cjs`))
+            || fs.existsSync(path.join(cartellaApplicazione, 'migrations', `${n}.js`)));
+        return { nomi: extra, annullabili: inCoda && conFile };
+    }
+
+    const descriviMigrazione = (n) => n.replace(/^\d+_/, '').replace(/[-_]/g, ' ');
+
+    async function versioniPrecedenti() {
+        let nomi = [];
+        try {
+            nomi = await fs.promises.readdir(cartellaApp);
+        } catch {
+            return [];
+        }
+        const backup = nomi.map(n => n.match(NOME_DB_PRIMA)).filter(Boolean)
+            .map(m => ({ nome: m[0], istante: istanteDa(m[1], m[2]) }));
+        const elenco = [];
+        for (const nome of nomi) {
+            const m = nome.match(NOME_CODICE_VALIDO);
+            if (!m) continue;
+            const percorso = path.join(cartellaApp, nome);
+            const info = await fs.promises.stat(percorso).catch(() => null);
+            if (!info?.isFile()) continue;
+            const istante = istanteDa(m[1], m[2]);
+            // Il backup dei dati fatto dalla stessa operazione, poco prima.
+            const coppia = backup.filter(b => b.istante <= istante && istante - b.istante <= 6 * 3600 * 1000)
+                .sort((a, b) => b.istante - a.istante)[0];
+            const migrazioni = await migrazioniDellArchivio(percorso, nome, info.mtimeMs);
+            const daAnnullare = migrazioni ? await modificheDaAnnullare(migrazioni) : null;
+            elenco.push({
+                nome,
+                versione: (await versioneDellArchivio(percorso, nome, info.mtimeMs)) || m[3],
+                // Tenendo i dati: cosa si toglie dal database, e se si può.
+                modifiche: daAnnullare ? { annullabili: daAnnullare.annullabili, elenco: daAnnullare.nomi.map(descriviMigrazione) } : null,
+                lasciata_il: new Date(istante).toISOString(),
+                dimensione: info.size,
+                dati: coppia ? { nome: coppia.nome, del: new Date(coppia.istante).toISOString() } : null
+            });
+        }
+        // Una riga per versione, la copia più recente; quella in uso non serve.
+        const viste = new Set();
+        return elenco.sort((a, b) => b.lasciata_il.localeCompare(a.lasciata_il))
+            .filter(v => v.versione !== versioneInstallata && !viste.has(v.versione) && viste.add(v.versione));
+    }
+
+    app.get('/api/sistema/versioni-precedenti', soloAdmin, async (req, res) => {
+        try {
+            res.json({ versione_installata: versioneInstallata, versioni: await versioniPrecedenti() });
+        } catch (e) {
+            logger.error('[Manutenzione] Elenco delle versioni precedenti non leggibile:', e);
+            res.status(500).json({ message: 'Errore nel leggere le versioni precedenti.' });
+        }
+    });
+
+    app.post('/api/sistema/versioni-precedenti/torna', soloAdmin, async (req, res) => {
+        const { nome, dati, password, conferma } = req.body || {};
+        if (conferma !== PAROLA_RITORNO) {
+            return res.status(400).json({ message: `Per procedere scrivi ${PAROLA_RITORNO} nella casella di conferma.` });
+        }
+        if (!password) return res.status(400).json({ message: 'Serve la tua password per confermare.' });
+        const utente = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+        const passwordGiusta = utente.rowCount > 0 && await bcrypt.compare(password, utente.rows[0].password);
+        if (!passwordGiusta) return res.status(403).json({ message: 'Password errata.' });
+
+        const scelta = (await versioniPrecedenti()).find(v => v.nome === nome);
+        if (!scelta) return res.status(400).json({ message: 'Versione non trovata fra quelle messe da parte.' });
+        let backupDati = null;
+        if (!dati && scelta.modifiche && !scelta.modifiche.annullabili) {
+            return res.status(400).json({ message: 'Il database ha modifiche che quella versione non conosce e che non si possono annullare: si può tornare solo riportando anche i dati a com\'erano.' });
+        }
+        if (dati) {
+            if (!scelta.dati) return res.status(400).json({ message: 'Per questa versione non c\'è il backup dei dati di allora: si può tornare solo al programma.' });
+            backupDati = path.join(cartellaApp, scelta.dati.nome);
+            const verifica = await verificaArchivio(backupDati);
+            if (!verifica.valido) return res.status(400).json({ message: `Il backup dei dati di allora non si può usare: ${verifica.motivo}.` });
+        }
+        const requisiti = await verificaRequisiti();
+        if (!requisiti.pronto) {
+            return res.status(409).json({ message: `Non si può tornare indietro adesso: ${requisiti.problemi.join(' ')}` });
+        }
+        if (!iniziaOperazione('ritorno')) {
+            return res.status(409).json({ message: 'C\'è già un\'operazione di manutenzione in corso.' });
+        }
+
+        registraAudit(req, 'sistema.ritorno_versione', { dettagli: { da: versioneInstallata, a: scelta.versione, archivio: nome, dati: !!dati } });
+        logger.warn(`[Manutenzione] RITORNO dalla versione ${versioneInstallata} alla ${scelta.versione}${dati ? ' con i dati di allora' : ''}, richiesto da ${req.user.username}.`);
+        res.json({ message: 'Ritorno alla versione precedente avviato.', avviato: true });
+
+        const lavoro = path.join(cartellaApp, 'aggiornamento');
+        (async () => {
+            await fs.promises.rm(lavoro, { recursive: true, force: true });
+            await fs.promises.mkdir(lavoro, { recursive: true });
+            try {
+                await tornaAllaVersione(scelta, path.join(cartellaApp, nome), backupDati, lavoro);
+            } finally {
+                await fs.promises.rm(lavoro, { recursive: true, force: true }).catch(() => {});
+            }
+        })().catch(e => {
+            ultimoPasso('errore');
+            impostaManutenzione(null);
+            avvisaClienti('manutenzione', { attiva: false });
+            chiudiOperazione('errore', e.message);
+        });
+    });
+
+    async function tornaAllaVersione(scelta, archivio, backupDati, lavoro) {
+        // 1. Database e codice di adesso, da parte: senza, non si comincia.
+        passo('Backup del database attuale');
+        const sicurezza = await eseguiBackup('pre-ritorno');
+        if (!sicurezza) {
+            ultimoPasso('errore');
+            chiudiOperazione('errore', 'Il backup non è riuscito, quindi non si è tornati indietro: l\'installazione è intatta.');
+            return;
+        }
+        ultimoPasso('fatto');
+        operazione.backup_sicurezza = path.basename(sicurezza);
+
+        passo(`Copia di sicurezza della versione ${versioneInstallata}`);
+        const copiaCodice = await archiviaCodice();
+        if (!copiaCodice) {
+            ultimoPasso('errore');
+            chiudiOperazione('errore', 'Non è stato possibile mettere da parte il codice attuale: non si torna indietro. L\'installazione è intatta.');
+            return;
+        }
+        ultimoPasso('fatto');
+        operazione.copia_codice = path.basename(copiaCodice);
+
+        // 2. La versione di allora, con le sue dipendenze, nella cartella di lavoro.
+        passo(`Preparazione della versione ${scelta.versione}`);
+        const radice = await scompattaPacchetto(archivio, lavoro);
+        const descrizione = JSON.parse(await fs.promises.readFile(path.join(radice, 'package.json'), 'utf8'));
+        if (String(descrizione.name).toLowerCase() !== 'orion' || !fs.existsSync(path.join(radice, 'src', 'server.js'))) {
+            ultimoPasso('errore');
+            chiudiOperazione('errore', 'L\'archivio non contiene ORION. Niente è stato toccato.');
+            return;
+        }
+        ultimoPasso('fatto');
+        passo('Installazione delle dipendenze di quella versione');
+        try {
+            await installaDipendenze(radice);
+            ultimoPasso('fatto');
+        } catch (e) {
+            ultimoPasso('errore');
+            chiudiOperazione('errore', `${e.message} Niente è stato toccato: database e programma sono quelli di adesso.`);
+            return;
+        }
+
+        // 3. Porte chiuse: i dati (se richiesto) e poi i file.
+        impostaManutenzione({ motivo: 'ritorno a una versione precedente', iniziata: new Date().toISOString() });
+        avvisaClienti('manutenzione', { attiva: true, motivo: 'ritorno a una versione precedente' });
+
+        if (backupDati) {
+            try {
+                passo(`Dati come erano il ${new Date(scelta.dati.del).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}`);
+                await ripristinaDatabase(backupDati);
+                ultimoPasso('fatto');
+                passo('Allineamento del database a quella versione');
+                await applicaMigrazioni(radice);
+                ultimoPasso('fatto');
+            } catch (e) {
+                ultimoPasso('errore');
+                impostaManutenzione(null);
+                avvisaClienti('manutenzione', { attiva: false });
+                chiudiOperazione('errore', `Il ripristino dei dati di allora non è riuscito: ${e.message} Il programma è ancora quello di adesso.`);
+                return;
+            }
+        } else {
+            // I dati restano; il database torna alla forma di quella versione.
+            try {
+                const nomiVecchi = (await fs.promises.readdir(path.join(radice, 'migrations')))
+                    .map(f => f.match(/^(.+)\.c?js$/)?.[1]).filter(Boolean);
+                const daAnnullare = await modificheDaAnnullare(nomiVecchi);
+                if (!daAnnullare.nomi.length) {
+                    passo('I dati restano quelli di adesso: il database va già bene a quella versione', 'saltato');
+                } else {
+                    passo(`I dati restano; si annullano ${daAnnullare.nomi.length === 1 ? 'una modifica' : `${daAnnullare.nomi.length} modifiche`} al database delle versioni successive (${daAnnullare.nomi.map(descriviMigrazione).join(', ')})`);
+                    if (!daAnnullare.annullabili) throw new Error('alcune modifiche al database non si possono annullare.');
+                    await runner({
+                        databaseUrl: connessionePg,
+                        dir: path.join(cartellaApplicazione, 'migrations'),
+                        migrationsTable: 'pgmigrations',
+                        direction: 'down',
+                        count: daAnnullare.nomi.length,
+                        // Tutte o nessuna.
+                        singleTransaction: true,
+                        log: () => {},
+                        logger: { debug: () => {}, info: () => {}, warn: m => logger.warn(`[Migrazioni] ${m}`), error: m => logger.error(`[Migrazioni] ${m}`) }
+                    });
+                    ultimoPasso('fatto');
+                }
+            } catch (e) {
+                ultimoPasso('errore');
+                impostaManutenzione(null);
+                avvisaClienti('manutenzione', { attiva: false });
+                chiudiOperazione('errore', `Il database non è tornato alla forma di quella versione: ${e.message} Niente è cambiato (le modifiche si annullano tutte insieme o nessuna). Si può riprovare riportando anche i dati a com'erano.`);
+                return;
+            }
+        }
+
+        try {
+            passo('Sostituzione dei file');
+            await copiaVersione(radice);
+            if (!fs.existsSync(path.join(cartellaApplicazione, 'node_modules', '.bin', 'node-pg-migrate'))) {
+                throw new Error('Dopo la copia le dipendenze non risultano al loro posto.');
+            }
+            ultimoPasso('fatto');
+        } catch (e) {
+            ultimoPasso('errore');
+            impostaManutenzione(null);
+            avvisaClienti('manutenzione', { attiva: false });
+            chiudiOperazione('errore', `${e.message} Il codice di prima è in ${copiaCodice}${backupDati ? ` e i dati di prima nel backup ${path.basename(sicurezza)}` : ''}.`);
+            return;
+        }
+
+        const sottoPm2 = process.env.pm_id !== undefined || process.env.PM2_HOME;
+        passo(sottoPm2 ? 'Riavvio dell\'applicazione' : 'In attesa del riavvio manuale dell\'applicazione', sottoPm2 ? 'fatto' : 'saltato');
+        const avanti = `Per tornare alla ${versioneInstallata} basta aggiornare di nuovo dalla pagina Sistema${backupDati ? `; i dati di adesso sono nel backup ${path.basename(sicurezza)}` : ''}.`;
+        chiudiOperazione('fatto', sottoPm2
+            ? `Tornati alla versione ${scelta.versione}. L'applicazione si sta riavviando: ricarica la pagina fra qualche secondo${backupDati ? ' e rifai l\'accesso' : ''}. ${avanti}`
+            : `Tornati alla versione ${scelta.versione}. Adesso l'applicazione va riavviata sul server (pm2 restart Orion). ${avanti}`);
+        logger.warn(`[Manutenzione] Ritorno alla versione ${scelta.versione} completato.`);
+        if (sottoPm2) setTimeout(() => process.exit(0), 1500);
+        else impostaManutenzione({ motivo: 'ritorno completato: riavvia l\'applicazione', iniziata: new Date().toISOString(), riavvio_manuale: true });
+    }
+
+    // La versione installata si legge da package.json. Se chi pubblica la
+    // release non lo aggiorna, ORION si crederebbe ancora alla versione di
+    // prima e riproporrebbe lo stesso aggiornamento all'infinito: vale il
+    // numero della release.
+    async function allineaNumeroVersione(radice, descrizione, versione) {
+        if (!versione || descrizione.version === versione) return;
+        logger.warn(`[Manutenzione] Il pacchetto dichiara la versione ${descrizione.version}, la release e' la ${versione}: vale la release.`);
+        descrizione.version = versione;
+        await fs.promises.writeFile(path.join(radice, 'package.json'), JSON.stringify(descrizione, null, 2) + '\n');
+        const fileLock = path.join(radice, 'package-lock.json');
+        if (fs.existsSync(fileLock)) {
+            const lock = JSON.parse(await fs.promises.readFile(fileLock, 'utf8'));
+            lock.version = versione;
+            if (lock.packages?.['']) lock.packages[''].version = versione;
+            await fs.promises.writeFile(fileLock, JSON.stringify(lock, null, 2) + '\n');
+        }
     }
 
     async function scaricaFile(indirizzo, destinazione) {

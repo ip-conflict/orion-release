@@ -22,6 +22,12 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Questa versione vuole Node.js 22.13 o più recente (engines in package.json).
+if ! node -e "const [a,b]=process.versions.node.split('.').map(Number); process.exit(a>22||(a===22&&b>=13)?0:1)"; then
+    print_error "Node.js $(node -v) è troppo vecchio: serve la 22.13 o più recente (consigliata la 24). Vedi \"Aggiornare Node.js\" nel manuale tecnico. Niente è stato toccato."
+    exit 1
+fi
+
 read -p "Inserisci il nome dominio dell'istanza da aggiornare (es. orion.miaassociazione.it): " DOMAIN_NAME
 APP_DIR="/var/www/$DOMAIN_NAME"
 APP_USER="orion_app"

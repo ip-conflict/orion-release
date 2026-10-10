@@ -15,7 +15,7 @@
 // riepilogo lo legge anche chi gestisce l'anagrafica. Ognuno vede le sue e ne
 // scarica l'attestato.
 
-import PdfPrinter from 'pdfmake';
+import pdfmake from 'pdfmake';
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
 import { dataItaliana, dataOraItaliana, fusoOrario, oraItaliana } from './date.js';
@@ -274,8 +274,12 @@ async function attestatoPdf(p, persona) {
         : `all'attività "${p.titolo}" (${p.tipo.toLowerCase()})`;
     const nome = `${persona.nome || ''} ${persona.cognome || ''}`.trim() || persona.username;
     const nato = persona.codice_fiscale ? `, codice fiscale ${persona.codice_fiscale},` : ',';
-    const stampante = new PdfPrinter({ Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } });
-    const documento = stampante.createPdfKitDocument({
+    pdfmake.setFonts({ Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } });
+    // Nessuna immagine o carattere da internet né dal disco: il documento è
+    // solo testo, con i caratteri standard del PDF.
+    pdfmake.setUrlAccessPolicy(() => false);
+    pdfmake.setLocalAccessPolicy((percorso) => /^Helvetica(-Bold|-Oblique|-BoldOblique)?$/.test(percorso));
+    return pdfmake.createPdf({
         pageSize: 'A4', pageMargins: [60, 70, 60, 70],
         defaultStyle: { font: 'Helvetica', fontSize: 11, lineHeight: 1.35 },
         info: { title: `Attestato di presenza - ${nome}` },
@@ -289,14 +293,7 @@ async function attestatoPdf(p, persona) {
             { columns: [{ text: '' }, { text: 'Il responsabile\n\n\n______________________________', alignment: 'center' }], margin: [0, 24, 0, 0] },
             { text: `Documento preparato con ORION. Rif. presenza n. ${p.id}.`, fontSize: 8, color: '#777777', margin: [0, 60, 0, 0] }
         ]
-    });
-    return new Promise((ok, ko) => {
-        const pezzi = [];
-        documento.on('data', x => pezzi.push(x));
-        documento.on('end', () => ok(Buffer.concat(pezzi)));
-        documento.on('error', ko);
-        documento.end();
-    });
+    }).getBuffer();
 }
 
 export function registraRottePresenze(app) {

@@ -38,6 +38,7 @@ import { registraRotteLetture } from './letture.js';
 import { registraRotteSegreteria } from './segreteria.js';
 import { registraRotteSessioni } from './sessioni.js';
 import { registraRotteAvvisi, registraRotteAvvisiTelefono } from './avvisi.js';
+import { registraRotteFirebase, registraRotteFirebaseTelefono } from './firebase.js';
 import { registraRotteGestionePermessi } from './gestionePermessi.js';
 import { richiedePermesso } from './permessi.js';
 import { registraRotteFunzioni } from './funzioni.js';
@@ -59,7 +60,7 @@ import { registraRotteCopione } from './copione.js';
 import { registraRotteScenari } from './scenari.js';
 import { annotaRegistroSquadre, nomiRadioBloccati, registraRotteSquadre } from './squadre.js';
 import { activeEmergency, loadActiveEmergency } from './statoEmergenza.js';
-import { avviaTempoReale, avvisaClienti, notifiche } from './tempoReale.js';
+import { avviaTempoReale, avvisaClienti, avvisaTelefoniInAscolto, notifiche } from './tempoReale.js';
 import { registraRotteUtenti } from './utenti.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -133,6 +134,12 @@ app.use(async (req, res, next) => {
     jsonMappa(req, res, next);
 });
 app.use(express.urlencoded({ extended: true }));
+// Express 5 lascia req.body indefinito quando la richiesta non ha un corpo:
+// le rotte lo leggono come oggetto, vuoto se non c'è niente.
+app.use((req, res, next) => {
+    if (req.body === undefined) req.body = {};
+    next();
+});
 
 // Le pagine di lavoro stanno in public/ con quelle pubbliche: senza sessione
 // non si servono.
@@ -203,12 +210,14 @@ registraRotteInformativaPubblica(app);
 app.use('/api/', limitePerRete);
 // Gli avvisi del telefono si leggono col loro token, non con la sessione.
 registraRotteAvvisiTelefono(app);
+registraRotteFirebaseTelefono(app);
 app.use(authenticateToken);
 app.use('/api/', apiLimiter);
 // Scritture rimandate dopo un buco di rete: la stessa chiave non scrive due volte.
 app.use('/api/', creaIdempotenza({ pool, logger, escluse: ['/magazzino/'] }));
 
 registraRotteAvvisi(app, { notifiche });
+registraRotteFirebase(app, { avvisaTelefoni: () => avvisaTelefoniInAscolto() });
 registraRotteGestionePermessi(app);
 
 registraRotteEsterniTemporanei(app, {

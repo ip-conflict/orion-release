@@ -1,23 +1,12 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // Di chi è una richiesta, per i limiti: una persona collegata si conta per sé
 // (una sala operativa esce da un solo indirizzo), chi non lo è per indirizzo,
 // e un indirizzo IPv6 per la sua rete /64.
-export function chiaveIndirizzo(ip) {
-    const indirizzo = String(ip || '').replace(/^::ffff:/i, '');
-    if (!indirizzo.includes(':')) return indirizzo;
-    const [testa, coda = ''] = indirizzo.split('::');
-    const gruppiTesta = testa ? testa.split(':') : [];
-    const gruppiCoda = indirizzo.includes('::') && coda ? coda.split(':') : [];
-    const mancanti = 8 - gruppiTesta.length - gruppiCoda.length;
-    const gruppi = indirizzo.includes('::')
-        ? [...gruppiTesta, ...Array(Math.max(0, mancanti)).fill('0'), ...gruppiCoda]
-        : gruppiTesta;
-    return gruppi.slice(0, 4).map(g => (parseInt(g, 16) || 0).toString(16)).join(':') + '::/64';
-}
+export const chiaveIndirizzo = (ip) => ipKeyGenerator(String(ip || ''), 64);
 
 export const chiaveRichiesta = (req) =>
-    req.user?.id ? `utente:${req.user.id}` : `indirizzo:${chiaveIndirizzo(req.ip)}`;
+    req.user?.id ? `utente:${req.user.id}` : `indirizzo:${ipKeyGenerator(req.ip || '', 64)}`;
 
 const userKeyGenerator = chiaveRichiesta;
 
@@ -51,7 +40,7 @@ export const limitePerRete = rateLimit({
     message: { message: 'Troppe richieste da questa rete: aspetta qualche minuto e riprova.' },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `rete:${chiaveIndirizzo(req.ip)}`,
+    keyGenerator: (req) => `rete:${ipKeyGenerator(req.ip || '', 64)}`,
     skip: nonContare
 });
 
@@ -60,7 +49,7 @@ export const passwordLimiter = rateLimit({
   max: 100,
   // Per indirizzo: chi tenta una password non è ancora nessuno. Contano solo
   // i tentativi sbagliati: una sala che entra tutta insieme non si blocca.
-  keyGenerator: (req) => `indirizzo:${chiaveIndirizzo(req.ip)}`,
+  keyGenerator: (req) => `indirizzo:${ipKeyGenerator(req.ip || '', 64)}`,
   skipSuccessfulRequests: true,
   // In JSON, come le altre risposte: la pagina d'accesso e l'app mostrano il motivo.
   message: { message: 'Troppi tentativi sbagliati da questa rete: aspetta un quarto d\'ora e riprova.' },

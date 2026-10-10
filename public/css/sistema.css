@@ -379,3 +379,29 @@
 #testo-chiave-recupero { font-size: 1rem; letter-spacing: 0.06em; text-align: center; }
 #esito-recupero.ko { color: var(--danger-text); font-weight: 600; }
 #esito-recupero.ok { color: var(--success-text); font-weight: 600; }
+
+/* Notifiche Firebase: la guida chiusa, i due file uno accanto all'altro. */
+.guida-pannello {
+    margin-top: 16px; border: 1px solid var(--border-color); border-radius: 8px;
+    padding: 10px 14px; background: var(--bg-color); font-size: 0.9rem; line-height: 1.55;
+}
+.guida-pannello summary { cursor: pointer; font-weight: 600; color: var(--text-color); }
+.guida-pannello ol { margin: 10px 0 2px; padding-left: 20px; }
+.guida-pannello li { margin-bottom: 6px; }
+.campi-firebase { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+.campi-firebase .campo span { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+.campi-firebase .campo input { width: 100%; box-sizing: border-box; font-size: 0.85rem; color: var(--text-color); }
+#esito-firebase.ok { color: var(--success-text, #15803d); font-weight: 600; }
+#esito-firebase.ko { color: var(--danger-text); font-weight: 600; }
+
+/* Versioni precedenti: una riga per versione, il pulsante a destra. */
+#versioni-precedenti { margin-top: 18px; }
+.elenco-versioni { list-style: none; margin: 10px 0 0; padding: 0; }
+.elenco-versioni li {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 0; border-top: 1px solid var(--border-color);
+}
+.elenco-versioni .versione-nome { font-weight: 600; color: var(--text-color); }
+.elenco-versioni .versione-dettagli { display: block; font-size: 0.82rem; color: var(--text-secondary, var(--text-color)); opacity: 0.85; }
+.elenco-versioni .vuoto { border-top: none; font-size: 0.88rem; }
+#modale-ritorno .spiegazione { font-size: 0.88rem; line-height: 1.5; color: var(--text-secondary, var(--text-color)); margin: 8px 0 14px; }

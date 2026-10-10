@@ -643,6 +643,20 @@ cancellano e sono legati in una catena: "Verifica adesso" controlla che
 nessuno li abbia toccati. Il **sigillo** è l'impronta della catena: si
 scarica, si conserva fuori dal server e si confronta in seguito.
 
+**Notifiche Firebase.** Facoltative. Di base l'app riceve gli avvisi restando
+in ascolto del server, con la notifica fissa "Avvisi attivi" sul telefono. Chi
+vuole avvisi più puntuali, anche sui telefoni che chiudono le app da soli,
+crea un progetto Firebase dell'associazione seguendo la guida del riquadro
+(circa un quarto d'ora, una volta sola), carica `google-services.json` e la
+chiave dell'account di servizio e preme **Attiva**. ORION controlla con
+Google che la chiave funzioni prima di salvarla. Da lì i telefoni passano a
+Firebase la prossima volta che si collegano; quelli senza Google Play restano
+come prima. A Google non va il contenuto delle notifiche, solo un segnale
+vuoto. Il riquadro dice quanti telefoni sono registrati e quando è partito
+l'ultimo segnale; **Manda una prova al mio telefono** e **Spegni Firebase**
+fanno quello che dicono. Spento Firebase, i telefoni tornano da soli al
+collegamento di sempre.
+
 ![I backup](immagini/web/93-sistema-backup.png)
 
 **Backup.** Il server ne fa uno ogni notte e ORION uno a ogni chiusura
@@ -650,6 +664,16 @@ d'emergenza. "Fai
 un backup adesso", Scarica, Verifica, Ripristina. Il ripristino chiede la
 password e la parola RIPRISTINA, e prima salva i dati attuali. Ogni tanto va
 scaricata una copia e tenuta altrove.
+
+**Tornare a una versione precedente.** Se un aggiornamento dà problemi, nel
+riquadro della versione c'è l'elenco delle versioni lasciate, una per riga.
+**Torna a questa** chiede la password e la parola TORNA. Di base i dati
+restano quelli di adesso: si tolgono solo le parti del database aggiunte dalle
+versioni successive, e la finestra dice quali. Con **Riporta anche i dati a
+com'erano** si torna anche ai dati del momento dell'aggiornamento: quello che
+è stato fatto dopo sparisce (resta nel backup fatto prima di tornare
+indietro). Per tornare
+avanti basta aggiornare di nuovo. Con un'emergenza aperta non si può.
 
 
 ## 16. Quando qualcosa non va
@@ -664,3 +688,4 @@ scaricata una copia e tenuta altrove.
 | La mappa è grigia | Manca internet: si passa al fondo "Territorio (dal server)" se c'è |
 | Una squadra non compare sulla mappa | Il telefono non ha la posizione "sempre" o la persona non è in squadra |
 | Le email non partono | "Manda una prova" nelle impostazioni della posta dice il motivo |
+| Firebase non si attiva | Il messaggio dice quale file non va: i due file devono essere dello stesso progetto, e nel progetto deve esserci l'app `it.orion.app` |

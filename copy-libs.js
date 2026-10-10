@@ -31,9 +31,6 @@ const file = [
     ['leaflet.markercluster/dist/MarkerCluster.css', 'vendor/leaflet-markercluster/MarkerCluster.css'],
     ['leaflet.markercluster/dist/MarkerCluster.Default.css', 'vendor/leaflet-markercluster/MarkerCluster.Default.css'],
 
-    ['leaflet-control-geocoder/dist/Control.Geocoder.js', 'vendor/leaflet-geocoder/Control.Geocoder.js'],
-    ['leaflet-control-geocoder/dist/Control.Geocoder.css', 'vendor/leaflet-geocoder/Control.Geocoder.css'],
-
     ['js-cookie/dist/js.cookie.min.js', 'vendor/js-cookie/js.cookie.min.js'],
 
     ['pdfmake/build/pdfmake.min.js', 'vendor/pdfmake/pdfmake.min.js'],
@@ -46,14 +43,12 @@ const file = [
     ['@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css', 'vendor/geoman/leaflet-geoman.css'],
     ['@tmcw/togeojson/dist/togeojson.umd.js', 'vendor/togeojson/togeojson.umd.js'],
 
-    ['@fortawesome/fontawesome-free/css/all.min.css', 'vendor/fontawesome/css/all.min.css'],
-    ['line-awesome/dist/font-awesome-line-awesome/css/all.min.css', 'vendor/line-awesome/css/all.min.css']
+    ['@fortawesome/fontawesome-free/css/all.min.css', 'vendor/fontawesome/css/all.min.css']
 ];
 
 // Intere cartelle (i CSS delle icone puntano a ../webfonts/)
 const cartelle = [
-    ['@fortawesome/fontawesome-free/webfonts', 'vendor/fontawesome/webfonts'],
-    ['line-awesome/dist/font-awesome-line-awesome/webfonts', 'vendor/line-awesome/webfonts']
+    ['@fortawesome/fontawesome-free/webfonts', 'vendor/fontawesome/webfonts']
 ];
 
 let errori = 0;

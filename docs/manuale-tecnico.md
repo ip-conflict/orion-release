@@ -17,7 +17,15 @@ servizio centrale, nessun account presso terzi, nessuna notifica che passi da
 Google o da altri. Se il server dell'associazione è acceso, ORION funziona;
 se è spento, nessun altro ne sa niente.
 
-Il server è un'applicazione Node.js (Express) con un database PostgreSQL.
+Il server è un'applicazione Node.js (Express 5) con un database PostgreSQL.
+Le librerie usate sono poche e tutte all'ultima versione principale: per
+vedere se ce ne sono di nuove basta `npm outdated`, e `npm audit --omit=dev`
+dice se qualcuna ha un problema di sicurezza noto. Express 5 lascia
+`req.body` indefinito quando una richiesta non ha corpo: un middleware in
+`server.js` lo rimette a oggetto vuoto, come le rotte si aspettano. Le
+librerie del browser (mappa, icone, PDF, QR) non stanno nel repository:
+`copy-libs.js` le copia da `node_modules` in `public/vendor` a ogni
+installazione.
 Davanti c'è Nginx, che fa da proxy, gestisce il certificato HTTPS e lascia
 passare il WebSocket. PM2 tiene acceso il processo e lo fa ripartire al
 riavvio della macchina, con un utente di sistema dedicato e mai come root.
@@ -69,8 +77,8 @@ chmod +x ./setup.sh
 sudo ./setup.sh
 ```
 
-Lo script è interattivo. Installa Nginx, PostgreSQL, Node.js (almeno la
-versione 22), PM2, Certbot, il firewall e cron; copia l'applicazione nella
+Lo script è interattivo. Installa Nginx, PostgreSQL, Node.js (la
+versione 24), PM2, Certbot, il firewall e cron; copia l'applicazione nella
 cartella di produzione (`/var/www/<dominio>`); crea il database e il suo
 utente; crea l'utente di sistema che farà girare il programma; prova a
 ottenere il certificato da Let's Encrypt e, se non ci riesce, chiede di
@@ -297,8 +305,38 @@ sistema (`.pm2`, `.npm`, `.npmrc`, `.env`), i dati caricati, i loghi, i
 registri e `app-android`. Il controllo delle nuove versioni si fa a mano con
 "Controlla adesso"; acceso, quello giornaliero avvisa gli amministratori con
 una notifica e un'email. ORION non si aggiorna mai da solo, e con
-un'emergenza aperta non si aggiorna proprio. Il dettaglio è in
-`manutenzione-backup-e-aggiornamenti.md`.
+un'emergenza aperta non si aggiorna proprio.
+
+Si torna a una versione precedente dalla stessa pagina, riquadro "Tornare a
+una versione precedente". Ogni aggiornamento dalla pagina Sistema lascia nella
+cartella dei backup dell'applicazione due file: il backup del database fatto
+prima (`db_<data>_pre-aggiornamento.sql.gz`) e il codice della versione
+lasciata (`codice_<data>_v<versione>.tar.gz`, senza `node_modules`, `.env` e
+chiave dei dati). L'elenco mostra una riga per versione, con la versione letta
+dal `package.json` dentro l'archivio. Il ritorno mette da parte database e
+codice attuali (`pre-ritorno` e un nuovo `codice_`), scompatta la versione
+scelta nella cartella di lavoro, ne installa le dipendenze e la copia al posto
+di quella attuale come fa l'aggiornamento. Di base i dati restano quelli di
+adesso: le migrazioni che la versione scelta non conosce (quelle in
+`pgmigrations` che non sono nella sua cartella `migrations`) si annullano con
+il loro `down`, dalla più recente, in una transazione sola, usando i file
+della versione ancora installata. Le righe restano; si perdono solo le
+tabelle e le colonne aggiunte dopo, con il loro contenuto. Se una di quelle
+migrazioni non si può annullare (manca il file o non sono le ultime
+applicate) si torna solo riportando anche i dati. Con "Riporta anche i dati a
+com'erano" si ripristina il backup di quel momento, e quello che è stato
+fatto dopo resta solo nel backup `pre-ritorno`. Tornando avanti, le
+migrazioni annullate si riapplicano da sole all'avvio. Gli archivi del codice non scadono; i backup del database sì
+(`ORION_BACKUP_RETENTION_DAYS`, 30 giorni), e dopo una versione si può
+riprendere solo col programma. Per tornare avanti si aggiorna di nuovo.
+
+La versione installata è il campo `version` di `package.json`, letto
+all'avvio. Prima di pubblicare una release su `orion-release` va portato allo
+stesso numero del tag (anche in `package-lock.json`, con `npm version 1.2.3
+--no-git-tag-version`). Se ci si dimentica, l'aggiornamento dalla pagina
+Sistema mette comunque il numero della release nel `package.json` installato;
+con `update.sh` invece resta quello scritto nel pacchetto, e la pagina Sistema
+continuerebbe a proporre la stessa versione.
 
 Fino alla 3.36 l'aggiornamento dalla pagina Sistema cancellava `.pm2`: PM2
 restava acceso ma senza più rispondere, e il primo `update.sh` successivo si
@@ -306,6 +344,57 @@ fermava su "Process Orion not found". Da quelle versioni si aggiorna con
 `update.sh`, che adesso se ne accorge, ferma i processi rimasti dell'utente
 dell'applicazione e riavvia ORION da capo.
 
+
+### Aggiornare Node.js
+
+ORION gira su Node.js 22.13 o più recente (`engines` in `package.json`) ed è
+provato su Node 24, la versione LTS attiva. `setup.sh` installa la 24. Su un
+server già installato con la 22 (supportata fino ad aprile 2027) il passaggio
+si fa a emergenza chiusa, dopo un backup dalla pagina Sistema:
+
+```
+curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh
+sudo bash /tmp/nodesource_setup.sh
+sudo apt-get install -y nodejs
+cd /var/www/<dominio>
+sudo -u orion_app npm rebuild
+sudo -u orion_app pm2 update
+```
+
+`npm rebuild` ricompila i moduli nativi (bcrypt) per la versione nuova;
+`pm2 update` riavvia PM2 e l'applicazione con il Node appena installato.
+`node -v` deve dire v24, e la pagina Sistema deve rispondere come prima.
+
+### Aggiornare PostgreSQL
+
+`setup.sh` installa il PostgreSQL della distribuzione: la 14 su Ubuntu 22.04,
+la 16 su Ubuntu 24.04. La 14 non riceve più aggiornamenti di sicurezza da
+novembre 2026, e `setup.sh` lo segnala. ORION è provato sulla 16; il
+passaggio si fa con gli strumenti di Ubuntu, che spostano i dati e le
+impostazioni di accesso, a emergenza chiusa:
+
+```
+# 1. Backup dalla pagina Sistema, e uno completo a parte
+sudo -u postgres pg_dumpall > /root/prima-di-postgres-16.sql
+# 2. Il repository ufficiale di PostgreSQL e la versione nuova
+sudo apt-get install -y postgresql-common
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+sudo apt-get install -y postgresql-16
+# 3. L'applicazione si ferma; il cluster vuoto creato dall'installazione si toglie
+sudo -u orion_app pm2 stop Orion
+sudo pg_dropcluster 16 main --stop
+# 4. I dati passano dalla 14 alla 16, che prende la porta 5432
+sudo pg_upgradecluster 14 main
+# 5. Si riparte e si controlla
+sudo -u orion_app pm2 start Orion
+```
+
+Il vecchio cluster resta fermo sulla porta 5433: se qualcosa non va si torna
+indietro senza perdere niente. Quando ORION ha lavorato qualche giorno sulla
+16 senza problemi, si toglie con `sudo pg_dropcluster 14 main` e
+`sudo apt-get purge postgresql-14`. I backup di ORION (`pg_dump` in formato
+custom) si ripristinano su una versione uguale o più nuova di quella che li
+ha fatti, quindi quelli vecchi restano buoni.
 
 ### La cifratura
 
@@ -1091,11 +1180,65 @@ collegamenti degli avvisi un ping ogni due minuti, che tiene aperta la strada
 nella rete mobile e fa cadere quelli morti. Il servizio è acceso di base; chi
 lo spegne resta con il controllo periodico di WorkManager (60 minuti, 15 in
 emergenza, che Android può rimandare anche di ore), che legge la coda con lo
-stesso token. Niente Firebase né altri servizi esterni.
+stesso token. Di base niente Firebase né altri servizi esterni.
+
+### Le notifiche Firebase, facoltative
+
+Un'associazione può scegliere Firebase Cloud Messaging con un suo progetto
+Firebase: niente notifica fissa sul telefono e avvisi puntuali anche sui
+telefoni che chiudono le app in background. Non c'è un progetto comune: ogni
+associazione crea il suo, e senza configurazione non cambia niente. Nell'APK
+non c'è `google-services.json`: l'app è la stessa per tutti.
+
+L'amministratore carica dalla pagina Sistema due file del progetto:
+`google-services.json`, da cui il server prende gli identificativi pubblici
+dell'app `it.orion.app` (progetto, `app_id`, chiave API, numero del
+mittente), e la chiave dell'account di servizio, che resta sul server cifrata
+con la chiave dei dati (`branding_settings`, chiavi `firebase_app` e
+`firebase_account`, fuori dalle impostazioni generali). Prima di salvare, il
+server chiede a Google un token di accesso con quella chiave: una chiave che
+non funziona non si salva. Il codice è in `src/firebase.js`, senza
+dipendenze: il JWT firmato RS256 per l'OAuth e la chiamata a FCM HTTP v1.
+
+| Rotta | Chi | Cosa fa |
+|---|---|---|
+| `GET /api/avvisi/configurazione` | telefono, token degli avvisi | Gli identificativi pubblici, o `null` se Firebase è spento |
+| `PUT /api/avvisi/firebase` | telefono, token degli avvisi | Registra l'identificativo Firebase del telefono (`token`, `progetto`), o lo toglie con `token: null`; 409 se il progetto è cambiato |
+| `GET /api/admin/firebase` | amministratore | Stato: progetto, account, telefoni registrati, ultimo segnale, ultimo errore |
+| `PUT /api/admin/firebase` | amministratore | Attiva o sostituisce: `{ google_services, account }` |
+| `DELETE /api/admin/firebase` | amministratore | Spegne Firebase e dimentica i telefoni registrati |
+
+L'identificativo Firebase sta accanto al token degli avvisi
+(`token_avvisi.fcm_token`, `fcm_progetto`, `fcm_il`), quindi si revoca con lui.
+A ogni notifica `consegna` chiama `svegliaTelefoni`: se Firebase è configurato,
+il server manda ai telefoni registrati della persona un messaggio di soli dati,
+`{ orion: "novita" }`, ad alta priorità e con `collapse_key`, raggruppando le
+notifiche ravvicinate in un segnale solo. A Google non va il contenuto: il
+telefono si sveglia e legge la coda dal server col token degli avvisi. Gli
+identificativi che Google dice non più registrati si tolgono da soli.
+
+Sul telefono `FirebaseAvvisi` legge la configurazione dal server, avvia
+Firebase a mano con quegli identificativi (`FirebaseOptions`, il provider di
+avvio automatico è tolto dal manifesto), registra l'identificativo e allora
+spegne il servizio "Avvisi attivi". Si torna al collegamento di sempre quando
+Firebase è spento sul server, quando il telefono non ha Google Play e quando la
+registrazione non riesce. Prima di spegnere o cambiare progetto il server manda
+`{ orion: "configurazione" }` ai telefoni registrati e
+`avvisi_configurazione` a quelli in ascolto: rileggono la configurazione
+subito. Il controllo periodico la ricontrolla comunque ogni sei ore.
+
+Lo stesso nome di pacchetto `it.orion.app` va registrato nel progetto di ogni
+associazione: per la sola messaggistica Firebase non chiede il certificato di
+firma. La versione di prova (`it.orion.app.dev`) va aggiunta al progetto come
+seconda app, se la si vuole provare con Firebase. `npm run test:firebase`
+prova tutto contro un Google finto (`tests/google-finto.mjs`): il server va
+avviato con `ORION_GOOGLE_TOKEN_URL=http://127.0.0.1:3098/token` e
+`ORION_FCM_URL=http://127.0.0.1:3098`.
 
 `GET /api/app/avvisi/stato` dice alla persona come il server vede i suoi
 telefoni; `GET /api/avvisi/telefoni` lo dice per tutti agli operatori interni
-(la gestione utenti mostra il telefono verde se è in ascolto adesso);
+(la gestione utenti mostra il telefono verde se è in ascolto adesso o
+registrato su Firebase);
 `POST /api/notifiche/prova` con `{ ritardo }` (fino a 120 secondi) manda a sé
 stessi una notifica di prova. `npm run test:avvisi` prova il token, le
 revoche, il collegamento e la prova.
@@ -1107,8 +1250,8 @@ magazzino a chi li ha chiesti.
 
 ## 10. L'app Android
 
-L'app richiede Android 8 (API 26) o successivo. Si compila con l'SDK
-Android e Gradle:
+L'app richiede Android 8 (API 26) o successivo. Si compila con Gradle 9,
+un JDK 17 o successivo e l'SDK Android con la piattaforma 37:
 
 ```
 ./gradlew :app:testDebugUnitTest    # test su JVM con Robolectric

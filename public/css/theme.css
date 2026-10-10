@@ -8,6 +8,12 @@
    invece di ridefinirli ciascuno a modo suo.
    ========================================================================== */
 
+/* Font Awesome 7 dà a ogni icona una larghezza fissa di 1,25em: qui resta
+   quella naturale, come con la 6. Chi vuole la colonna allineata usa fa-fw. */
+:root {
+    --fa-width: auto;
+}
+
 :root {
     /* --- TEMA CHIARO (DEFAULT) --- */
 

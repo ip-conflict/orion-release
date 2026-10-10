@@ -41,7 +41,7 @@ const CATEGORIA_DEL_TIPO = {
 const VALIDA = '(scade_il IS NULL OR scade_il > NOW())';
 
 // La coda di notifiche, separata dalle rotte: la usano anche magazzino e scadenze.
-export function creaNotifiche({ pool, logger, avvisaUtente, inSimulazione = () => false }) {
+export function creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni = null, inSimulazione = () => false }) {
 
     // Mette una notifica nella coda e la consegna subito a chi è collegato.
     // Non lancia: restituisce la notifica o null (doppione o errore).
@@ -78,6 +78,8 @@ export function creaNotifiche({ pool, logger, avvisaUtente, inSimulazione = () =
         if (typeof avvisaUtente === 'function' && creata) {
             avvisaUtente(userId, 'notifica', { notifica: creata });
         }
+        // Con Firebase configurato: il segnale ai telefoni che non ascoltano il server.
+        if (typeof svegliaTelefoni === 'function' && creata) svegliaTelefoni(userId);
     }
 
 

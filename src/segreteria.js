@@ -551,38 +551,38 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    app.get('/api/documents/certificates/:filename', 
-        (req, res, next) => {
+    app.get('/api/documents/certificates/:filename',
+        // Il proprietario si legge dal database, dalla riga che punta a questo
+        // file: il numero nel nome non è una prova (i certificati sostituiti
+        // dalle rotte di modifica portano nel nome l'id della riga, non
+        // dell'utente). Senza una riga che lo richiami, il file non esiste per
+        // chi chiede.
+        async (req, res, next) => {
             const filename = req.params.filename;
-            const parts = filename.split('-');
-            if (parts.length < 3 || parts[0] !== 'cert') {
+            if (!/^cert-\d+-[0-9a-f]+\.[a-z0-9]+$/i.test(filename)) {
                 return res.status(400).json({ message: 'Nome file non valido.' });
             }
-            req.params.userId = parts[1]; 
-            next();
-            
+            const url = `/api/documents/certificates/${filename}`;
+            try {
+                const r = await pool.query(
+                    `SELECT user_id FROM user_medical_records WHERE document_url = $1
+                     UNION SELECT user_id FROM user_courses WHERE document_url = $1 LIMIT 1`, [url]);
+                if (r.rowCount === 0) return res.status(404).json({ message: 'Il documento non è stato trovato.' });
+                req.params.userId = String(r.rows[0].user_id);
+                next();
+            } catch (e) {
+                logger.error('Errore nel controllo del proprietario del certificato:', e);
+                res.status(500).json({ message: 'Errore interno.' });
+            }
     }, checkOwnershipOrSegreteria, (req, res) => {
-        
-        const filename = req.params.filename;
-        
-        const safePath = path.resolve(certDir, filename);
-
-        logger.info(`[DOWNLOAD] Richiesto file: ${filename}`);
-        logger.info(`[DOWNLOAD] Percorso calcolato nel server: ${safePath}`);
-
-
+        const safePath = path.resolve(certDir, req.params.filename);
         if (!safePath.startsWith(certDir + path.sep)) {
             logger.warn(`[SECURITY] Tentativo di path traversal bloccato: ${safePath}`);
             return res.status(403).json({ message: 'Accesso negato al percorso.' });
         }
-
-
         if (!fs.existsSync(safePath)) {
-            logger.error(`[DOWNLOAD 404] Il file non esiste sul disco: ${safePath}`);
             return res.status(404).json({ message: 'Il documento non è stato trovato.' });
         }
-
-
         inviaFile(res, safePath);
     });
 

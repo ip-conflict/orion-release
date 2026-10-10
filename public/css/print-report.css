@@ -1,3 +1,6 @@
+/* Icone di Font Awesome 7 alla loro larghezza naturale, come con la 6. */
+:root { --fa-width: auto; }
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
 body {

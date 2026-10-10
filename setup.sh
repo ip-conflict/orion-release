@@ -5,7 +5,8 @@
 # ==============================================================================
 # 
 # PREREQUISITI:
-# 1. Un server Ubuntu/debian (testato su ubuntu 20.04/22.04).
+# 1. Un server Ubuntu/Debian (Ubuntu 22.04 o 24.04; meglio la 24.04, che porta
+#    PostgreSQL 16).
 # 2. Un dominio che punta all'indirizzo IP del server.
 # 3. Aver clonato il repository Git dell'applicazione.
 # 4. Eseguire questo script con un utente che ha privilegi 'sudo'.
@@ -74,6 +75,14 @@ apt-get update -y
 print_info "Installazione di Nginx, PostgreSQL, Certbot, rsync e altre dipendenze..."
 apt-get install -y nginx postgresql postgresql-contrib certbot python3-certbot-nginx ufw curl rsync cron
 
+# PostgreSQL 14 (quello di Ubuntu 22.04) esce dal supporto a novembre 2026:
+# si installa lo stesso, ma lo si dice. Come passare a una versione nuova:
+# docs/manuale-tecnico.md, "Aggiornare PostgreSQL".
+PG_MAJOR=$(sudo -u postgres psql -tAc "SHOW server_version_num" 2>/dev/null | cut -c1-2)
+if [ -n "$PG_MAJOR" ] && [ "$PG_MAJOR" -le 14 ]; then
+    print_warning "PostgreSQL $PG_MAJOR non riceve più aggiornamenti di sicurezza da novembre 2026. Conviene passare a una versione supportata: vedi \"Aggiornare PostgreSQL\" nel manuale tecnico."
+fi
+
 # ==============================================================================
 # 3. CREAZIONE UTENTE DI SISTEMA
 # ==============================================================================
@@ -101,7 +110,7 @@ ufw allow 'Nginx Full'
 ufw --force enable
 print_success "Firewall abilitato e configurato."
 
-REQUIRED_NODE_MAJOR=22
+REQUIRED_NODE_MAJOR=24
 NODE_INSTALLED=false
 
 # Controlla se Node.js è già installato e se la versione è sufficiente

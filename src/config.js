@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-dotenv.config();
+dotenv.config({ quiet: true });
 // I file creati dal programma non si leggono dagli altri utenti della macchina.
 process.umask(0o027);
 export const domainName = process.env.DOMAIN_NAME;

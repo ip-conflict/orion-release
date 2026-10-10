@@ -1,4 +1,5 @@
-// Gli avvisi sul telefono anche ad app chiusa, senza servizi esterni. Il
+// Gli avvisi sul telefono anche ad app chiusa, senza servizi esterni (o con
+// Firebase, se l'associazione lo configura: src/firebase.js). Il
 // telefono tiene un collegamento in ascolto con il server dell'associazione
 // e lo apre con il token degli avvisi: uno per telefono, buono solo per
 // ricevere le proprie notifiche. La sessione dell'app dura un giorno e per
@@ -77,12 +78,14 @@ export function telefonoScollegato(utente) {
 // l'ultima volta che il telefono si è fatto sentire.
 export async function statoTelefoni(userIds = null) {
     const r = await pool.query(
-        `SELECT user_id, MAX(COALESCE(usato_il, creato_il)) AS ultimo, COUNT(*)::int AS telefoni
+        `SELECT user_id, MAX(COALESCE(usato_il, creato_il)) AS ultimo, COUNT(*)::int AS telefoni,
+                BOOL_OR(fcm_token IS NOT NULL) AS firebase
            FROM token_avvisi WHERE scade_il > NOW() AND ($1::int[] IS NULL OR user_id = ANY($1::int[]))
           GROUP BY user_id`, [userIds]);
     const stato = {};
     for (const riga of r.rows) {
-        stato[riga.user_id] = { collegato: collegati.has(riga.user_id), ultimo: riga.ultimo, telefoni: riga.telefoni };
+        // firebase: un telefono raggiungibile con le notifiche Firebase anche se non è in ascolto.
+        stato[riga.user_id] = { collegato: collegati.has(riga.user_id), firebase: riga.firebase === true, ultimo: riga.ultimo, telefoni: riga.telefoni };
     }
     return stato;
 }
@@ -156,7 +159,7 @@ export function registraRotteAvvisi(app, { notifiche }) {
     // Lo stato visto dal server, per la schermata "Stato degli avvisi".
     app.get('/api/app/avvisi/stato', async (req, res) => {
         try {
-            res.json((await statoTelefoni([req.user.id]))[req.user.id] || { collegato: false, ultimo: null, telefoni: 0 });
+            res.json((await statoTelefoni([req.user.id]))[req.user.id] || { collegato: false, firebase: false, ultimo: null, telefoni: 0 });
         } catch (e) {
             logger.error('Errore GET /api/app/avvisi/stato:', e);
             res.status(500).json({ message: 'Errore nel leggere lo stato degli avvisi.' });

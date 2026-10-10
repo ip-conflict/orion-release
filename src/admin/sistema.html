@@ -105,6 +105,15 @@
                     <h3>Cosa cambia</h3>
                     <pre id="testo-note"></pre>
                 </div>
+
+                <details id="versioni-precedenti" class="guida-pannello">
+                    <summary>Tornare a una versione precedente</summary>
+                    <p class="spiegazione">
+                        A ogni aggiornamento ORION mette da parte il programma della versione che lascia e un backup
+                        dei dati di quel momento. Se la versione nuova dà problemi, da qui si torna a quella di prima.
+                    </p>
+                    <ul id="elenco-versioni-precedenti" class="elenco-versioni"></ul>
+                </details>
             </section>
 
             <!-- Cifratura dei dati -->
@@ -185,6 +194,44 @@
                 </div>
 
                 <div id="cancellazioni-integrita"></div>
+            </section>
+
+            <!-- Notifiche Firebase, facoltative -->
+            <section class="pannello" id="pannello-firebase">
+                <h2>Notifiche Firebase</h2>
+                <p class="spiegazione">
+                    Di base l'app riceve gli avvisi restando in ascolto di questo server, con la notifica fissa
+                    "Avvisi attivi". Con un progetto Firebase dell'associazione il telefono viene svegliato da Google
+                    a ogni novità: niente notifica fissa e avvisi puntuali anche sui telefoni che chiudono le app in
+                    background. A Google non va il contenuto: solo un segnale vuoto, poi l'app legge la notifica da
+                    qui. I telefoni senza Google Play continuano come prima.
+                </p>
+                <div id="stato-firebase" class="griglia-stato" aria-live="polite"></div>
+                <details id="guida-firebase" class="guida-pannello">
+                    <summary>Come si crea il progetto Firebase (una volta, circa 15 minuti)</summary>
+                    <ol>
+                        <li>Con un account Google dell'associazione, apri <a href="https://console.firebase.google.com/" target="_blank" rel="noopener">console.firebase.google.com</a> e crea un progetto (Google Analytics non serve: spegnilo).</li>
+                        <li>Nel progetto aggiungi un'app <strong>Android</strong> con nome del pacchetto <code>it.orion.app</code>. Il certificato SHA-1 non serve. Scarica <code>google-services.json</code> e salta gli altri passaggi.</li>
+                        <li>In <em>Impostazioni progetto &gt; Account di servizio</em> premi <em>Genera nuova chiave privata</em>: si scarica un file JSON. È una chiave segreta: caricala qui e poi cancellala dal computer.</li>
+                        <li>Carica i due file qui sotto e premi <em>Attiva</em>. ORION controlla con Google che la chiave funzioni prima di salvarla.</li>
+                    </ol>
+                </details>
+                <div class="campi-firebase">
+                    <label class="campo" for="file-google-services">
+                        <span>google-services.json</span>
+                        <input type="file" id="file-google-services" accept=".json,application/json">
+                    </label>
+                    <label class="campo" for="file-account-firebase">
+                        <span>Chiave dell'account di servizio (JSON)</span>
+                        <input type="file" id="file-account-firebase" accept=".json,application/json">
+                    </label>
+                </div>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-attiva-firebase" class="button-style">Attiva</button>
+                    <button type="button" id="btn-prova-firebase" class="button-style button-secondary" hidden>Manda una prova al mio telefono</button>
+                    <button type="button" id="btn-spegni-firebase" class="button-style button-secondary" hidden>Spegni Firebase</button>
+                    <span id="esito-firebase" class="nota" role="status"></span>
+                </div>
             </section>
 
             <!-- Backup -->
@@ -303,6 +350,51 @@
             <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
                 <button id="annulla-aggiornamento" class="button-style btn-discreto">Annulla</button>
                 <button id="conferma-aggiornamento" class="button-style" style="margin-left: 10px;">Aggiorna adesso</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conferma del ritorno a una versione precedente -->
+    <div id="modale-ritorno" class="modal-overlay" hidden>
+        <div class="modal-content" style="background: var(--surface-color); border-radius: 12px; max-width: 620px;">
+            <div class="modal-header" style="background: var(--bg-color); padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: var(--text-color);">Tornare a una versione precedente?</h3>
+                <button id="chiudi-modale-ritorno" class="close-modal-btn" aria-label="Chiudi">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p class="riga-backup-scelto" id="ritorno-scelto"></p>
+
+                <p class="avviso-aggiornamento">ORION resta fermo per qualche minuto. Prima vengono messi da parte il
+                    database e il programma di adesso: si potrà tornare avanti aggiornando di nuovo.</p>
+
+                <label class="riga-opzione" id="riga-ritorno-dati">
+                    <input type="checkbox" id="ritorno-dati">
+                    <span>
+                        Riporta anche i dati a com'erano
+                        <small id="ritorno-dati-quando"></small>
+                    </span>
+                </label>
+                <p class="spiegazione" id="ritorno-senza-dati"></p>
+                <div class="riquadro-pericolo" id="ritorno-pericolo" hidden>
+                    <p><strong>Tutto quello che è stato fatto dopo quel momento sparisce</strong>: segnalazioni, emergenze,
+                       utenti, documenti registrati. Resta nel backup che viene fatto adesso. Dopo si rifà l'accesso.</p>
+                </div>
+
+                <label class="campo">
+                    La tua password
+                    <input type="password" id="password-ritorno" autocomplete="current-password">
+                </label>
+
+                <label class="campo">
+                    Scrivi <code>TORNA</code> per confermare
+                    <input type="text" id="parola-ritorno" autocomplete="off" spellcheck="false">
+                </label>
+
+                <p id="errore-ritorno" class="errore" hidden></p>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
+                <button id="annulla-ritorno" class="button-style btn-discreto">Annulla</button>
+                <button id="conferma-ritorno" class="button-style btn-pericolo-pieno" style="margin-left: 10px;">Torna a questa versione</button>
             </div>
         </div>
     </div>

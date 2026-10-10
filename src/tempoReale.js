@@ -5,6 +5,7 @@ import cookie from 'cookie';
 import cookieParser from 'cookie-parser';
 import logger from './logger.js';
 import { creaNotifiche } from './appMobile.js';
+import { svegliaTelefoni } from './firebase.js';
 import { ruoliDi, tokenSuperato } from './autenticazione.js';
 import { mfaRichiesta, permessiDi } from './permessi.js';
 import { verifyJwtToken } from './authHelper.js';
@@ -85,17 +86,19 @@ function filtraPerApp(ws) {
     };
 }
 
-// Il telefono in ascolto per gli avvisi riceve solo le sue notifiche. Il
+// Il telefono in ascolto per gli avvisi riceve solo le sue notifiche (e
+// l'invito a rileggere la configurazione, quando Firebase cambia). Il
 // server gli manda un ping ogni INTERVALLO_PING_AVVISI: tiene aperta la strada
 // attraverso la rete mobile (che chiude i collegamenti muti) e fa cadere quelli
 // morti. Più spesso costerebbe batteria al telefono.
 const INTERVALLO_PING_AVVISI = 2 * 60 * 1000;
+const AZIONI_AVVISI = new Set(['notifica', 'avvisi_configurazione']);
 
 function soloAvvisi(ws) {
     const inviaDavvero = ws.send.bind(ws);
     ws.send = (dati, ...resto) => {
         try {
-            if (JSON.parse(dati).action !== 'notifica') return;
+            if (!AZIONI_AVVISI.has(JSON.parse(dati).action)) return;
         } catch {
             return;
         }
@@ -171,7 +174,21 @@ function avvisaUtente(userId, azione, dati = {}) {
 }
 
 // La coda di notifiche per persona, letta dall'app.
-export const notifiche = creaNotifiche({ pool, logger, avvisaUtente, inSimulazione: () => activeEmergency?.simulazione === true });
+export const notifiche = creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni, inSimulazione: () => activeEmergency?.simulazione === true });
+
+// Ai telefoni in ascolto col token degli avvisi: la configurazione è cambiata
+// (Firebase acceso o spento), la rileggono subito.
+export function avvisaTelefoniInAscolto(azione = 'avvisi_configurazione') {
+    wss.clients.forEach(client => {
+        if (client.readyState === 1 && client.avvisi) {
+            try {
+                client.send(JSON.stringify({ action: azione }));
+            } catch (e) {
+                logger.error(`WS Send Error (${azione}):`, e);
+            }
+        }
+    });
+}
 
 export function avviaTempoReale(server) {
     // Il WebSocket si apre solo con una sessione valida.

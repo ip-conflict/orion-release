@@ -438,6 +438,108 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Versioni precedenti ---------------------------------------------------
+    let ritornoScelto = null;
+
+    async function caricaVersioniPrecedenti() {
+        const elenco = $('elenco-versioni-precedenti');
+        try {
+            const dati = await fetchApi('/api/sistema/versioni-precedenti');
+            elenco.innerHTML = '';
+            if (!dati.versioni.length) {
+                const li = document.createElement('li');
+                li.className = 'vuoto';
+                li.textContent = 'Nessuna versione messa da parte: compaiono qui dopo il primo aggiornamento fatto da questa pagina.';
+                elenco.append(li);
+                return;
+            }
+            dati.versioni.forEach(v => {
+                const li = document.createElement('li');
+                const testo = document.createElement('span');
+                const nome = document.createElement('span');
+                nome.className = 'versione-nome';
+                nome.textContent = `Versione ${v.versione}`;
+                const dettagli = document.createElement('span');
+                dettagli.className = 'versione-dettagli';
+                dettagli.textContent = `Messa da parte il ${quandoLeggibile(v.lasciata_il)}${v.dati ? ', con i dati di quel momento' : ', senza backup dei dati'}`;
+                testo.append(nome, dettagli);
+                const bottone = document.createElement('button');
+                bottone.type = 'button';
+                bottone.className = 'button-style button-secondary';
+                bottone.textContent = 'Torna a questa';
+                bottone.addEventListener('click', () => apriRitorno(v, dati.versione_installata));
+                li.append(testo, bottone);
+                elenco.append(li);
+            });
+        } catch (e) {
+            elenco.innerHTML = '';
+            const li = document.createElement('li');
+            li.className = 'vuoto';
+            li.textContent = e.message;
+            elenco.append(li);
+        }
+    }
+
+    function apriRitorno(v, installata) {
+        ritornoScelto = v;
+        $('ritorno-scelto').textContent = `Dalla versione ${installata} alla ${v.versione}`;
+        $('ritorno-dati').checked = false;
+        $('ritorno-dati').disabled = !v.dati;
+        $('ritorno-dati-quando').textContent = v.dati
+            ? `Il backup del ${quandoLeggibile(v.dati.del)}: quello che è stato fatto dopo sparisce.`
+            : 'Per questa versione non c\'è il backup dei dati di allora.';
+        const modifiche = v.modifiche?.elenco || [];
+        $('ritorno-senza-dati').textContent = !v.modifiche
+            ? 'Senza la casella i dati restano quelli di adesso.'
+            : !v.modifiche.annullabili
+                ? 'Il database ha modifiche che quella versione non conosce e che non si possono annullare: per tornare a questa versione bisogna riportare anche i dati.'
+                : modifiche.length
+                    ? `Senza la casella i dati restano quelli di adesso. Si tolgono solo le parti del database aggiunte dalle versioni successive (${modifiche.join(', ')}), con quello che contenevano.`
+                    : 'Senza la casella i dati restano tutti quelli di adesso: il database va già bene a quella versione.';
+        if (v.modifiche && !v.modifiche.annullabili && v.dati) $('ritorno-dati').checked = true;
+        $('ritorno-pericolo').hidden = !$('ritorno-dati').checked;
+        $('ritorno-senza-dati').hidden = false;
+        $('password-ritorno').value = '';
+        $('parola-ritorno').value = '';
+        $('errore-ritorno').hidden = true;
+        $('modale-ritorno').hidden = false;
+    }
+
+    $('ritorno-dati').addEventListener('change', () => {
+        $('ritorno-pericolo').hidden = !$('ritorno-dati').checked;
+    });
+    function chiudiRitorno() { $('modale-ritorno').hidden = true; }
+    $('chiudi-modale-ritorno').addEventListener('click', chiudiRitorno);
+    $('annulla-ritorno').addEventListener('click', chiudiRitorno);
+    $('versioni-precedenti').addEventListener('toggle', () => {
+        if ($('versioni-precedenti').open) caricaVersioniPrecedenti();
+    });
+
+    $('conferma-ritorno').addEventListener('click', async (evento) => {
+        if (!ritornoScelto) return;
+        const pulsante = evento.currentTarget;
+        pulsante.disabled = true;
+        $('errore-ritorno').hidden = true;
+        try {
+            await fetchApi('/api/sistema/versioni-precedenti/torna', {
+                method: 'POST',
+                body: JSON.stringify({
+                    nome: ritornoScelto.nome,
+                    dati: $('ritorno-dati').checked,
+                    password: $('password-ritorno').value,
+                    conferma: $('parola-ritorno').value.trim().toUpperCase()
+                })
+            });
+            chiudiRitorno();
+            seguiOperazione();
+        } catch (e) {
+            $('errore-ritorno').textContent = e.message;
+            $('errore-ritorno').hidden = false;
+        } finally {
+            pulsante.disabled = false;
+        }
+    });
+
     // Come sta andando
     // Mentre il ripristino lavora, l'applicazione risponde "in manutenzione" a
     // tutto il resto: questa pagina continua a chiedere solo a che punto è.
@@ -514,7 +616,89 @@ document.addEventListener('DOMContentLoaded', () => {
         caricaVersione();
         caricaIntegrita();
         caricaCifratura();
+        caricaFirebase();
     })();
+
+    // --- Notifiche Firebase --------------------------------------------------
+    function esitoFirebase(testo, tipo = '') {
+        const esito = $('esito-firebase');
+        esito.textContent = testo;
+        esito.className = `nota${tipo ? ` ${tipo}` : ''}`;
+    }
+
+    async function caricaFirebase() {
+        const box = $('stato-firebase');
+        try {
+            const f = await fetchApi('/api/admin/firebase');
+            box.innerHTML = '';
+            if (!f.configurato) {
+                box.append(voceStato('Firebase', 'spento: avvisi dal collegamento col server'));
+            } else {
+                box.append(
+                    voceStato('Firebase', 'attivo'),
+                    voceStato('Progetto', f.progetto),
+                    voceStato('Telefoni registrati', String(f.telefoni)),
+                    voceStato('Ultimo segnale', f.ultimo_invio ? quandoLeggibile(f.ultimo_invio) : 'nessuno da quando il server è partito')
+                );
+                if (f.ultimo_errore) box.append(voceStato('Ultimo errore', `${quandoLeggibile(f.ultimo_errore.il)}: ${f.ultimo_errore.messaggio}`, 'attenzione'));
+            }
+            $('btn-attiva-firebase').textContent = f.configurato ? 'Sostituisci i file' : 'Attiva';
+            $('btn-spegni-firebase').hidden = !f.configurato;
+            $('btn-prova-firebase').hidden = !f.configurato;
+        } catch (e) {
+            box.innerHTML = '';
+            box.append(voceStato('Firebase', e.message, 'attenzione'));
+        }
+    }
+
+    const leggiFile = (input) => new Promise((ok, ko) => {
+        const file = input.files?.[0];
+        if (!file) return ok(null);
+        if (file.size > 100 * 1024) return ko(new Error(`${file.name} è troppo grande per essere un file di Firebase.`));
+        const r = new FileReader();
+        r.onload = () => ok(String(r.result));
+        r.onerror = () => ko(new Error(`${file.name} non si legge.`));
+        r.readAsText(file);
+    });
+
+    $('btn-attiva-firebase').addEventListener('click', async () => {
+        const bottone = $('btn-attiva-firebase');
+        try {
+            const [googleServices, account] = await Promise.all([leggiFile($('file-google-services')), leggiFile($('file-account-firebase'))]);
+            if (!googleServices || !account) return esitoFirebase('Scegli entrambi i file: google-services.json e la chiave dell\'account di servizio.', 'ko');
+            bottone.disabled = true;
+            esitoFirebase('Controllo la chiave con Google…');
+            const r = await fetchApi('/api/admin/firebase', { method: 'PUT', body: JSON.stringify({ google_services: googleServices, account }) });
+            $('file-google-services').value = '';
+            $('file-account-firebase').value = '';
+            esitoFirebase(r.message, 'ok');
+            await caricaFirebase();
+        } catch (e) {
+            esitoFirebase(e.message, 'ko');
+        } finally {
+            bottone.disabled = false;
+        }
+    });
+
+    $('btn-spegni-firebase').addEventListener('click', async () => {
+        try {
+            const r = await fetchApi('/api/admin/firebase', { method: 'DELETE' });
+            esitoFirebase(r.message, 'ok');
+            await caricaFirebase();
+        } catch (e) {
+            esitoFirebase(e.message, 'ko');
+        }
+    });
+
+    $('btn-prova-firebase').addEventListener('click', async () => {
+        try {
+            const r = await fetchApi('/api/notifiche/prova', { method: 'POST', body: JSON.stringify({ ritardo: 0 }) });
+            esitoFirebase(`${r.message} Arriva sui telefoni con l'app ORION collegati al tuo account.`, 'ok');
+            setTimeout(caricaFirebase, 3000);
+        } catch (e) {
+            esitoFirebase(e.message, 'ko');
+        }
+    });
 
     // --- Cifratura ---------------------------------------------------------
     let modoRecupero = null; // 'mostra' | 'inserisci'

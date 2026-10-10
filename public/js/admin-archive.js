@@ -203,7 +203,7 @@ let brandingSettings = {
             // Nome file e autore come testo, non come HTML.
             docElement.innerHTML = `
                 <a href="${escapeHTML(doc.file_path)}" target="_blank" class="doc-link" title="Apri ${escapeHTML(doc.original_filename)}">
-                    <i class="las la-file-alt doc-icon"></i>
+                    <i class="far fa-file-lines doc-icon"></i>
                     <div class="doc-info">
                         <span class="doc-filename">${escapeHTML(doc.original_filename)}</span>
                         <small class="doc-meta">Caricato da ${escapeHTML(doc.uploader_fullname)} il ${escapeHTML(uploadedAt)}</small>
@@ -372,7 +372,7 @@ let brandingSettings = {
                   notifica(`Errore eliminazione: ${error.message}`, 'errore');
                    // Riabilita il bottone in caso di errore
                    deleteSelectedEmergencyBtn.disabled = false;
-                   deleteSelectedEmergencyBtn.innerHTML = '<i class="las la-trash-alt"></i> Elimina Selezionata';
+                   deleteSelectedEmergencyBtn.innerHTML = '<i class="fas fa-trash-can"></i> Elimina Selezionata';
              }
              // Non serve riabilitare il bottone in caso di successo, perché loadClosedEmergencies() lo nasconderà
          });

@@ -288,14 +288,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         return dataBreve(valore);
     }
 
-    // Il telefono riceve gli avvisi? Verde: in ascolto adesso. Grigio: registrato,
-    // ma non si fa sentire da un po' (spento, senza rete, o avvisi sempre attivi spenti).
+    // Il telefono riceve gli avvisi? Verde: in ascolto adesso, o registrato su
+    // Firebase. Grigio: registrato, ma non si fa sentire da un po' (spento,
+    // senza rete, o avvisi sempre attivi spenti).
     function iconaTelefono(t) {
         if (!t) return '';
+        const raggiungibile = t.collegato || t.firebase;
         const titolo = t.collegato
             ? 'Avvisi: il telefono è in ascolto adesso'
-            : `Avvisi: telefono non in ascolto, ultimo contatto ${accessoRelativo(t.ultimo).toLowerCase()}`;
-        return ` <i class="fas fa-mobile-screen gu-telefono${t.collegato ? ' in-ascolto' : ''}" title="${escapeHTML(titolo)}" aria-label="${escapeHTML(titolo)}"></i>`;
+            : t.firebase
+                ? `Avvisi: il telefono li riceve con Firebase, ultimo contatto ${accessoRelativo(t.ultimo).toLowerCase()}`
+                : `Avvisi: telefono non in ascolto, ultimo contatto ${accessoRelativo(t.ultimo).toLowerCase()}`;
+        return ` <i class="fas fa-mobile-screen gu-telefono${raggiungibile ? ' in-ascolto' : ''}" title="${escapeHTML(titolo)}" aria-label="${escapeHTML(titolo)}"></i>`;
     }
 
     function disegnaTesta() {
@@ -849,7 +853,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalHtml = copyCredBtn.innerHTML;
-                copyCredBtn.innerHTML = '<i class="las la-check"></i> Copiato!';
+                copyCredBtn.innerHTML = '<i class="fas fa-check"></i> Copiato!';
                 copyCredBtn.style.backgroundColor = '#1e7e34';
                 
                 setTimeout(() => {

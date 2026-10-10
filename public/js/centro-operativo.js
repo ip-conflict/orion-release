@@ -1989,7 +1989,7 @@ async function submitCoordinatesFromPanel(reportId, latitude, longitude) {
     console.log(`[PanelCoordUpdate] Invio nuove coordinate per report ${reportId}: Lat ${latitude}, Lon ${longitude}`);
     const updateCoordsBtn = document.getElementById('details-panel-update-coords-btn'); 
     if (updateCoordsBtn) {
-        updateCoordsBtn.innerHTML = '<i class="fas fa-spinner la-spin"></i>';
+        updateCoordsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         updateCoordsBtn.disabled = true;
     }
 
@@ -2848,7 +2848,7 @@ async function handleCloseEmergencyClick() {
             showTemporaryFeedback(`Errore chiusura emergenza: ${error.message}`);
             if (closeEmergencyBtn) {
                 closeEmergencyBtn.disabled = false;
-                closeEmergencyBtn.innerHTML = '<i class="las la-door-closed"></i> Chiudi emergenza';
+                closeEmergencyBtn.innerHTML = '<i class="fas fa-door-closed"></i> Chiudi emergenza';
             }
         }
     }
@@ -3151,7 +3151,7 @@ function renderEmergencyDocuments(documents) {
         // Il nome del file è testo, mai markup.
         docElement.innerHTML = `
             <a href="${escapeHTML(doc.file_path)}" target="_blank" class="doc-link" title="Apri ${escapeHTML(doc.original_filename)}">
-                <i class="las la-file-alt doc-icon"></i>
+                <i class="far fa-file-lines doc-icon"></i>
                 <div class="doc-info">
                     <span class="doc-filename">${escapeHTML(doc.original_filename)}</span>
                     <small class="doc-meta">Caricato da ${escapeHTML(doc.uploader_fullname)} il ${escapeHTML(uploadedAt)}</small>
@@ -3464,9 +3464,16 @@ function setupWebSocketListeners() {
         if (statusData) {
             console.log("Aggiorno UI e stato emergenza da WS...");
             updateEmergencyStatusUI(statusData);
-            // MODIFICA: Ricarica marker e tabella per nuova emergenza
+            // Nuova emergenza (o chiusa): marker, tabella e squadre, compresa la
+            // squadra COC che nasce con l'apertura.
             await loadAllMapMarkers(activeEmergency?.id);
             loadReports(1, 25, false, activeEmergency?.id);
+            try {
+                await loadAllTeams();
+                updateTeamStatusPanel();
+            } catch (e) {
+                console.error('Squadre non rilette al cambio di emergenza:', e);
+            }
             if (!statusData.active && bottomPanel.style.display !== 'none') {
                 console.log("Emergenza chiusa via WS, chiudo pannello dettagli.");
                 closeBottomPanel();
@@ -3607,7 +3614,7 @@ document.addEventListener('ws:new_emergency_document', (event) => {
 
     docElement.innerHTML = `
         <a href="${escapeHTML(newDoc.file_path)}" target="_blank" class="doc-link" title="Apri ${escapeHTML(newDoc.original_filename)}">
-            <i class="las la-file-alt doc-icon"></i>
+            <i class="far fa-file-lines doc-icon"></i>
             <div class="doc-info">
                 <span class="doc-filename">${escapeHTML(newDoc.original_filename)}</span>
                 <small class="doc-meta">Caricato da ${escapeHTML(newDoc.uploader_fullname)} il ${escapeHTML(uploadedAt)}</small>

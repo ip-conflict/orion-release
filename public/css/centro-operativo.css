@@ -172,7 +172,7 @@ body > header h1 {
 
 .leaflet-control-layers-toggle {
 
-    width: 30px !important;  /* Larghezza simile ai pulsanti zoom/geocoder standard */
+    width: 30px !important;  /* Come i pulsanti dello zoom */
     height: 30px !important; /* Altezza simile */
     padding: 0 !important; 
     background-position: center center !important;
@@ -1005,15 +1005,6 @@ body {
      #bottom-updates-list li small { /* Già presente, ma verifica */
         color: #aaa;
     }
-     /* Stili Leaflet Dark (esempio, potrebbero servire altri) */
-   
-    /* Pulsante di chiusura/collasso (se appare) 
-    .leaflet-control-geocoder-collapse {
-         background-color: var(--secondary-bg-color);
-    }
-     .leaflet-control-geocoder-collapse:hover {
-          background-color: var(--list-item-hover-bg);
-     }*/
 
    .button-style.button-secondary {
         color: var(--text-color);

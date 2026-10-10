@@ -197,6 +197,9 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
         dettagli: { codice: nuova.code, nome: nuova.name, simulazione, attivita: attivitaId, squadre_sciolte: squadreSciolte, volontari_ereditati: membriEreditati.length }
     });
     annunciaStatoEmergenza();
+    // La squadra COC appena creata (e le squadre sciolte, se richiesto): le
+    // pagine aperte rileggono le squadre senza ricaricare.
+    avvisaClienti('reload_squadre');
     if (!simulazione) allegaBollettinoInVigore();
     return {
         emergency: activeEmergency,

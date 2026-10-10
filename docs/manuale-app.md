@@ -137,6 +137,13 @@ stanno sotto il titolo.
 Toccando un'attività si leggono i dettagli e si risponde **Partecipo** o **Non
 partecipo**, con una nota facoltativa per chi organizza.
 
+Dopo aver risposto di sì compare **Aggiungi al calendario del telefono**: si
+apre l'app del calendario con titolo, orari, luogo e note già scritti, e
+l'evento si salva nel calendario che si preferisce. ORION non chiede il
+permesso sul calendario e non lo legge: se poi l'attività cambia o viene
+annullata, l'evento sul telefono va corretto a mano. Il pulsante resta finché
+l'attività non è finita.
+
 ![Le mie presenze](immagini/app/12-presenze.png)
 
 **Le mie presenze** mostra le ore dell'anno, in attività e in emergenza, con
@@ -180,7 +187,10 @@ perdere gli altri. Toccando una notifica si arriva dove la cosa si guarda.
 ![Gli avvisi sul telefono](immagini/app/17-avvisi.png)
 
 Perché gli avvisi arrivino anche ad app chiusa, l'app resta in ascolto del
-server (un'icona discreta fra le notifiche). La schermata **Avvisi sul
+server (un'icona discreta fra le notifiche). Se l'associazione usa Firebase,
+l'icona non c'è: il telefono viene svegliato a ogni avviso e la schermata
+dice "Avvisi con Firebase". Non c'è niente da fare: l'app passa da sola a
+Firebase e torna indietro se l'associazione lo spegne. La schermata **Avvisi sul
 telefono** controlla tutto quello che serve: permesso delle notifiche, canale
 Emergenza non silenziato, risparmio energetico, collegamento con il server.
 Ogni voce da sistemare si tocca e porta dove si sistema. **Manda una prova** fa

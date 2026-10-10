@@ -172,6 +172,13 @@ async function cifraSegretiInChiaro() {
         await scriviImpostazione('smtp_pass', cifraTesto(v));
         logger.info('[Cifratura] Password della posta cifrata nel database.');
     }
+    // La chiave di Firebase salvata mentre mancava la chiave dei dati.
+    const f = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'firebase_account'");
+    const fv = f.rows[0]?.setting_value;
+    if (fv && !fv.startsWith(PREFISSO_TESTO)) {
+        await scriviImpostazione('firebase_account', cifraTesto(fv));
+        logger.info('[Cifratura] Chiave di Firebase cifrata nel database.');
+    }
     // I segreti della verifica in due passaggi salvati mentre mancava la chiave.
     const m = await pool.query("SELECT id, mfa_segreto FROM users WHERE mfa_segreto IS NOT NULL AND mfa_segreto NOT LIKE 'enc1:%'");
     for (const u of m.rows) {
