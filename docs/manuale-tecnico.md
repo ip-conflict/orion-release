@@ -3,10 +3,7 @@
 Questo manuale è per chi installa, mantiene e sviluppa ORION: il tecnico
 dell'associazione che cura il server e lo sviluppatore che mette mano al
 codice. Chi usa ORION trova quello che gli serve nei manuali d'uso
-(`manuale-web.md` per il browser, `manuale-app.md` per il telefono). Le ragioni delle scelte più delicate stanno nei documenti
-vicini: ruoli e magazzino in `architettura-ruoli-e-magazzino.md`, backup e
-aggiornamenti in `manutenzione-backup-e-aggiornamenti.md`, sicurezza in
-`sicurezza.md`, le rotte dell'app in `app-android.md`.
+(`manuale-web.md` per il browser, `manuale-app.md` per il telefono).
 
 
 ## 1. Com'è fatto
@@ -117,7 +114,21 @@ norma 3000) e il fuso orario (`TZ`, Europe/Rome). Facoltative sono
 quanti giorni tenerli (predefinito 30).
 
 I due segreti non vanno mai cambiati a server acceso senza sapere cosa si fa:
-cambiare `JWT_SECRET` fa uscire tutti.
+cambiare `JWT_SECRET` fa uscire tutti. Sono segreti distinti: un'installazione
+nata senza `COOKIE_SECRET` non firma più i cookie con `JWT_SECRET` ma con un
+segreto ricavato da quello (un HMAC, da cui non si risale all'altro), e
+`update.sh` gliene scrive una propria in `.env` al primo aggiornamento; chi è
+collegato in quel momento rifà l'accesso una volta.
+
+Con `DB_SSL=true` la connessione al database è cifrata e il certificato del
+server PostgreSQL si verifica, come qualunque certificato TLS. Se il
+certificato è firmato da un'autorità propria (il caso tipico di un database
+gestito o interno), il suo certificato si indica con `DB_SSL_CA`, il percorso
+del file PEM. `DB_SSL_STRICT=false` spegne la verifica: la connessione resta
+cifrata ma non si sa con chi si parla, e il server lo ricorda nel log a ogni
+avvio. Le stesse regole valgono per le migrazioni lanciate dall'aggiornamento
+(`sslmode=verify-full`, con `sslrootcert` se c'è `DB_SSL_CA`) e per
+`create-admin.js`.
 
 La mappa del centro operativo usa servizi di OpenStreetMap chiesti dal
 browser della sala, non dal server: le tessere della mappa
@@ -132,6 +143,18 @@ il server stesso scarica da internet: ogni quarto d'ora chiede
 `raw.githubusercontent.com` (vedi "Il bollettino di allerta" più avanti).
 Se la rete dell'ente blocca le uscite del server, quell'indirizzo va lasciato
 passare. `ORION_ALLERTA_URL` sostituisce l'indirizzo, per le prove.
+
+Gli indirizzi degli aggiornamenti (il servizio delle release, il manifesto, il
+pacchetto) li sceglie l'amministratore, ma il server non deve
+diventare il modo per raggiungere la rete interna. Per questo
+`src/indirizziEsterni.js` accetta solo `https` verso indirizzi pubblici: il
+nome si risolve prima di collegarsi, un indirizzo privato, di loopback,
+link-local, CGNAT o multicast viene rifiutato, e lo stesso controllo si
+ripete a ogni reindirizzamento. Il salvataggio della configurazione rifiuta
+subito un indirizzo che non passa. Chi tiene gli aggiornamenti su un server
+dell'ente, raggiungibile solo dalla rete interna, mette
+`ORION_AGGIORNAMENTI_RETE_LOCALE=true` in `.env`: allora sono ammessi anche
+`http` e gli indirizzi interni.
 
 Tutto il resto si configura dall'applicazione, nelle Impostazioni, e sta nel
 database: la posta in uscita (SMTP), il logo e il nome dell'associazione, i
@@ -330,20 +353,53 @@ migrazioni annullate si riapplicano da sole all'avvio. Gli archivi del codice no
 (`ORION_BACKUP_RETENTION_DAYS`, 30 giorni), e dopo una versione si può
 riprendere solo col programma. Per tornare avanti si aggiorna di nuovo.
 
-La versione installata è il campo `version` di `package.json`, letto
-all'avvio. Prima di pubblicare una release su `orion-release` va portato allo
-stesso numero del tag (anche in `package-lock.json`, con `npm version 1.2.3
---no-git-tag-version`). Se ci si dimentica, l'aggiornamento dalla pagina
-Sistema mette comunque il numero della release nel `package.json` installato;
-con `update.sh` invece resta quello scritto nel pacchetto, e la pagina Sistema
-continuerebbe a proporre la stessa versione.
-
 Fino alla 3.36 l'aggiornamento dalla pagina Sistema cancellava `.pm2`: PM2
 restava acceso ma senza più rispondere, e il primo `update.sh` successivo si
 fermava su "Process Orion not found". Da quelle versioni si aggiorna con
 `update.sh`, che adesso se ne accorge, ferma i processi rimasti dell'utente
 dell'applicazione e riavvia ORION da capo.
 
+
+### Pubblicare una versione
+
+La versione installata è il campo `version` di `package.json`, letto
+all'avvio, e la pagina Sistema la confronta con il tag dell'ultima release di
+`orion-release` (`releases/latest` di GitHub, che salta bozze e
+pre-release). Una release si prepara così.
+
+Se è cambiata anche l'app, prima si alza `versionCode` e `versionName` in
+`app/build.gradle.kts` del repository dell'app, si compila con `./gradlew
+:app:assembleRelease` (serve `keystore.properties` con la chiave dello
+sviluppatore) e si porta l'APK nel server con `scripts/pubblica.sh
+app/build/outputs/apk/release/app-release.apk ../Orion/app-android`; il terzo
+argomento, facoltativo, alza la versione minima accettata e va usato solo
+quando il server nuovo non funziona più con le app vecchie. I due file di
+`app-android` si mettono nel commit del server.
+
+Poi si provano server e app su un'istanza di prova (`npm test`, capitolo 11)
+e si porta il numero di versione al nuovo valore con `npm version 1.2.3
+--no-git-tag-version`, che cambia anche `package-lock.json`. Il codice di
+quel commit si copia in `orion-release`, si fa il commit, si crea il tag
+`v1.2.3` e da quel tag una release su GitHub con le note: sono le note che gli
+amministratori leggono nella pagina Sistema prima di aggiornare. Una release in
+bozza o segnata come pre-release non viene proposta a nessuno. Alla fine, da
+un'installazione di prova, "Controlla adesso" nella pagina Sistema deve
+proporre la versione nuova e l'aggiornamento deve andare a buon fine.
+
+Se ci si dimentica `npm version`, l'aggiornamento dalla pagina Sistema mette
+comunque il numero della release nel `package.json` installato; con
+`update.sh` invece resta quello scritto nel pacchetto, e la pagina Sistema
+continuerebbe a proporre la stessa versione.
+
+Chi non usa GitHub pubblica un manifesto JSON su un indirizzo proprio e lo
+indica nella pagina Sistema. Servono `versione` e `pacchetto` (l'indirizzo
+https del `.tar.gz`); `note`, `pubblicata_il` e `sha256` sono facoltativi, e
+con `sha256` l'aggiornamento controlla l'impronta del pacchetto prima di
+scompattarlo.
+
+```json
+{ "versione": "1.2.3", "note": "Novità...", "pacchetto": "https://esempio.it/orion-1.2.3.tar.gz", "sha256": "…" }
+```
 
 ### Aggiornare Node.js
 
@@ -518,6 +574,34 @@ squadra, genera un codice nuovo e chiude le sessioni di chi c'era prima. Alla ch
 una revoca vengono disattivati e le loro richieste ricevono una risposta 403
 che dice il motivo (`accesso_temporaneo_finito`), così l'app lo spiega invece
 di dire "sessione scaduta".
+
+Oltre al limite per indirizzo (cento tentativi sbagliati ogni quarto d'ora
+dalla stessa rete), c'è un limite per account, in `src/tentativiAccesso.js`:
+dopo cinque password sbagliate di fila sullo stesso nome utente l'account si
+ferma per un minuto, e ogni errore successivo raddoppia la pausa fino a un
+massimo di quindici minuti. L'accesso risponde 429 con `Retry-After` e un
+messaggio che dice quanto aspettare, che la pagina d'accesso e l'app mostrano
+così come arriva. Vale per qualunque nome scritto, esistente o no, così la
+risposta non rivela quali account ci sono; una password giusta azzera il
+conto, e dopo un'ora senza errori si riparte da capo. Il conto sta in memoria:
+un riavvio lo azzera. La pausa è breve apposta, perché chi la provoca per
+tenere fuori qualcuno lo tiene fuori per minuti e non per giorni.
+`npm run test:tentativi` lo prova su un server acceso.
+
+Le regole di una password nuova sono in `src/password.js` e valgono dovunque
+se ne sceglie una (primo accesso, cambio password, link di ripristino): almeno
+12 caratteri, al massimo 128, con maiuscole, minuscole, un numero e un
+simbolo, e almeno sei caratteri diversi. Oltre alla forma si rifiutano le
+password che la rispettano solo in apparenza. Si confrontano con un elenco di
+parole che si provano per prime (password, qwerty, i mesi, le squadre di
+calcio, le città, protezione civile, ORION...), dopo aver tradotto le
+sostituzioni ovvie (0 per o, 3 per e, @ per a) e tolto numeri e simboli in
+testa e in coda: "P@ssw0rd2025!" e "Juventus1897!" non passano, e nemmeno
+una parola comune ripetuta o una parola lunga che fa quasi tutta la password.
+Si rifiutano anche il proprio nome, cognome, nome utente o la prima parte
+dell'email. Una frase o più parole che non stanno insieme passano. `npm run test:sicurezza` prova
+queste regole, la pausa per account, gli indirizzi esterni e il TLS del
+database senza bisogno del server.
 
 L'app, con l'impronta, non conserva la password: tiene un token di rinnovo
 legato a quel telefono e cifrato con una chiave del portachiavi hardware. Il
@@ -890,7 +974,9 @@ file vecchio dal disco. `npm run test:eliminazione` prova i due casi.
 
 ### La verifica in due passaggi
 
-La verifica in due passaggi è TOTP (RFC 6238): codici di sei cifre a
+La verifica in due passaggi ha due forme, che si possono avere insieme: il
+telefono collegato, descritto nella sezione dopo, e i codici TOTP. `mfa_attiva`
+vuol dire che almeno una delle due c'è. TOTP è la RFC 6238: codici di sei cifre a
 intervalli di 30 secondi, HMAC-SHA1, calcolati dal telefono con un segreto di
 160 bit condiviso al momento dell'attivazione. È scritta in `src/mfa.js`
 senza librerie e senza servizi esterni. Il server accetta anche l'intervallo
@@ -936,8 +1022,77 @@ riserva, la toglie chi ha accesso al server:
 cd /percorso/di/orion && sudo -u <utente del servizio> node scripts/mfa-azzera.mjs <username>
 ```
 
-Lo script chiude anche le sessioni; al prossimo accesso l'amministratore la
-riattiva. Anche questo finisce nel registro delle operazioni.
+Lo script chiude anche le sessioni e scollega i telefoni; al prossimo accesso
+l'amministratore la riattiva. Anche questo finisce nel registro delle
+operazioni.
+
+### Il telefono come secondo fattore
+
+L'app crea nel portachiavi hardware di Android una chiave P-256 per server e
+persona, che non esce mai dal telefono; il server tiene in `telefoni_chiave`
+solo la parte pubblica (SPKI), con un nome e l'ultimo uso. Da Android 11 la
+chiave chiede impronta o PIN a ogni firma, prima solo l'impronta; su un
+telefono senza blocco schermo non può chiedere niente e vale come fattore di
+possesso. Ogni firma copre un testo con un prefisso diverso per scopo
+(`orion-collega:`, `orion-accesso:`, `orion-conferma:`), così una firma non
+vale per un'altra operazione; il server la verifica con `crypto.verify` di
+Node. Il codice è in `src/telefoniChiave.js`.
+
+Collegare un telefono vuol dire mandare la chiave pubblica firmata con sé
+stessa. Si fa in tre modi: all'attivazione dell'account (sotto); dopo la
+password, se il ruolo chiede la verifica e la persona non ce l'ha ancora
+(`POST /api/accesso/mfa/telefono` con la sfida `attivazione`, come oggi si
+attiva l'app dei codici dal browser); dal profilo, con la password
+(`POST /api/telefoni`). Il primo telefono accende la verifica e dà i dieci
+codici di riserva; ogni telefono nuovo manda una notifica e un'email alla
+persona e finisce nel registro come `mfa.telefono_collegato`. Scollegare
+l'ultimo telefono, senza app dei codici, spegne la verifica, e per chi la deve
+avere è rifiutato.
+
+All'accesso, `POST /login` risponde con la sfida e dice quanti telefoni ci
+sono e se c'è l'app dei codici. L'app sul telefono collegato firma la sfida e
+la manda a `/api/accesso/chiave`. Il browser chiede invece la conferma con
+`POST /api/accesso/telefono`: il server sceglie un numero da 10 a 99 e lo
+restituisce al browser, prepara tre scelte che lo contengono e manda alla
+persona una notifica `conferma_accesso` senza il numero (WebSocket, Firebase se
+c'è, coda delle notifiche). Il telefono legge le richieste in attesa con il
+token degli avvisi (`GET /api/avvisi/conferme`), mostra browser, ora e i tre
+numeri, e risponde a `POST /api/avvisi/conferme/:id`: "no", oppure il numero
+scelto firmato con la chiave. Un numero sbagliato blocca l'accesso come un
+rifiuto. Il browser chiede a `/api/accesso/telefono/stato` ogni due secondi e
+riceve 202 finché si aspetta, la sessione quando il telefono ha confermato.
+Le richieste stanno in memoria e durano due minuti; ogni sfida ne può chiedere
+tre. Il numero da toccare serve contro chi manda richieste a raffica sperando
+in una conferma distratta: il telefono non lo conosce, lo conosce solo chi sta
+davanti al browser.
+
+### L'attivazione dal telefono
+
+Il link d'attivazione (`reset-password.html?token=..&id=..`, per email o sul
+foglio con il QR) su Android propone "Continua nell'app". Il pulsante è un
+`intent://attiva?...#Intent;scheme=orionmobile;package=it.orion.app;...;end`:
+nominando il pacchetto, Android consegna il token solo all'app ORION e non a
+un'altra app che si registri lo stesso schema. Senza app installata Chrome apre
+l'indirizzo di riserva, la stessa pagina con `installa=1`, che spiega come
+installarla. Lo stesso link si può inquadrare dall'app con "Accedi con un QR".
+Fuori da Android, o scegliendo "Continua qui nel browser", resta la pagina di
+sempre.
+
+L'app legge nome, nome utente e cosa serve con `GET /api/attivazione` e le
+condizioni con `/api/pubblico/informativa`; poi manda tutto in una richiesta
+sola, `POST /api/attivazione`: password (con le stesse regole di sempre),
+versione delle condizioni accettate e, se c'è, il telefono da collegare. Il
+server controlla il token, salva password, presa visione e telefono in una
+transazione, consuma il link e restituisce la sessione con i codici di
+riserva; se qualcosa non va non cambia niente e il link resta buono. Per chi
+deve avere la verifica il telefono è obbligatorio. A chi la verifica ce l'ha
+già, un link di ripristino cambia la password ma non collega telefoni e non
+apre sessioni: altrimenti la sola email basterebbe a scavalcare il secondo
+fattore.
+
+Dall'app, chi gestisce l'anagrafica iscrive una persona con `POST /api/users`
+e mostra il link d'attivazione come QR, da inquadrare con il telefono di chi
+viene iscritto. `npm run test:telefoni` prova tutto con un telefono finto.
 
 
 ### Le segnalazioni nel centro operativo
@@ -1156,8 +1311,8 @@ mai lette dopo 90. Una chiave unica per persona impedisce i doppioni.
 
 Chi produce una notifica usa `notifica` o `notificaA` di `appMobile.js`;
 chi deve toglierla perché ha perso significato usa `scadi`, per tipo, per
-categoria, per riferimento o per persona. La tabella completa di chi produce
-cosa è in `app-android.md`.
+categoria, per riferimento o per persona. Chi produce cosa si legge in
+`CATEGORIA_DEL_TIPO` di `appMobile.js`, che elenca tutti i tipi.
 
 L'app riceve le notifiche dal WebSocket della sessione quando è aperta. Ad
 app chiusa le riceve con il token degli avvisi (`src/avvisi.js`, tabella
@@ -1271,9 +1426,25 @@ L'app non passa dal Play Store. L'APK firmato si mette nella cartella
 `app-android` del server insieme a `versione.json`, con lo script
 `scripts/pubblica.sh` del repository dell'app, che controlla la firma e
 scrive l'impronta del certificato. Il server lo offre a `/app/orion.apk`, e
-nel contesto dice all'app qual è l'ultima versione e qual è la più vecchia
-ancora accettata: l'app propone di aggiornarsi o si ferma di conseguenza.
-Android accetta un aggiornamento solo se è firmato con la stessa chiave.
+nel contesto (`GET /api/app/contesto`, campo `app`) dice all'app qual è
+l'ultima versione e qual è la più vecchia ancora accettata. Sotto la minima
+l'app si ferma e chiede di aggiornarsi.
+
+L'app non interroga il server apposta: legge il contesto a ogni accesso, ogni
+volta che torna davanti e a ogni aggiornamento della schermata, e quando è
+chiusa lo rilegge il lavoro periodico di Android al massimo ogni venti ore.
+Se il `versionCode` annunciato è più alto del suo, scarica l'APK nei propri
+file e prima di tenerlo controlla che sia ORION, che sia proprio la versione
+annunciata e che sia firmato con lo stesso certificato dell'app installata;
+altrimenti lo butta. L'installazione parte con il `PackageInstaller` solo
+quando l'app non è davanti e la persona non è in servizio (emergenza aperta e
+una squadra), così non si chiude sotto le mani di chi la usa. La prima volta
+Android chiede di consentire le installazioni da ORION e di confermare; da
+Android 12 le volte successive non chiede più niente. Finché il permesso non
+c'è, la schermata principale mostra un riquadro con "Consenti" e, ad app
+chiusa, arriva una notifica; con il file già scaricato il riquadro offre
+"Aggiorna ora" per non aspettare. Android stesso, comunque, accetta un aggiornamento solo se è
+firmato con la stessa chiave.
 
 Sul telefono i dati che restano per il lavoro senza rete (contesto,
 intervento, profilo, elenco delle consegne, coda delle azioni) sono cifrati
@@ -1342,8 +1513,9 @@ formato si rigenerano da un'istanza di collaudo e i test dicono cosa si è
 rotto. `SchermateFotoTest` fotografa le schermate principali in
 `app/build/schermate`, per guardarle senza un telefono.
 
-Prima di mettere in produzione una versione nuova si segue la lista di
-collaudo in `collaudo.md`, su un telefono vero e con il web accanto.
+Prima di mettere in produzione una versione nuova la si prova su un telefono
+vero, con il web accanto: accesso, avvisi ad app chiusa, chiamata, consegna
+e rientro, posizione della squadra in emergenza.
 
 
 ## 12. Sviluppare
@@ -1360,7 +1532,7 @@ prova sulla resa HTML lo verifica.
 Sull'app, le schermate non conoscono il contenitore: ricevono uno stato e
 delle azioni, così si provano da sole. Il contesto del server decide cosa si
 vede; le rotte restano comunque l'ultima parola. Le rotte che servono solo
-all'app si documentano in `app-android.md`.
+all'app stanno in `src/appMobile.js` e `src/avvisi.js`.
 
 Una versione nuova del server che cambia il formato di una risposta usata
 dall'app va provata con l'app già installata sui telefoni, perché non tutti

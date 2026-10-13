@@ -1,15 +1,5 @@
-// Le funzioni di supporto nel centro operativo:
-//   - nel dettaglio di una segnalazione, gli incarichi alle funzioni, con
-//     "Assegna a una funzione" (motivazione), "Prendo in carico", "Concludi"
-//     (esito) e "Nota per la funzione";
-//   - sulle schede dell'elenco, le sigle delle funzioni al lavoro;
-//   - il pannello "Funzioni" dell'intestazione: il tavolo di ogni funzione,
-//     con i suoi incarichi e i suoi membri.
-// Con il modulo spento non compare niente: Funzioni.attivo resta false.
-//
-// Il centro operativo chiama Funzioni.inizia(), Funzioni.montaIncarichi(),
-// Funzioni.etichette() e Funzioni.notaPer(); per aprire una segnalazione
-// questo file manda l'evento "orion:apri-segnalazione".
+// Funzioni di supporto nel centro operativo. Con il modulo spento non compare niente
+// (Funzioni.attivo resta false); per aprire una segnalazione manda "orion:apri-segnalazione".
 
 (function () {
     const STATO = { aperto: 'Aperto', in_corso: 'In corso', concluso: 'Concluso' };
@@ -101,7 +91,6 @@
         if (!document.getElementById('fz-stile')) document.head.append(el('style', { id: 'fz-stile', testo: STILE }));
         await ricarica();
         document.addEventListener('ws:reload_funzioni', () => ricarica().then(() => aggiornaAperti()));
-        // Un incarico nuovo o concluso cambia anche i conteggi delle funzioni.
         document.addEventListener('ws:reload_incarichi', (ev) => ricarica().then(() => aggiornaAperti(ev.detail?.reportId)));
     }
 
@@ -111,7 +100,6 @@
             stato.attivo = !!dati?.attivo;
             stato.funzioni = dati?.funzioni || [];
         } catch {
-            // 404 a modulo spento: non c'è niente da mostrare.
             stato.attivo = false;
             stato.funzioni = [];
         }
@@ -120,10 +108,8 @@
         document.dispatchEvent(new CustomEvent('orion:funzioni-pronte', { detail: { attivo: stato.attivo } }));
     }
 
-    // Le sigle sulla scheda dell'elenco: piene finché c'è lavoro, tratteggiate con la spunta a lavoro fatto.
     function etichette(incarichi) {
         if (!stato.attivo || !Array.isArray(incarichi) || !incarichi.length) return '';
-        // Una sigla per funzione: "al lavoro" se almeno un suo incarico è ancora aperto.
         const perSigla = new Map();
         incarichi.forEach(i => {
             const prima = perSigla.get(i.sigla);
@@ -132,7 +118,6 @@
         return [...perSigla].map(([sigla, st]) => `<span class="fz-tag${st === 'concluso' ? ' concluso' : ''}" title="${escapeHTML(STATO[st] || st)}">${escapeHTML(sigla)}</span>`).join(' ');
     }
 
-    // La funzione per conto di cui si sta scrivendo una nota su quella segnalazione.
     function notaPer(reportId) {
         return stato.notaPer && stato.notaPer.reportId === reportId ? stato.notaPer.funzioneId : null;
     }
@@ -151,9 +136,6 @@
             el('button', { type: 'button', title: 'Scrivi una nota normale', 'aria-label': 'Annulla la nota per la funzione', testo: '×', suClick: smettiNotaPer })));
         area.focus();
     }
-
-    // ---------------------------------------------------------------
-    // Nel dettaglio della segnalazione
 
     let montato = null; // { contenitore, report, modificabile }
 
@@ -289,16 +271,12 @@
         }
     }
 
-    // ---------------------------------------------------------------
-    // Il pannello "Funzioni": il tavolo di una funzione
-
     let pannello = null;
 
     function apriPannello() {
         if (pannello || !stato.attivo) return;
         const visibili = stato.interno ? stato.funzioni : stato.funzioni.filter(f => f.mia);
         if (!visibili.length) return;
-        // Si parte dalla propria funzione, se se ne ha una sola; altrimenti dalla prima con lavoro aperto.
         const mie = visibili.filter(f => f.mia);
         let scelta = (mie.length === 1 ? mie[0] : null) || visibili.find(f => f.aperti) || visibili[0];
         let conclusi = false;
@@ -389,7 +367,6 @@
             esito.focus();
         }
 
-        // Chi c'è nella funzione; in emergenza gli operatori aggiungono gli accessi temporanei.
         function sezioneMembri() {
             const blocco = el('div', {}, el('h3', { testo: 'Chi ne fa parte' }),
                 el('div', { class: 'fzp-membri' }, (scelta.membri || []).length

@@ -1,25 +1,4 @@
-// Il copione della simulazione e la regia.
-//
-// Prima: la regia (il responsabile dell'attività, i registi scelti e chi
-// organizza le attività) scrive gli eventi di scenario sulla pagina del
-// copione, con la mappa sotto, oppure li carica da un foglio Excel compilato
-// sul modello. Ogni evento esce a un minuto dall'avvio o a mano:
-//   - segnalazione: entra da sola nel centro operativo, oppure la regia
-//     riceve il promemoria di telefonarla alla sala (che la inserisce lei);
-//   - aggravamento: una nota, e se serve la priorità, su una segnalazione già
-//     uscita;
-//   - comunicazione: un messaggio che arriva alla sala (nel diario di sala);
-//   - imprevisto: un avviso sul telefono dei membri di una squadra;
-//   - strada: una strada chiusa o una zona interdetta sulla mappa.
-//
-// Durante: con la sala aperta, la regia avvia l'orologio, mette in pausa, fa
-// uscire, rimanda o salta gli eventi, ne improvvisa di nuovi, collega alla
-// segnalazione inserita dalla sala quella telefonata, scrive osservazioni. Gli
-// eventi a tempo escono da soli (un controllo ogni 15 secondi).
-//
-// Dopo: per ogni segnalazione i tempi (assegnata dopo, chiusa dopo) contro
-// quelli attesi; il debriefing scritto dai registi; la regia decide se copione
-// e debriefing li vedono anche i partecipanti.
+// Copione della simulazione e regia: vedi "Chiamata, simulazione e copione" nel manuale tecnico.
 
 import ExcelJS from 'exceljs';
 import multer from 'multer';
@@ -38,12 +17,10 @@ const NOMI_TIPI = {
     segnalazione: 'Segnalazione', aggravamento: 'Aggravamento', comunicazione: 'Comunicazione alla sala',
     imprevisto: 'Imprevisto a una squadra', strada: 'Strada chiusa o zona', pericolo: 'Zona di pericolo'
 };
-// Le forme che un evento disegna sulla mappa, per tipo; la prima è quella di partenza.
 const ELEMENTI_DI = {
     strada: ['strada_chiusa', 'zona_interdetta'],
     pericolo: ['pericolo_generico', 'pericolo_alluvione', 'pericolo_frana']
 };
-// Nel foglio Excel la zona di pericolo dice anche di che pericolo è.
 const PERICOLI_EXCEL = {
     pericolo_alluvione: 'Zona di pericolo (alluvione)', pericolo_frana: 'Zona di pericolo (frana)', pericolo_generico: 'Zona di pericolo (altro)'
 };
@@ -81,7 +58,6 @@ function numero(valore) {
     return Number.isFinite(n) ? n : NaN;
 }
 
-// Chi fa la regia di un'attività: chi organizza le attività, il responsabile, i registi.
 async function regia(req, attivitaId) {
     if (esterno(req)) return null;
     const r = await pool.query(
@@ -99,7 +75,6 @@ async function regia(req, attivitaId) {
     return a;
 }
 
-// Le persone della regia, per i promemoria: il responsabile e i registi.
 async function personeRegia(attivitaId) {
     const r = await pool.query(
         `SELECT responsabile_id AS id FROM attivita WHERE id = $1 AND responsabile_id IS NOT NULL
@@ -107,9 +82,7 @@ async function personeRegia(attivitaId) {
     return r.rows.map(x => x.id);
 }
 
-// --- Gli eventi ------------------------------------------------------------------------
-
-// I campi di un evento, controllati. [rifValidi]: gli id delle segnalazioni del copione.
+// [rifValidi]: gli id delle segnalazioni del copione.
 function leggiEvento(corpo, rifValidi = null) {
     const tipo = corpo?.tipo;
     if (!TIPI.includes(tipo)) return { errore: 'Tipo di evento non valido.' };
@@ -160,8 +133,6 @@ function leggiEvento(corpo, rifValidi = null) {
 const COLONNE_EVENTO = ['minuto', 'tipo', 'titolo', 'testo', 'modo', 'indirizzo', 'lat', 'lng', 'priorita', 'segnalante', 'telefono',
     'riferimento_id', 'squadra', 'elemento_tipo', 'geometria', 'risposta_attesa', 'minuti_attesi'];
 
-// Il copione sta in un'attività o in uno scenario (src/scenari.js): la
-// colonna dice quale. Di serie è un'attività.
 const COLONNE_CONTENITORE = new Set(['attivita_id', 'scenario_id']);
 const colonna = (c) => { if (!COLONNE_CONTENITORE.has(c)) throw new Error('Contenitore del copione non valido'); return c; };
 
@@ -180,13 +151,8 @@ export async function eventiDi(attivitaId, esecutore = pool, contenitore = 'atti
     return r.rows;
 }
 
-// --- Le misure ----------------------------------------------------------------------------
-
 const minutiTra = (a, b) => (a && b ? Math.round((new Date(b) - new Date(a)) / 60000) : null);
 
-// Per ogni evento uscito di una sala: quando è uscito e, per le segnalazioni,
-// dopo quanto è stata assegnata una squadra, è arrivata la prima notizia, è
-// stata chiusa; e se rispetta il tempo atteso.
 async function esitiDi(emergencyId, eventi) {
     const esiti = (await pool.query(`
         SELECT x.*, r.emergency_report_number AS numero, r.status,
@@ -228,13 +194,10 @@ async function esitiDi(emergencyId, eventi) {
     });
 }
 
-// --- L'orologio --------------------------------------------------------------------------------
-
 async function orologio(emergencyId, esecutore = pool) {
     return (await esecutore.query('SELECT * FROM regia_orologio WHERE emergency_id = $1', [emergencyId])).rows[0] || null;
 }
 
-// I minuti di scenario trascorsi: dall'avvio, tolte le pause.
 function trascorsi(o, adesso = Date.now()) {
     if (!o) return null;
     const avvio = new Date(o.avviata_il).getTime();
@@ -242,10 +205,7 @@ function trascorsi(o, adesso = Date.now()) {
     return Math.max(0, (adesso - avvio - o.pausa_secondi * 1000 - pausaInCorso) / 60000);
 }
 
-// --- L'uscita di un evento -------------------------------------------------------------------
-
-// Fa uscire un evento nella sala aperta. [chi]: { id, nome } di chi lo fa
-// uscire (per gli automatici: chi ha avviato l'orologio).
+// [chi]: per gli eventi automatici, chi ha avviato l'orologio.
 async function esci(emergenza, evento, chi, { automatico = false } = {}) {
     const client = await pool.connect();
     let creata = null, elemento = null, nota = null, promemoria = false, notaSala = null, avvisoSquadra = null;
@@ -330,7 +290,6 @@ async function esci(emergenza, evento, chi, { automatico = false } = {}) {
         client.release();
     }
 
-    // Dopo il COMMIT: chi deve sapere lo sa.
     if (creata && !creata.aggravata) {
         wss.clients.forEach(c => { if (c.readyState === 1) { try { c.send(JSON.stringify({ action: 'reload_reports', createdReportId: creata.id })); } catch { /* si riconnette */ } } });
         if (evento.lat !== null) aggiornaRischi({ emergencyId: emergenza.id, reportIds: [creata.id], userId: chi.id });
@@ -339,9 +298,7 @@ async function esci(emergenza, evento, chi, { automatico = false } = {}) {
     }
     if (notaSala) avvisaClienti('nota_sala', { emergency_id: emergenza.id, voce: notaSala });
     if (elemento) avvisaClienti('reload_mappa');
-    // Una zona di pericolo nuova: le segnalazioni che ci cadono dentro prendono il rischio.
     if (elemento && evento.tipo === 'pericolo') aggiornaRischi({ emergencyId: emergenza.id, userId: chi.id });
-    // Una comunicazione alla sala non resta solo nel diario: compare in grande a chi è in sala.
     if (evento.tipo === 'comunicazione') {
         avvisaClienti('comunicazione_sala', {
             emergency_id: emergenza.id, evento_id: evento.id, titolo: evento.titolo, testo: evento.testo || '', ora: new Date().toISOString()
@@ -368,9 +325,8 @@ async function esci(emergenza, evento, chi, { automatico = false } = {}) {
     return { creata, elemento, nota };
 }
 
-// Ogni cambio della regia: le pagine si aggiornano e la prossima uscita si
-// ripianifica al millisecondo, così un evento esce quando il conto alla
-// rovescia arriva a zero e non al giro di controllo dopo.
+// La prossima uscita si ripianifica al millisecondo: un evento esce quando il
+// conto alla rovescia arriva a zero, non al giro di controllo dopo.
 function regiaCambiata() {
     avvisaClienti('regia_aggiorna');
     pianifica().catch(e => logger.error('[Regia] Pianificazione della prossima uscita non riuscita:', e));
@@ -396,7 +352,6 @@ async function pianifica() {
     prossimaUscita.unref?.();
 }
 
-// Un controllo alla volta: se ne arriva un altro mentre uno gira, si ripete alla fine.
 let inControllo = false, daRipetere = false;
 async function controllaUscite() {
     if (inControllo) { daRipetere = true; return; }
@@ -410,7 +365,6 @@ async function controllaUscite() {
     }
 }
 
-// Il controllo: gli eventi a tempo il cui momento è arrivato.
 async function uscite() {
     const emergenza = activeEmergency;
     if (!emergenza?.simulazione || !emergenza.attivita_id) return;
@@ -436,8 +390,6 @@ async function uscite() {
         logger.error('[Regia] Controllo degli eventi a tempo non riuscito:', e);
     }
 }
-
-// --- Excel --------------------------------------------------------------------------------------
 
 const INTESTAZIONI = [
     ['Minuto', 12], ['Tipo', 26], ['Titolo', 40], ['Testo', 50], ['Come arriva', 14], ['Indirizzo', 30],
@@ -521,7 +473,6 @@ function valoreCella(cella) {
     return String(v);
 }
 
-// "90", "1:30", "1.30" -> minuti.
 function minutoDa(testoCella) {
     const t = testoCella.trim().toLowerCase();
     if (!t || t === 'a mano') return null;
@@ -531,7 +482,6 @@ function minutoDa(testoCella) {
     return Number.isFinite(n) ? Math.round(n) : NaN;
 }
 
-// Le righe del foglio Copione, già tradotte in eventi; tutti o nessuno.
 async function leggiExcel(buffer) {
     const libro = new ExcelJS.Workbook();
     try {
@@ -575,7 +525,6 @@ async function leggiExcel(buffer) {
             }
         });
     });
-    // I riferimenti puntano a righe del foglio: devono essere segnalazioni.
     const perRiga = new Map(righe.map(r => [r.n, r]));
     for (const r of righe) {
         const { errore } = leggiEvento(r.corpo);
@@ -589,9 +538,7 @@ async function leggiExcel(buffer) {
     return { righe, errori };
 }
 
-// Il copione di un'attività in coda a quello di un'altra, con gli aggravamenti
-// legati alle segnalazioni copiate. Dentro la transazione di chi chiama.
-// Da e verso uno scenario: { da: 'scenario_id' } o { verso: 'scenario_id' }.
+// Dentro la transazione di chi chiama.
 export async function copiaCopione(client, daId, attivitaId, { da = 'attivita_id', verso = 'attivita_id' } = {}) {
     const eventi = await eventiDi(daId, client, da);
     let ordine = (await client.query(`SELECT COALESCE(MAX(ordine), 0) AS m FROM copione_eventi WHERE ${colonna(verso)} = $1`, [attivitaId])).rows[0].m;
@@ -605,8 +552,6 @@ export async function copiaCopione(client, daId, attivitaId, { da = 'attivita_id
     return nuovi.size;
 }
 
-// I copioni da cui partire per una simulazione aperta al volo: quelli delle
-// attività di cui la persona fa la regia (tutti, per chi organizza le attività).
 export async function copioniDisponibili(req) {
     const r = await pool.query(`
         SELECT a.id, a.titolo, a.inizio, t.nome AS tipo, COUNT(e.id)::int AS eventi
@@ -619,13 +564,10 @@ export async function copioniDisponibili(req) {
     return r.rows;
 }
 
-// --- Le rotte ------------------------------------------------------------------------------------
-
 export function registraRotteCopione(app) {
     const id = (v) => { const n = parseInt(v, 10); return Number.isInteger(n) ? n : null; };
     const soloInterni = (req, res, next) => esterno(req) ? res.status(403).json({ message: 'La regia è degli interni.' }) : next();
 
-    // La regia dell'attività, o la risposta che dice perché no.
     async function serveRegia(req, res, attivitaId) {
         const a = await regia(req, attivitaId);
         if (!a) { res.status(404).json({ message: 'Attività non trovata.' }); return null; }
@@ -633,8 +575,6 @@ export function registraRotteCopione(app) {
         return a;
     }
 
-    // Lo scenario della biblioteca (src/scenari.js): lo prepara e lo tocca chi
-    // organizza le attività. Ha la stessa forma di quello che torna serveRegia.
     async function serveScenario(req, res, scenarioId) {
         if (!haPermesso(req, 'gruppo.attivita')) { res.status(403).json({ message: 'Gli scenari li prepara chi organizza le attività.' }); return null; }
         const s = (await pool.query('SELECT * FROM scenari WHERE id = $1', [scenarioId])).rows[0];
@@ -642,18 +582,14 @@ export function registraRotteCopione(app) {
         return { ...s, conduce: true, scenario_libro: true };
     }
 
-    // Lo stesso copione, in un'attività o in uno scenario: lo dice l'indirizzo.
     const diScenario = (req) => req.path.startsWith('/api/scenari/');
     const contenitoreDi = (req) => diScenario(req) ? 'scenario_id' : 'attivita_id';
     const serveContenitore = (req, res, contId) => diScenario(req) ? serveScenario(req, res, contId) : serveRegia(req, res, contId);
-    // Le modifiche a uno scenario non toccano nessuna sala aperta.
     const cambiato = (req) => { if (!diScenario(req)) regiaCambiata(); };
 
-    // La sala più recente dell'attività.
     const salaDi = async (attivitaId) => (await pool.query(
         'SELECT id, code, status, start_time, end_time FROM emergencies WHERE attivita_id = $1 ORDER BY id DESC LIMIT 1', [attivitaId])).rows[0] || null;
 
-    // Il modello da compilare, con le righe d'esempio e le istruzioni.
     app.get('/api/copione/modello.xlsx', soloInterni, async (req, res) => {
         try {
             const buffer = await modelloExcel();
@@ -666,8 +602,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Il copione di un'attività: per la regia tutto; per gli altri, se la regia
-    // l'ha pubblicato a simulazione chiusa, in sola lettura.
     app.get('/api/attivita/:id/copione', soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
@@ -699,7 +633,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Il copione in Excel, nello stesso formato del modello: si corregge e si ricarica.
     app.get(['/api/attivita/:id/copione.xlsx', '/api/scenari/:id/copione.xlsx'], soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
@@ -783,8 +716,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Caricare il copione dal foglio Excel: si aggiunge a quello che c'è, o lo
-    // sostituisce (modo=sostituisci). Tutto o niente: con un errore non si carica nulla.
     app.post(['/api/attivita/:id/copione/importa', '/api/scenari/:id/copione/importa'], soloInterni, (req, res, next) => {
         caricaFoglio.single('file')(req, res, (err) => {
             if (err) return res.status(400).json({ message: err.code === 'LIMIT_FILE_SIZE' ? 'Il file supera i 2 MB.' : 'File non valido.' });
@@ -842,8 +773,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Copiare il copione di un'altra attività (lo scenario dell'anno scorso) o
-    // di uno scenario della biblioteca ({ da } o { da_scenario }), in coda.
     app.post(['/api/attivita/:id/copione/copia', '/api/scenari/:id/copione/copia'], soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         const verso = contenitoreDi(req);
@@ -880,7 +809,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Il copione di uno scenario: come quello di un'attività mai andata in sala.
     app.get('/api/scenari/:id/copione', soloInterni, async (req, res) => {
         const scenarioId = id(req.params.id);
         if (!scenarioId) return res.status(400).json({ message: 'Scenario non valido.' });
@@ -904,7 +832,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Pubblicare copione e debriefing ai partecipanti (o ritirarli).
     app.put('/api/attivita/:id/copione/pubblica', soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
         if (!attivitaId) return res.status(400).json({ message: 'Attività non valida.' });
@@ -920,8 +847,6 @@ export function registraRotteCopione(app) {
             res.status(500).json({ message: 'Errore nel pubblicare.' });
         }
     });
-
-    // --- Debriefing e osservazioni ---------------------------------------------------------
 
     app.put('/api/attivita/:id/debriefing', soloInterni, async (req, res) => {
         const attivitaId = id(req.params.id);
@@ -987,9 +912,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // --- La regia in sala -----------------------------------------------------------------------
-
-    // La simulazione aperta e chi la conduce, o la risposta che dice perché no.
     async function regiaInSala(req, res) {
         const e = activeEmergency;
         if (!e?.simulazione || !e.attivita_id) { res.status(409).json({ message: 'Nessuna simulazione aperta in sala.' }); return null; }
@@ -1062,7 +984,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Un evento del copione della simulazione aperta, o la risposta che dice perché no.
     async function eventoInSala(req, res) {
         const r = await regiaInSala(req, res);
         if (!r) return null;
@@ -1125,8 +1046,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // La segnalazione telefonata, inserita dalla sala: la regia la collega
-    // all'evento, così i tempi si misurano e gli aggravamenti la trovano.
     app.post('/api/regia/eventi/:id/collega', soloInterni, async (req, res) => {
         const reportId = id(req.body?.report_id);
         if (!reportId) return res.status(400).json({ message: 'Scegli la segnalazione.' });
@@ -1149,9 +1068,6 @@ export function registraRotteCopione(app) {
         }
     });
 
-    // Un evento inventato al momento: entra nel copione (a mano) ed esce subito.
-    // Le comunicazioni uscite nella simulazione aperta, per chi è in sala (non solo la regia, esterni compresi):
-    // il centro operativo le mostra in primo piano finché non si segnano lette.
     app.get('/api/regia/comunicazioni', async (req, res) => {
         const emergenza = activeEmergency;
         if (!emergenza?.simulazione || !emergenza.attivita_id) return res.json([]);
@@ -1186,6 +1102,5 @@ export function registraRotteCopione(app) {
     });
 
     setInterval(controllaUscite, INTERVALLO_CONTROLLO_MS).unref();
-    // Dopo un riavvio con una simulazione in corso, la prossima uscita si ripianifica subito.
     setTimeout(controllaUscite, 3000).unref();
 }

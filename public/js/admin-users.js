@@ -37,7 +37,6 @@ async function loadAndApplyBranding() {
                 const sConf = typeof settings.segreteria_config === 'string' ? JSON.parse(settings.segreteria_config) : settings.segreteria_config;
 
                 const sidebarSegreteria = document.getElementById('sidebar-segreteria');
-                // Il magazzino a chi lo usa, se il modulo è acceso.
             const vociMagazzino = document.getElementById('sidebar-magazzino');
             if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haPermesso('magazzino.gestione', 'magazzino.consegne')) {
                 vociMagazzino.style.display = 'block';
@@ -62,7 +61,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log("Pagina Gestione Utenti: DOM caricato e script avviato.");
     await loadAndApplyBranding();
 
-    // Selezione Elementi DOM
     const userTableBody = document.getElementById('user-table-body');
     const addUserBtn = document.getElementById('add-user-btn');
     const importUsersBtn = document.getElementById('import-users-btn');
@@ -88,12 +86,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const editEmailInput = document.getElementById('edit-email');
     const editRuoliBox = document.getElementById('edit-ruoli');
 
-    // Ruoli
-    // I ruoli si sommano: una persona può essere segretaria e magazziniera
-    // insieme. "Esterno" fa eccezione, è una limitazione e non si combina con
-    // nulla: spuntandolo si spengono gli altri, e spuntando un altro si spegne
-    // lui. La stessa regola è scritta nel server e nel database; qui serve solo
-    // a non far arrivare il volontario a un messaggio d'errore evitabile.
+    // "Esterno" non si combina con nulla: la stessa regola sta nel server e nel database, qui
+    // evita solo un errore.
     const ETICHETTE_RUOLI = {
         admin: 'Amministratore',
         coordinatore: 'Coordinatore',
@@ -133,8 +127,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     collegaEsclusivitaEsterno(addRuoliBox);
     collegaEsclusivitaEsterno(editRuoliBox);
 
-    // Chi gestisce l'anagrafica senza essere amministratore vede l'elenco e
-    // iscrive i volontari; ruoli, permessi e account restano all'amministratore.
     const amministra = haRuolo('admin');
     if (!amministra) {
         if (importUsersBtn) importUsersBtn.hidden = true;
@@ -144,7 +136,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (titoloNuovo) titoloNuovo.textContent = 'Nuovo volontario';
     }
 
-    // Permessi in più (src/permessi.js): il catalogo si legge una volta.
     const permessiBox = document.getElementById('edit-permessi');
     const permessiElenco = document.getElementById('edit-permessi-elenco');
     let catalogoPermessi = null;
@@ -158,7 +149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return new Set(ruoli.flatMap(r => pacchetti[r] || []));
     }
 
-    // Le caselle dei permessi: quelle comprese nei ruoli spuntati sono bloccate.
     function aggiornaCasellePermessi() {
         if (!permessiElenco || !catalogoPermessi) return;
         const ruoli = leggiRuoliSelezionati(editRuoliBox);
@@ -213,7 +203,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // I permessi in più spuntati, senza quelli che arrivano già dai ruoli.
     function permessiInPiuScelti() {
         if (!permessiElenco || permessiBox?.hidden) return null;
         return [...permessiElenco.querySelectorAll('input[type="checkbox"]')].filter(c => c.checked && !c.disabled).map(c => c.value);
@@ -231,8 +220,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Interni ed esterni in due schede; fra gli esterni, i temporanei (nati
-    // dal centro operativo con il QR) si distinguono dai permanenti.
     const testaTabella = document.getElementById('user-table-head');
     const schede = Array.from(document.querySelectorAll('.gu-scheda'));
     const cercaInput = document.getElementById('cerca-utenti');
@@ -240,7 +227,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const notaEsterni = document.getElementById('nota-esterni');
 
     let tuttiUtenti = [];
-    // Gli avvisi sul telefono di ciascuno: in ascolto adesso, o l'ultimo contatto.
     let telefoni = {};
     let gruppo = 'interni';
     try { if (localStorage.getItem('gestione-utenti-gruppo') === 'esterni') gruppo = 'esterni'; } catch (e) { /* senza memoria si parte dagli interni */ }
@@ -272,7 +258,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return valore ? new Date(valore).toLocaleString('it-IT', { dateStyle: 'full', timeStyle: 'short' }) : '';
     }
 
-    // "Oggi, 14:32", "Ieri, 09:10", "3 giorni fa": in sala conta quanto è recente.
     function accessoRelativo(valore) {
         if (!valore) return 'Mai';
         const quando = new Date(valore);
@@ -288,9 +273,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return dataBreve(valore);
     }
 
-    // Il telefono riceve gli avvisi? Verde: in ascolto adesso, o registrato su
-    // Firebase. Grigio: registrato, ma non si fa sentire da un po' (spento,
-    // senza rete, o avvisi sempre attivi spenti).
     function iconaTelefono(t) {
         if (!t) return '';
         const raggiungibile = t.collegato || t.firebase;
@@ -315,7 +297,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 th.title = 'Ordina';
                 th.tabIndex = 0;
                 const ordina = () => {
-                    // Le date si guardano di solito dalla più recente.
                     const verso = ordine.chiave === c.chiave ? -ordine.verso : (c.chiave.endsWith('_il') || c.chiave === 'ultimo_accesso' ? -1 : 1);
                     ordine = { chiave: c.chiave, verso };
                     disegna();
@@ -330,7 +311,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function confronta(a, b) {
         const k = ordine.chiave;
         let va = a[k], vb = b[k];
-        // I vuoti ("mai", "non si sa") in fondo, in entrambi i versi.
         if (va == null || va === '') return (vb == null || vb === '') ? 0 : 1;
         if (vb == null || vb === '') return -1;
         if (k === 'creato_il' || k === 'ultimo_accesso') return (new Date(va) - new Date(vb)) * ordine.verso;
@@ -373,16 +353,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         elenco.forEach(user => userTableBody.appendChild(rigaUtente(user)));
-        // Sul telefono ogni riga diventa una scheda: ogni cella si porta il nome
-        // della sua colonna.
         const titoli = [...document.querySelectorAll('#user-table-head th')].map(th => th.textContent.replace(/[↑↓]/g, '').trim());
         userTableBody.querySelectorAll('tr').forEach(tr => [...tr.cells].forEach((td, i) => {
             if (titoli[i]) td.dataset.etichetta = titoli[i];
         }));
     }
 
-    // Il nome breve dei pulsanti, scritto accanto all'icona sul telefono, dove
-    // il suggerimento al passaggio del mouse non c'è.
     const BREVI = {
         'edit-user-btn': 'Modifica', 'suspend-btn': 'Sospendi', 'reactivate-btn': 'Riattiva',
         'reset-pwd-btn': 'Password', 'reset-mfa-btn': 'Verifica', 'delete-user-btn': 'Elimina'
@@ -406,7 +382,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tr = document.createElement('tr');
         tr.dataset.userId = user.id;
 
-        // Un temporaneo non si sospende: il suo accesso finisce con l'emergenza.
         let stato;
         if (temporaneo) {
             stato = user.is_active && user.emergenza_aperta
@@ -419,10 +394,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             <td class="gu-data" title="${escapeHTML(dataCompleta(user.creato_il))}">${escapeHTML(dataBreve(user.creato_il))}</td>
             <td class="gu-data" title="${escapeHTML(dataCompleta(user.ultimo_accesso))}">${escapeHTML(accessoRelativo(user.ultimo_accesso))}</td>`;
 
-        // Cognome e nome insieme, il nome utente sotto: la tabella resta larga
-        // quanto lo schermo anche con le date.
-        // Il temporaneo il nome utente non lo usa mai (entra col QR), e dopo un
-        // "Cambia persona" sarebbe ancora quello di prima: non lo si mostra.
         const persona = `<td><strong>${escapeHTML([user.cognome, user.nome].filter(Boolean).join(' '))}</strong>` +
             (temporaneo ? '' : `<span class="gu-sotto">${escapeHTML(user.username)}` +
                 (user.mfa_attiva ? ' <i class="fas fa-shield-halved gu-mfa" title="Verifica in due passaggi attiva" aria-label="Verifica in due passaggi attiva"></i>' : '') +
@@ -448,7 +419,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const actionTd = document.createElement('td');
         actionTd.className = 'action-buttons';
         actionTd.style.textAlign = 'right';
-        // Senza essere amministratore l'elenco si consulta e basta.
         if (!haRuolo('admin')) {
             tr.appendChild(actionTd);
             return tr;
@@ -463,8 +433,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             actionTd.appendChild(isMe
                 ? bottone('reset-pwd-btn', 'fa-key', "La tua password si cambia da Il mio profilo")
                 : bottone('reset-pwd-btn', 'fa-key', `Azzera la password di ${user.username}`, () => handleResetPassword(user.id, user.username)));
-            // Telefono perso e codici di riserva finiti: la verifica si toglie, e
-            // la persona la riattiva.
             if (user.mfa_attiva && !isMe && haRuolo('admin')) {
                 actionTd.appendChild(bottone('reset-mfa-btn', 'fa-mobile-screen-button',
                     `Azzera la verifica in due passaggi di ${user.username}`, () => handleAzzeraMfa(user.id, user.username)));
@@ -501,7 +469,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function handleToggleStatus(userId, username, currentStatus) {
-        // Sospendere chiude subito le sue sessioni: si chiede. Riattivare no.
         if (currentStatus && !window.confirm(`Sospendere ${username}? Esce subito da ORION, sul web e sull'app.`)) return;
 
         try {
@@ -527,7 +494,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function handleResetPassword(userId, username) {
         if (!userId) return;
 
-        // Chiedi conferma
         if (!window.confirm(`Sei sicuro di voler resettare la password per l'utente '${username}' (ID: ${userId})?\nIl suo accesso attuale verrà bloccato finché non imposterà una nuova password.`)) {
              return;
         }
@@ -543,7 +509,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (result.emailError) {
                     notifica(`Reset effettuato, ma ERRORE EMAIL:\n${result.emailError}\n\nCopia il Magic Link manualmente.`, 'attenzione', 12000);
                 }
-                // Passa il magicLink al modale
                 showCredentialsModal(username, result.magicLink, true);
             }
 
@@ -583,8 +548,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (editUserModal) editUserModal.style.display = 'none';
     }
 
-    // Gestori Submit Form
-
     async function handleAddUserSubmit(event) {
         event.preventDefault();
         const submitButton = addUserForm.querySelector('button[type="submit"]');
@@ -605,7 +568,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (newUser.emailError) {
                     notifica(`Utente creato, ma ERRORE EMAIL:\n${newUser.emailError}\n\nCopia il Magic Link manualmente.`, 'attenzione', 12000);
                 }
-                // Passa il magicLink al modale
                 showCredentialsModal(newUser.username, newUser.magicLink, false, `${userData.nome} ${userData.cognome}`);
             }
         } catch (error) { notifica(`Errore: ${error.message}`, 'errore'); } 
@@ -654,11 +616,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Gestore Eliminazione
     async function handleDeleteUser(userId, username) {
         if (!userId) return;
-        // Eliminare cancella i dati personali: per togliere l'accesso solo per
-        // un periodo c'è "Sospendi".
         if (!window.confirm(`Eliminare l'utente '${username}'?\n\nSi cancellano i suoi dati personali, la foto e i certificati di visite e corsi. Se compare nello storico delle emergenze, lì resta solo il suo nome.\nNon si torna indietro: per togliergli l'accesso solo per un periodo usa "Sospendi".`)) {
              return;
         }
@@ -678,8 +637,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             notifica(`Errore durante l'eliminazione dell'utente: ${error.message}`, 'errore');
         }
     }
-
-    // Gestore Importazione
 
     async function handleImportUsers() {
         if (!importFileInput || !importFeedbackDiv) return;
@@ -703,9 +660,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         } finally { importUsersBtn.disabled = false; importUsersBtn.textContent = "Importa da file"; }
     }
 
-    // Il resoconto dell'importazione: chi è entrato (con il link da
-    // consegnare a mano a chi non ha ricevuto l'email) e quali righe sono
-    // rimaste fuori, con il motivo.
     function mostraEsitoImport(result) {
         const d = result.details || {};
         const parti = [];
@@ -748,7 +702,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
             parti.push(titolo, tabella);
-            // Senza email: i fogli da consegnare in mano, tutti insieme.
             const daConsegnare = d.importati.filter(u => !u.email_inviata && u.magicLink);
             if (daConsegnare.length) {
                 const stampa = document.createElement('button');
@@ -779,8 +732,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
-// FUNZIONE PER MOSTRARE IL MODALE CREDENZIALI
-    // Il foglio di attivazione della finestra aperta: chi, e il suo link.
     let foglioAperto = null;
     document.getElementById('stampa-credentials-btn')?.addEventListener('click', () => {
         if (foglioAperto) stampaFogliAttivazione([foglioAperto], { associazione: brandingSettings.association_name });
@@ -794,14 +745,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const passSpan = document.getElementById('new-user-password');
         
-        // Selezioniamo la label in modo sicuro saltando il div contenitore
         const codeContainer = passSpan.parentElement;
         const labelElement = codeContainer.previousElementSibling;
         if (labelElement && labelElement.tagName === 'P') {
             labelElement.innerHTML = `<strong>${magicLink ? 'Collegamento per scegliere la password:' : 'Password iniziale:'}</strong>`;
         }
         
-        // Se c'è un magic link lo mostra, altrimenti avvisa che si usa la password di default
         passSpan.textContent = magicLink || "Password standard di default";
         passSpan.style.wordBreak = 'break-all';
         passSpan.style.fontSize = '0.9em';
@@ -821,30 +770,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (credentialsModal) credentialsModal.style.display = 'flex';
     }
 
-    // GESTIONE CHIUSURA MODALE CREDENZIALI
     function closeCredentialsModal() {
         if (credentialsModal) credentialsModal.style.display = 'none';
     }
     if (closeCredModalBtn) closeCredModalBtn.addEventListener('click', closeCredentialsModal);
     if (okCredBtn) okCredBtn.addEventListener('click', closeCredentialsModal);
 
-    // Pulsante Aggiungi Utente
     addUserBtn.addEventListener('click', openAddUserModal);
 
-    // Pulsanti Chiusura/Annulla Modali
     if (closeAddModalBtn) closeAddModalBtn.addEventListener('click', closeAddUserModal);
     if (cancelAddModalBtn) cancelAddModalBtn.addEventListener('click', closeAddUserModal);
     if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', closeEditUserModal);
     if (cancelEditModalBtn) cancelEditModalBtn.addEventListener('click', closeEditUserModal);
 
-    // Submit Forms Modali
     if (addUserForm) addUserForm.addEventListener('submit', handleAddUserSubmit);
     if (editUserForm) editUserForm.addEventListener('submit', handleEditUserSubmit);
 
-    // Pulsante Importa
     if (importUsersBtn) importUsersBtn.addEventListener('click', handleImportUsers);
 
-    // GESTIONE PULSANTE COPIA
     if (copyCredBtn) {
         copyCredBtn.addEventListener('click', () => {
             const user = document.getElementById('new-user-username').textContent;
@@ -867,7 +810,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Caricamento Iniziale
     loadUsers();
 
     console.log("Setup pagina Gestione Utenti completato.");

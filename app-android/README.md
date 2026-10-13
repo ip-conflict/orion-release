@@ -24,7 +24,7 @@ firmato con la stessa chiave.
 
 `codice` e `minima` sono i `versionCode` Android. Il server li riporta in
 `GET /api/app/contesto` (campo `app`), e l'app propone di aggiornarsi quando
-è più vecchia di `ultima`, o si ferma quando è più vecchia di `minima`.
+è più vecchia di `codice`, o si ferma quando è più vecchia di `minima`.
 
 Se la cartella è vuota il contesto riporta `app: null` e tutto il resto
 funziona lo stesso.

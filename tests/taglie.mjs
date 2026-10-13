@@ -1,5 +1,3 @@
-// tests/taglie.mjs
-//
 // Le taglie di una persona alla consegna: per un DPI già ricevuto vale la
 // taglia che ha ancora in carico, altrimenti l'ultima consegnata; per un DPI
 // mai ricevuto si deduce dalla taglia di un DPI dello stesso gruppo (busto,
@@ -91,18 +89,15 @@ try {
     verifica('cambiando solo il nome il gruppo resta', rinominati.corpo?.gruppo_taglia === 'scarpe', rinominati.corpo?.gruppo_taglia);
     verifica('la taglia Unica non conta', !t.has(casco.id), t.get(casco.id));
 
-    // Rende la XL perché grande: vale la L che ha ancora, anche per la polo.
     await rientro(variante(giacca, 'XL'));
     t = await taglie();
     verifica('resa la XL, vale la L che ha ancora', t.get(giacca.id)?.taglia === 'L', t.get(giacca.id));
     verifica('e la polo dedotta segue: L', t.get(polo.id)?.taglia === 'L', t.get(polo.id));
 
-    // Resa anche la L: non ha più niente, vale l'ultima consegnata.
     await rientro(variante(giacca, 'L'));
     t = await taglie();
     verifica('resa anche la L, vale l\'ultima consegnata (XL)', t.get(giacca.id)?.taglia === 'XL', t.get(giacca.id));
 
-    // Una polo ricevuta davvero prevale sulla dedotta.
     await consegna(variante(polo, 'L'));
     t = await taglie();
     verifica('ricevuta la polo L: è sua, non più dedotta', t.get(polo.id)?.taglia === 'L' && t.get(polo.id)?.dedotta === false, t.get(polo.id));

@@ -77,7 +77,6 @@ function zip(file) {
     return Buffer.concat([...locali, ...centrali, fine]);
 }
 
-// Un PDF di una pagina, valido, con una riga di testo.
 function pdf(testo) {
     const flusso = `BT /F1 14 Tf 60 780 Td (${testo.replace(/[()\\]/g, '')}) Tj ET`;
     const oggetti = [
@@ -98,10 +97,6 @@ function pdf(testo) {
 
 const giorno = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
-/**
- * livelli: { oggi: { 'Vene-E1': { idrogeologico, idraulico, temporali } }, domani: {...} };
- * le zone non citate sono verdi. tipo: first o update.
- */
 export function creaBollettino({ data = new Date(), ora = '14:10', tipo = 'first', livelli = {} } = {}) {
     const g = giorno(data).replace(/-/g, '');
     const chiave = `${g}_${ora.replace(':', '')}`;
@@ -128,7 +123,6 @@ export const ESEMPIO = {
     domani: { 'Vene-E1': { idrogeologico: 'arancione', idraulico: 'gialla' } }
 };
 
-/** Un server che pubblica l'archivio, con l'ETag come quello vero. */
 export function servi(porta, iniziale = creaBollettino({ livelli: ESEMPIO })) {
     let attuale = iniziale;
     let versione = 1;

@@ -1,5 +1,3 @@
-// tests/attivita.mjs
-//
 // Attività, calendario e presenze (src/attivita.js, src/presenze.js) e la
 // squadra COC. Le attività: chi le crea (gruppo.attivita, anche il
 // Coordinatore), chi le vede secondo la convocazione, le risposte, i posti
@@ -78,7 +76,6 @@ try {
     verifica('un volontario non crea attività -> 403',
         (await crea(a.token, { titolo: 'No', inizio: fra(24), fine: fra(26) })).stato === 403);
 
-    // Gli allegati: li carica chi organizza, li apre chi vede l'attività.
     {
         const conAllegati = (await crea(org.token, { titolo: `Con allegati ${suffisso}`, inizio: fra(30), fine: fra(32), convocazione: 'scelti', persone: [a.id] })).corpo;
         const allega = (token, nome, contenuto, tipo) => {
@@ -107,7 +104,6 @@ try {
         verifica('e non c\'è più', ((await chiama(`/api/attivita/${conAllegati.id}`, { token: a.token })).corpo?.allegati || []).length === 0);
     }
 
-    // Convocati scelti.
     const riunione = await crea(org.token, {
         tipo_id: tipo('Riunione'), titolo: `Riunione squadra ${suffisso}`, luogo: 'Sede', inizio: fra(48), fine: fra(50),
         convocazione: 'scelti', persone: [a.id], avviso_app: true, avviso_email: true
@@ -138,7 +134,6 @@ try {
     verifica('la convocazione scade con la risposta', !notificheDopo.some(n => n.tipo === 'convocazione' && n.riferimento_id === idRiunione), notificheDopo.map(n => n.tipo));
     verifica('chi organizza vede la risposta', (await chiama(`/api/attivita/${idRiunione}`, { token: org.token })).corpo?.si === 1);
 
-    // Tutti.
     const esercitazione = await crea(org.token, { tipo_id: tipo('Esercitazione'), titolo: `Esercitazione ${suffisso}`, inizio: fra(72), fine: fra(76), convocazione: 'tutti', avviso_app: true });
     verifica('con "tutti" la vede ogni interno', (await chiama(`/api/attivita/${esercitazione.corpo?.id}`, { token: b.token })).corpo?.sono_convocato === true);
     let avvisoTutti = null;
@@ -152,7 +147,6 @@ try {
     verifica('chi organizza la sposta', spostata.stato === 200, spostata);
     verifica('la fine prima dell\'inizio -> 400', (await crea(org.token, { titolo: 'Storta', inizio: fra(10), fine: fra(5) })).stato === 400);
 
-    // Aperta, con un posto.
     const servizio = await crea(org.token, { tipo_id: tipo('Servizio'), titolo: `Assistenza gara ${suffisso}`, inizio: fra(120), fine: fra(124), convocazione: 'aperta', posti: 1, avviso_app: false });
     const idServizio = servizio.corpo?.id;
     verifica('aperta: aderisce il primo', (await chiama(`/api/attivita/${idServizio}/risposta`, { method: 'POST', token: a.token, body: { risposta: 'si' } })).corpo?.posti_liberi === 0);
@@ -160,14 +154,12 @@ try {
     verifica('il secondo trova i posti esauriti -> 409', pieno.stato === 409 && pieno.corpo?.posti_esauriti === true, pieno);
     verifica('ma può dire di no', (await chiama(`/api/attivita/${idServizio}/risposta`, { method: 'POST', token: b.token, body: { risposta: 'no' } })).stato === 200);
 
-    // Annullata.
     const annullata = await chiama(`/api/attivita/${idServizio}/annulla`, { method: 'POST', token: org.token, body: { motivo: 'gara rinviata' } });
     verifica('annullata', annullata.corpo?.stato === 'annullata' && annullata.corpo?.motivo_annullamento === 'gara rinviata', annullata);
     verifica('e non si risponde più -> 409', (await chiama(`/api/attivita/${idServizio}/risposta`, { method: 'POST', token: a.token, body: { risposta: 'si' } })).stato === 409);
     verifica('una futura non si conclude -> 409',
         (await chiama(`/api/attivita/${idRiunione}/concludi`, { method: 'POST', token: org.token, body: { presenze: [{ user_id: a.id }] } })).stato === 409);
 
-    // Un addestramento fatto, che vale come corso.
     const corsi = (await chiama('/api/admin/courses-catalog', { token: admin })).corpo || [];
     const corso = corsi.find(c => c.validity_months) || corsi[0];
     const addestramento = await crea(org.token, {
@@ -200,7 +192,6 @@ try {
     verifica('un volontario non lo vede -> 403', (await chiama('/api/presenze/riepilogo', { token: a.token })).stato === 403);
     verifica("un'attività con presenze non si elimina -> 409", (await chiama(`/api/attivita/${idAdd}`, { method: 'DELETE', token: org.token })).stato === 409);
 
-    // Il calendario.
     const cal = (await chiama(`/api/calendario?da=${oggi(-2)}&a=${oggi(10)}`, { token: a.token })).corpo;
     verifica('il calendario porta le attività del periodo', cal?.attivita?.some(x => x.id === idRiunione) && cal?.attivita?.some(x => x.id === idAdd), cal?.attivita?.map(x => x.titolo));
     verifica('a un volontario niente scadenze degli altri', cal?.filtri?.segreteria === false && cal?.filtri?.magazzino === false, cal?.filtri);
@@ -208,7 +199,6 @@ try {
         !((await chiama(`/api/calendario?da=${oggi(-2)}&a=${oggi(10)}`, { token: b.token })).corpo?.attivita || []).some(x => x.id === idRiunione));
     verifica('un periodo troppo lungo -> 400', (await chiama(`/api/calendario?da=${oggi(0)}&a=${oggi(500)}`, { token: a.token })).stato === 400);
 
-    // Il modulo spento.
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { attivita_enabled: 'false' } });
     const spento = await chiama('/api/attivita', { token: a.token });
     verifica('modulo spento: le rotte rispondono 404', spento.stato === 404 && spento.corpo?.modulo_spento === true, spento);
@@ -216,7 +206,6 @@ try {
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { attivita_enabled: 'true' } });
     verifica('riacceso, tutto torna', (await chiama(`/api/attivita/${idRiunione}`, { token: a.token })).stato === 200);
 
-    // L'emergenza: la squadra COC e le presenze.
     const stato = (await chiama('/api/emergencies/status', { token: admin })).corpo;
     if (stato?.active) {
         console.log("  (un'emergenza era già aperta: squadra COC e presenze non si provano)");
@@ -240,7 +229,6 @@ try {
         const nota = await chiama(`/api/reports/${idReport}/updates`, { method: 'POST', token: est.token, body: { update_text: 'Dalla sala: avvisato il 118' } });
         verifica("un esterno in sala scrive note su ogni segnalazione", nota.stato === 201 || nota.stato === 200, nota);
         verifica('durante l\'emergenza non si scioglie -> 409', (await chiama(`/api/squadre/${coc?.id}`, { method: 'DELETE', token: admin })).stato === 409);
-        // Bruno in una squadra di campo.
         const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
         const radio = ['Zulu', 'Yankee', 'Whiskey', 'Victor', 'Uniform', 'Tango'].find(x => !usati.has(x));
         const campo = await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: radio, nome: 'Campo', membri: [{ username: b.username }] } });
@@ -270,7 +258,6 @@ try {
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { attivita_enabled: 'true' } });
     for (const s of squadre) await chiama(`/api/squadre/${s}`, { method: 'DELETE', token: admin, body: { beni: [] } });
     for (const p of persone.reverse()) await chiama(`/api/users/${p}`, { method: 'DELETE', token: admin, body: { beni: [] } });
-    // Dopo le persone: con loro se ne vanno le presenze che tenevano le attività.
     for (const id of attivita) await chiama(`/api/attivita/${id}`, { method: 'DELETE', token: admin });
 }
 console.log(falliti === 0 ? '\nTutto a posto.\n' : `\n${falliti} verifiche fallite.\n`);

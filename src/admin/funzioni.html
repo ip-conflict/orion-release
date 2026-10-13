@@ -27,6 +27,9 @@
         .fz-membro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border: 1px solid var(--border-color); border-radius: 16px; font-size: 0.85rem; background: var(--bg-color); }
         .fz-membro.referente { border-color: var(--info-text, #1d4ed8); }
         .fz-membro small { color: var(--text-muted); }
+        .fz-sposta { display: inline-flex; gap: 2px; }
+        .fz-sposta button { border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+        .fz-sposta button:disabled { opacity: 0.35; cursor: default; }
         .fz-membro button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 2px 5px; border-radius: 10px; font-size: 0.85rem; }
         .fz-membro button:hover { background: var(--secondary-bg-color); color: var(--text-color); }
         .fz-membro button.attivo { color: var(--info-text, #1d4ed8); }
@@ -61,7 +64,7 @@
             </header>
 
             <div class="fz-avviso" id="fz-spento" hidden>Il modulo è spento: in sala non compare niente. Si accende in <a href="/admin/dashboard-admin.html">Impostazioni</a>; le funzioni e i loro membri si possono preparare anche prima.</div>
-            <p class="fz-nota">Accendi solo le funzioni del vostro piano comunale, con le stesse sigle. I membri fissi li metti qui; durante un'emergenza gli operatori del centro operativo aggiungono gli accessi temporanei (dalla finestra «Accesso esterno» o dal pannello Funzioni). La stella segna il referente.</p>
+            <p class="fz-nota">Accendi solo le funzioni del vostro piano comunale, con le stesse sigle e gli stessi nomi: «Modifica» cambia sigla, nome e descrizione (per esempio F3 Volontariato), le frecce l'ordine. I membri fissi li metti qui; durante un'emergenza gli operatori del centro operativo aggiungono gli accessi temporanei (dalla finestra «Accesso esterno» o dal pannello Funzioni). La stella segna il referente.</p>
             <div id="fz-nuova-box"></div>
             <div class="fz-elenco" id="fz-elenco"><p class="fz-vuoto">Carico le funzioni…</p></div>
             <datalist id="fz-utenti"></datalist>

@@ -1,5 +1,3 @@
-// Apertura e chiusura delle emergenze, archivio, documenti ed eventi.
-
 import fs from 'fs';
 import logger from './logger.js';
 import path from 'path';
@@ -26,10 +24,8 @@ import { allegaBollettinoInVigore } from './allerta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Alla chiusura le squadre rimaste vuote si chiudono d'ufficio, tranne quelle
-// con materiale in carico: lì decide una persona.
-// La squadra COC finisce con l'emergenza: i suoi membri sono già usciti nel
-// registro alla chiusura, qui si scioglie.
+// Le squadre rimaste vuote si chiudono d'ufficio, tranne quelle con materiale in
+// carico: lì decide una persona.
 async function sciogliSquadraCoc(emergencyId, req) {
     const client = await pool.connect();
     try {
@@ -93,10 +89,8 @@ async function chiudiSquadreVuote(emergencyId, req) {
     return chiuse;
 }
 
-// La sala di una simulazione si apre al più tre ore prima dell'inizio.
 const ORE_PRIMA_SALA = 3;
 
-// Un errore con il suo stato HTTP, per apriEmergenza e chiudiEmergenza.
 class ErroreEmergenza extends Error {
     constructor(stato, message, extra = {}) {
         super(message);
@@ -105,7 +99,6 @@ class ErroreEmergenza extends Error {
     }
 }
 
-// Chi conduce una simulazione: chi organizza le attività, il responsabile, la regia.
 async function conduceSimulazione(req, attivitaId) {
     if (!attivitaId || ruoliDi(req.user).includes('esterno')) return false;
     if (haPermesso(req, 'gruppo.attivita')) return true;
@@ -124,7 +117,6 @@ function annunciaStatoEmergenza() {
     });
 }
 
-// Apre un'emergenza, vera o simulata. Lancia ErroreEmergenza se ce n'è già una.
 export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = false, simulazione = false, attivitaId = null }) {
     if (activeEmergency) throw new ErroreEmergenza(409, `Un'emergenza (${activeEmergency.code}) è già aperta.`);
     const client = await pool.connect();
@@ -134,8 +126,8 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
         if (azzeraSquadre) {
             const daSciogliere = await client.query('SELECT id FROM squadre');
             squadreSciolte = daSciogliere.rowCount;
-            // Le assegnazioni delle emergenze passate restano, con il nome
-            // radio di allora: il database mette squadra_id a NULL.
+            // Le assegnazioni passate restano, con il nome radio di allora: il database mette
+            // squadra_id a NULL.
             await client.query('DELETE FROM squadra_membri');
             await client.query('DELETE FROM squadre');
         }
@@ -144,9 +136,7 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
              VALUES ($1, $2, 'ACTIVE', NOW(), $3, $4) RETURNING *`,
             [codice, nome, simulazione, attivitaId])).rows[0];
 
-        // La squadra della sala: niente nome radio vero, niente posizione,
-        // niente interventi. Chi lavora in sala ci entra e risulta presente.
-        // Una rimasta da prima (una simulazione interrotta) si riusa.
+        // Una squadra COC rimasta da prima (una simulazione interrotta) si riusa.
         const gia = await client.query('SELECT id FROM squadre WHERE coc LIMIT 1');
         if (!gia.rowCount) {
             await client.query(
@@ -174,15 +164,13 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
         client.release();
     }
 
-    // Solo dopo il COMMIT.
     impostaEmergenzaAttiva({
         id: nuova.id, code: nuova.code, name: nuova.name, start_time: nuova.start_time,
         simulazione: nuova.simulazione === true, attivita_id: nuova.attivita_id ?? null
     });
     logger.info(`${simulazione ? 'SIMULAZIONE' : 'EMERGENZA'} APERTA: ID=${activeEmergency.id}, Code=${activeEmergency.code}`);
-    // Nessun avviso a tutti: lo riceve solo chi è già in una squadra,
-    // perché le squadre preparate prima entrano nell'emergenza. Gli
-    // altri lo ricevono quando il centro operativo li mette in squadra.
+    // Nessun avviso a tutti: lo riceve chi è già in squadra, gli altri quando il centro
+    // operativo li mette in una.
     const aperta = activeEmergency;
     (async () => {
         const perSquadra = new Map();
@@ -197,8 +185,6 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
         dettagli: { codice: nuova.code, nome: nuova.name, simulazione, attivita: attivitaId, squadre_sciolte: squadreSciolte, volontari_ereditati: membriEreditati.length }
     });
     annunciaStatoEmergenza();
-    // La squadra COC appena creata (e le squadre sciolte, se richiesto): le
-    // pagine aperte rileggono le squadre senza ricaricare.
     avvisaClienti('reload_squadre');
     if (!simulazione) allegaBollettinoInVigore();
     return {
@@ -209,10 +195,8 @@ export async function apriEmergenza(req, { codice, nome = null, azzeraSquadre = 
     };
 }
 
-// Chiude l'emergenza aperta. [tieni]: gli id di strade chiuse e zone che
-// restano in vigore (una simulazione non ne lascia nessuna). [interrotta]: una
-// simulazione fermata da un'emergenza vera che si apre subito dopo: la sala e
-// le squadre restano per quella.
+// [tieni]: strade chiuse e zone che restano in vigore. [interrotta]: una simulazione
+// fermata da un'emergenza vera: sala e squadre restano per quella.
 export async function chiudiEmergenza(req, { tieni = null, interrotta = false } = {}) {
     if (!activeEmergency) throw new ErroreEmergenza(400, 'Nessuna emergenza attiva da chiudere.');
     const chiusa = { ...activeEmergency };
@@ -226,7 +210,6 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
               WHERE emergency_id = $1 AND status = ANY($2::varchar[])`, [chiusa.id, ACTIVE_REPORT_STATUSES_BACKEND]);
         segnalazioniChiuse = r.rowCount;
         logger.info(`[DB] Chiusura automatica per ${segnalazioniChiuse} segnalazioni associate all'emergenza ${chiusa.id}.`);
-        // Nel registro tutti escono dalle squadre: l'impiego finisce qui.
         const membriInForza = (await client.query(`
             SELECT sm.username, sm.nome, sm.cognome, s.id AS squadra_id, s.nome_radio, s.nome AS squadra_nome
             FROM squadra_membri sm JOIN squadre s ON s.id = sm.squadra_id
@@ -239,9 +222,6 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
 
         temporaneiChiusi = await chiudiEsterniTemporanei(client, chiusa.id);
 
-        // Strade chiuse e zone interdette ancora in vigore: restano sulla
-        // mappa quelle indicate, le altre finiscono con l'emergenza. Senza
-        // l'elenco resta quello già segnato. Quelle simulate finiscono tutte.
         const daTenere = simulazione ? [] : tieni;
         if (daTenere) {
             const t = await client.query(
@@ -267,8 +247,6 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
     impostaEmergenzaAttiva(null);
     for (const id of temporaneiChiusi) await chiudiSessioni(id).catch(e => logger.error('Chiusura sessioni temporanee:', e));
     await notifiche.scadi({ categoria: 'emergenza' });
-    // Le presenze dal registro delle squadre, prima del resoconto e del backup:
-    // di una simulazione vanno all'attività del calendario.
     if (simulazione && chiusa.attivita_id) {
         await registraPresenzeSimulazione(chiusa.id, chiusa.attivita_id, req).catch(e => logger.error('[Presenze] Presenze della simulazione non registrate:', e));
     } else {
@@ -278,8 +256,6 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
     if (temporaneiChiusi.length) logger.info(`[Esterni temporanei] Chiusi ${temporaneiChiusi.length} accessi con l'emergenza.`);
     logger.info(`${simulazione ? 'SIMULAZIONE' : 'EMERGENZA'} CHIUSA: ID=${chiusa.id}, Code=${chiusa.code}${interrotta ? ' (interrotta)' : ''}`);
 
-    // Il sigillo dello storico a emergenza chiusa: torna qui, per mostrarlo
-    // e copiarlo, e parte per email agli amministratori.
     let sigillo = null;
     try {
         sigillo = await sigillaChiusura({ id: chiusa.id, code: chiusa.code, name: chiusa.name });
@@ -288,21 +264,18 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
     }
     registraAudit(req, 'emergenza.chiusa', { tipo: 'emergenza', id: chiusa.id, dettagli: { codice: chiusa.code, segnalazioni_chiuse: segnalazioniChiuse, simulazione, interrotta } });
 
-    // Interrotta, il resoconto aspetta l'emergenza vera, che deve nominare:
-    // lo fa partire chi l'ha aperta.
+    // Interrotta, il resoconto aspetta l'emergenza vera, che deve nominare.
     if (!interrotta) completaChiusura(chiusa, req, false);
     annunciaStatoEmergenza();
     return { chiusa, sigillo, segnalazioni_chiuse: segnalazioniChiuse };
 }
 
-// Dopo la chiusura: prima il resoconto, poi il backup, che così lo contiene.
+// Prima il resoconto, poi il backup, che così lo contiene.
 function completaChiusura(chiusa, req, interrotta) {
     const simulazione = chiusa.simulazione === true;
     salvaResocontoEmergenza(chiusa.id, req.user.username)
         .then(async nomeFile => {
             if (nomeFile) registraAudit(req, 'emergenza.resoconto_generato', { tipo: 'emergenza', id: chiusa.id, dettagli: { file: nomeFile } });
-            // Dopo il resoconto, che deve ancora vederle. Interrotta da
-            // un'emergenza vera, sala e squadre servono a quella.
             if (!interrotta) {
                 await sciogliSquadraCoc(chiusa.id, req);
                 await chiudiSquadreVuote(chiusa.id, req).catch(e => logger.error('[Squadre] Chiusura delle squadre vuote non riuscita:', e));
@@ -325,7 +298,6 @@ export function registraRotteEmergenze(app) {
         }
         if (!fs.existsSync(safePath)) return res.status(404).json({ message: 'File non trovato' });
         try {
-            // Di un'emergenza chiusa solo chi consulta le emergenze passate.
             const r = await pool.query('SELECT emergency_id FROM emergency_documents WHERE file_path = $1 LIMIT 1',
                 [`/uploads/documents/${req.params.filename}`]);
             if (r.rowCount === 0 ? !haPermesso(req, 'emergenze.archivio') : !puoVedereEmergenza(req, r.rows[0].emergency_id)) {
@@ -348,11 +320,6 @@ export function registraRotteEmergenze(app) {
     });
 
     app.post('/api/emergencies/open', richiedePermesso('emergenze.apertura'), async (req, res) => {
-        // azzera_squadre: si sciolgono le squadre di prima. Se restano, i loro
-        // membri risultano entrati all'apertura.
-        // interrompi_simulazione: c'è una simulazione in sala e arriva
-        // un'emergenza vera. La simulazione si chiude come interrotta e le
-        // squadre restano come sono: la gente è già in sala.
         const { external_code, name, azzera_squadre, interrompi_simulazione } = req.body;
         if (!external_code || String(external_code).trim() === '') {
             return res.status(400).json({ message: 'Il codice emergenza esterno è obbligatorio.' });
@@ -389,8 +356,6 @@ export function registraRotteEmergenze(app) {
         }
     });
 
-    // Chiude l'emergenza aperta: chi apre le emergenze; una simulazione anche
-    // chi la conduce (chi organizza le attività, il responsabile, la regia).
     app.post('/api/emergencies/close', async (req, res) => {
         if (!activeEmergency) return res.status(400).json({ message: 'Nessuna emergenza attiva da chiudere.' });
         const puo = haPermesso(req, 'emergenze.apertura')
@@ -409,8 +374,6 @@ export function registraRotteEmergenze(app) {
         }
     });
 
-    // Aprire la sala di una simulazione: dall'attività del calendario, il giorno
-    // stesso. Chi la conduce, anche senza il permesso delle emergenze vere.
     app.post('/api/attivita/:id/apri-sala', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Attività non valida.' });
@@ -444,11 +407,6 @@ export function registraRotteEmergenze(app) {
         }
     });
 
-    // La simulazione al volo, dal centro operativo: un'attività che comincia
-    // adesso (addestramento o esercitazione, con chi la apre come responsabile
-    // e regia), il copione di una vecchia o di uno scenario della biblioteca
-    // (src/scenari.js) se si vuole, e la sala aperta subito.
-    // Niente convocazioni: chi serve si chiama con la chiamata dei volontari.
     const apreAlVolo = (req) => haPermesso(req, 'emergenze.apertura', 'gruppo.attivita');
 
     app.get('/api/simulazioni/copioni', nonEsterni, async (req, res) => {
@@ -469,7 +427,6 @@ export function registraRotteEmergenze(app) {
         if (copiaDa !== null && !Number.isInteger(copiaDa)) return res.status(400).json({ message: 'Copione non valido.' });
         const scenarioId = vuoto(corpo.copia_scenario) ? null : Number(corpo.copia_scenario);
         if (scenarioId !== null && (!Number.isInteger(scenarioId) || copiaDa !== null)) return res.status(400).json({ message: "Si parte dal copione di un'attività o da uno scenario, non da tutti e due." });
-        // Da uno scenario: quello che non si scrive lo dice lo scenario.
         let dalloScenario = null;
         if (scenarioId !== null) {
             try {
@@ -543,7 +500,6 @@ export function registraRotteEmergenze(app) {
         }
     });
 
-    // Il resoconto di un'emergenza archiviata; se il file manca si rigenera.
     app.get('/api/admin/emergencies/:id/resoconto', richiedePermesso('emergenze.archivio'), async (req, res) => {
         const emergencyId = parseInt(req.params.id, 10);
         if (isNaN(emergencyId)) return res.status(400).json({ message: 'ID Emergenza non valido.' });
@@ -556,7 +512,6 @@ export function registraRotteEmergenze(app) {
             let nomeFile = rows[0].log_file_path;
 
             if (nomeFile) {
-                // basename: un nome manomesso non esce dalla cartella.
                 const percorso = path.join(CARTELLA_RESOCONTI, path.basename(nomeFile));
                 try {
                     const contenuto = await leggiFile(percorso);
@@ -610,7 +565,6 @@ export function registraRotteEmergenze(app) {
             const emergencyCode = emergencyCheck.rows[0].code;
             const resocontoDaEliminare = emergencyCheck.rows[0].log_file_path;
 
-            // I file si cancellano dopo il COMMIT: prima se ne raccolgono i percorsi.
             logger.debug(`[Delete EMG ${emergencyId}] Recupero URL immagini associate...`);
             const reportImageQuery = `SELECT image_url FROM report_images WHERE report_id IN (SELECT id FROM reports WHERE emergency_id = $1)`;
 
@@ -626,12 +580,8 @@ export function registraRotteEmergenze(app) {
             logger.debug(`[Delete EMG ${emergencyId}] Trovati ${documentFilesToDelete.length} documenti da eliminare dal filesystem.`);
 
 
-            // Lo storico è inalterabile, ma un'emergenza archiviata si può
-            // togliere per fare spazio: prima si sigilla tutto quello che
-            // c'è, poi si dichiara al database la cancellazione (solo per
-            // questa transazione), e la catena registra quali righe sono
-            // uscite, quando e per mano di chi. La verifica non le conta
-            // come mancanti; chi conserva un sigillo di prima sa che c'erano.
+            // Lo storico è inalterabile: si sigilla tutto, si dichiara la cancellazione al
+            // database (solo per questa transazione) e la catena registra le righe uscite.
             await client.query('SELECT orion_sigilla()');
             const righeTolte = (await client.query(
                 `SELECT jsonb_build_object(
@@ -641,8 +591,7 @@ export function registraRotteEmergenze(app) {
                  ) AS righe`, [emergencyId])).rows[0].righe;
             await client.query("SELECT set_config('orion.cancellazione_emergenza', $1, true)", [String(emergencyId)]);
 
-            // Le strade ancora chiuse oltre l'emergenza restano sulla mappa:
-            // si staccano dall'emergenza che se ne va.
+            // Le strade ancora chiuse oltre l'emergenza si staccano da quella che se ne va.
             await client.query(
                 'UPDATE elementi_mappa SET emergency_id = NULL WHERE emergency_id = $1 AND oltre_emergenza AND rimosso_il IS NULL', [emergencyId]);
 
@@ -689,7 +638,6 @@ export function registraRotteEmergenze(app) {
             }
             logger.debug(`[FS Cleanup] Eliminazione file completata (${filesDeletedCount}/${imageFilesToDelete.length}).`);
 
-            // basename: un percorso manomesso non esce dalla cartella.
             let documentiEliminati = 0;
             for (const percorsoRelativo of documentFilesToDelete) {
                 if (!percorsoRelativo || typeof percorsoRelativo !== 'string') continue;
@@ -788,8 +736,6 @@ export function registraRotteEmergenze(app) {
         }
     });
 
-    // La colonna degli eventi del centro operativo: segnalazioni aperte, voci
-    // dei diari, documenti e note di sala, in ordine di tempo.
     app.get('/api/emergencies/:id/eventi', authenticateToken, async (req, res) => {
         const emergencyId = parseInt(req.params.id, 10);
         if (isNaN(emergencyId)) return res.status(400).json({ message: 'ID Emergenza non valido.' });

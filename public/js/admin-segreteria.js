@@ -5,7 +5,6 @@ let brandingSettings = {
 };
 let brandingLogos = { logo2Url: null };
 
-// RECUPERO IMPOSTAZIONI BRANDING E LOGO
 async function loadAndApplyBranding() {
     try {
         const settings = await fetchApi('/api/branding/settings');
@@ -20,9 +19,7 @@ async function loadAndApplyBranding() {
         if (settings) {
             brandingSettings.card_district_label = settings.card_district_label || '';
             brandingSettings.card_regional_entity_name = settings.card_regional_entity_name || '';
-            // Il codice fiscale sul tesserino: acceso se non lo si è spento.
             brandingSettings.badge_cf_barcode = settings.badge_cf_barcode !== 'false';
-            // L'aspetto scelto dall'amministratore (vuoto: quello predefinito).
             brandingSettings.badge_modello = settings.badge_modello || '';
         }
 
@@ -46,15 +43,12 @@ if (ruoliUtente().length > 0 && !haPermesso('volontari.sanitario', 'volontari.an
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // I cataloghi di corsi e visite a chi gestisce i dati sanitari.
     if (!haPermesso('volontari.sanitario')) {
         ['btn-manage-catalog', 'btn-manage-medical-catalog'].forEach(id => {
             const voce = document.getElementById(id)?.closest('li');
             if (voce) voce.hidden = true;
         });
     }
-    // L'area Amministrazione è riservata all'admin: mostriamo il link solo a lui,
-    // così un utente di segreteria non finisce su una pagina che gli viene negata.
     if (haRuolo('admin')) {
         const sidebarSettings = document.getElementById('sidebar-settings');
         if (sidebarSettings) sidebarSettings.style.display = 'block';
@@ -76,13 +70,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     searchInput.addEventListener('keyup', filterTable);
     document.getElementById('btn-search').addEventListener('click', filterTable);
-    // GESTIONE MODALE
     const modal = document.getElementById('medical-modal');
     const closeModalBtn = document.querySelector('.close-modal');
     const coursesModal = document.getElementById('courses-modal');
     const closeCoursesBtn = document.querySelector('.close-modal-courses');
     
-    // Chiude dal pulsante (X)
     closeModalBtn.onclick = () => {
         modal.style.display = 'none';
     };
@@ -91,7 +83,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         coursesModal.style.display = 'none'; 
     };
     
-    // Chiude cliccando fuori dal modale
     window.onclick = (event) => {
         if (event.target == document.getElementById('medical-modal')) document.getElementById('medical-modal').style.display = 'none';
         if (event.target == coursesModal) coursesModal.style.display = 'none';
@@ -112,11 +103,9 @@ function autoCalculateExpiry(startDateInputId, selectId, catalogArray, targetExp
 
     if (!startDateVal || !selectedId) return;
 
-    // Trova l'oggetto nel catalogo
     const selectedItem = catalogArray.find(item => item.id == selectedId);
     
     if (selectedItem && selectedItem.validity_months) {
-        // Forza la conversione in numero intero per evitare errori matematici
         const monthsToAdd = parseInt(selectedItem.validity_months, 10);
         if (!isNaN(monthsToAdd)) {
             const d = new Date(startDateVal);
@@ -124,12 +113,10 @@ function autoCalculateExpiry(startDateInputId, selectId, catalogArray, targetExp
             targetInput.value = d.toISOString().split('T')[0];
         }
     } else {
-        // Se è NULL (nessuna scadenza, es. Corso Base) svuota il campo
         targetInput.value = ''; 
     }
 }
 
-// Agganciamo i listener (sia al 'change' che all'input per sicurezza)
 function setupExpiryListeners() {
     const events = ['input', 'change', 'blur']; 
     
@@ -138,24 +125,19 @@ function setupExpiryListeners() {
         if (el) events.forEach(evt => el.addEventListener(evt, callback));
     };
 
-    // Corsi (Creazione)
     attachListeners('acquisition_date', () => autoCalculateExpiry('acquisition_date', 'course_id', window.catalogsData.courses, 'course_expiry_date'));
     attachListeners('course_id', () => autoCalculateExpiry('acquisition_date', 'course_id', window.catalogsData.courses, 'course_expiry_date'));
 
-    // Visite (Creazione)
     attachListeners('last_visit_date', () => autoCalculateExpiry('last_visit_date', 'visit_type_id', window.catalogsData.medicalVisits, 'expiry_date'));
     attachListeners('visit_type_id', () => autoCalculateExpiry('last_visit_date', 'visit_type_id', window.catalogsData.medicalVisits, 'expiry_date'));
     
-    // Visite (Modifica)
     attachListeners('edit_last_visit_date', () => autoCalculateExpiry('edit_last_visit_date', 'edit_visit_type_id', window.catalogsData.medicalVisits, 'edit_expiry_date'));
     attachListeners('edit_visit_type_id', () => autoCalculateExpiry('edit_last_visit_date', 'edit_visit_type_id', window.catalogsData.medicalVisits, 'edit_expiry_date'));
 }
 
 document.addEventListener('DOMContentLoaded', setupExpiryListeners);
 
-// CARICAMENTO DASHBOARD ALLARMI
 async function loadDashboardAlerts() {
-    // Le scadenze di visite e corsi a chi gestisce i dati sanitari.
     if (!haPermesso('volontari.sanitario')) return;
     try {
         const response = await fetch('/api/admin/segreteria/dashboard');
@@ -174,7 +156,7 @@ function formatScadenza(dateString) {
     
     const pureDate = dateString.split('T')[0];
     
-    // Forziamo entrambe le date a mezzanotte spaccata locale
+    // Entrambe le date a mezzanotte locale.
     const expDate = new Date(pureDate + 'T00:00:00');
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -290,8 +272,6 @@ function renderAlerts(medicalAlerts, coursesAlerts) {
     });
 }
 
-// CARICAMENTO UTENTI NELLA TABELLA
-// Le persone dell'elenco, per id: la stampa dei fascicoli scelti ne prende i dati.
 let utentiSegreteria = new Map();
 
 async function loadUsers() {
@@ -310,15 +290,12 @@ async function loadUsers() {
         users.forEach(user => {
             const tr = document.createElement('tr');
             
-            // RENDIAMO LA RIGA CLICCABILE E PIÙ ELEGANTE
             tr.style.cursor = 'pointer';
             tr.title = "Clicca per aprire il fascicolo completo";
             tr.addEventListener('click', () => showUserDetailView(user));
-            // Effetto hover per far capire che è cliccabile (funziona se non c'è già nel CSS)
             tr.addEventListener('mouseenter', () => tr.style.backgroundColor = 'var(--list-item-hover-bg, rgba(0,0,0,0.02))');
             tr.addEventListener('mouseleave', () => tr.style.backgroundColor = '');
 
-            // La casella per le registrazioni multiple: non apre il fascicolo.
             const sceltaTd = document.createElement('td');
             sceltaTd.className = 'col-scelta';
             const scelta = document.createElement('input');
@@ -364,8 +341,7 @@ async function loadUsers() {
                 if (hasValidMed && hasValidCourse) {
                     statusTd.innerHTML = '<span class="status-badge active"><i class="fas fa-check-circle"></i> Operativo</span>';
                 } else if (!medRecords.length && !courses.length) {
-                    // Niente di registrato non è "fuori regola": è un fascicolo
-                    // ancora da riempire (il primo giorno, tutti).
+                    // Niente di registrato non è "fuori regola": è un fascicolo ancora da riempire.
                     statusTd.innerHTML = '<span class="status-badge" style="background: rgba(100,116,139,0.12); color: var(--text-muted);"><i class="fas fa-folder-open"></i> Dati da inserire</span>';
                 } else if (!hasValidMed && !hasValidCourse) {
                     statusTd.innerHTML = '<span class="status-badge suspended"><i class="fas fa-times-circle"></i> Non Operativo</span>';
@@ -389,7 +365,6 @@ async function loadUsers() {
         console.error('Errore Tabella Utenti:', error);
     }
 }
-// LOGICA DEL MODALE VISITA MEDICA
 async function openMedicalModal(userId, userName) {
     document.getElementById('medical-user-id').value = userId;
     document.getElementById('medical-user-name').innerText = userName;
@@ -406,7 +381,6 @@ async function openMedicalModal(userId, userName) {
             window.catalogsData.medicalVisits.forEach(v => {
                 selectType.innerHTML += `<option value="${escapeHTML(v.id)}">${escapeHTML(v.name)}</option>`;
             });
-            // Un solo tipo di visita (il caso di tutti, all'inizio): già scelto.
             if (window.catalogsData.medicalVisits.length === 1) selectType.value = String(window.catalogsData.medicalVisits[0].id);
         }
     } catch(e) { console.error("Errore catalogo visite", e); }
@@ -425,7 +399,6 @@ async function openMedicalModal(userId, userName) {
                 let statusColor = m.status === 'Idoneo' ? '#10b981' : '#ef4444'; 
                 if (new Date(m.expiry_date) < new Date()) statusColor = '#f59e0b'; 
 
-                // Cerca il nome della visita dal catalogo (se presente)
                 const visitTypeObj = window.catalogsData.medicalVisits.find(v => v.id == m.visit_type_id);
                 const visitName = visitTypeObj ? visitTypeObj.name : 'Visita di idoneità fisica all\'impiego';
 
@@ -493,7 +466,6 @@ async function deleteMedicalRecord(recordId, userId, userName) {
     }
 }
 
-// UPLOAD SICURO DEL CERTIFICATO
 document.getElementById('medical-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -541,7 +513,6 @@ document.getElementById('medical-form').addEventListener('submit', async (e) => 
     }
 });
 
-// LOGICA DEL MODALE CORSI
 async function openCoursesModal(userId, userName) {
     document.getElementById('course-user-id').value = userId;
     document.getElementById('courses-user-name').innerText = userName;
@@ -571,7 +542,6 @@ async function openCoursesModal(userId, userName) {
                 const acqDate = new Date(c.acquisition_date).toLocaleDateString('it-IT');
                 const expDate = c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Nessuna scadenza';
                 
-                // CREAZIONE SICURA DELL'ELEMENTO LISTA (Stile coerente con le visite)
                 const li = document.createElement('li');
                 li.style.display = 'flex';
                 li.style.justifyContent = 'space-between';
@@ -579,7 +549,6 @@ async function openCoursesModal(userId, userName) {
                 li.style.padding = '12px 0';
                 li.style.borderBottom = '1px solid var(--border-light-color)';
 
-                // PARTE SINISTRA: Testi e Date
                 const leftDiv = document.createElement('div');
                 leftDiv.style.lineHeight = '1.4';
                 leftDiv.innerHTML = `
@@ -589,7 +558,6 @@ async function openCoursesModal(userId, userName) {
                     </div>
                 `;
 
-                // PARTE DESTRA
                 const rightDiv = document.createElement('div');
                 rightDiv.style.display = 'flex';
                 rightDiv.style.gap = '12px';
@@ -609,7 +577,6 @@ async function openCoursesModal(userId, userName) {
                     rightDiv.appendChild(ghostSpan);
                 }
 
-                // Bottone Modifica
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
                 editBtn.className = 'btn-icon-action btn-edit-record';
@@ -618,7 +585,6 @@ async function openCoursesModal(userId, userName) {
                 editBtn.addEventListener('click', () => loadEditCourseRecord(c, userId, userName));
                 rightDiv.appendChild(editBtn);
 
-                // Bottone Elimina
                 const deleteBtn = document.createElement('button');
                 deleteBtn.type = 'button';
                 deleteBtn.className = 'btn-icon-action btn-delete-record';
@@ -640,7 +606,6 @@ async function openCoursesModal(userId, userName) {
     }
 }
 
-// UPLOAD SICURO DEL CORSO E ATTESTATO
 document.getElementById('course-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -648,7 +613,6 @@ document.getElementById('course-form').addEventListener('submit', async (e) => {
     const fileInput = document.getElementById('course_document');
     const file = fileInput.files[0];
 
-    // SECURITY LATO CLIENT: Verifica peso file (50MB limit)
     if (file && file.size > 52428800) {
         notifica("Errore di Sicurezza: L'attestato supera i 50MB consentiti.", 'errore');
         fileInput.value = '';
@@ -739,7 +703,6 @@ async function loadEditMedicalRecord(record, userId, userName) {
     if (docContainer) docContainer.style.display = record.document_url ? 'block' : 'none';
 }
 
-// Chiude la Modifica e riapre il Fascicolo
 const closeEditModal = () => {
     document.getElementById('medical-edit-modal').style.display = 'none';
     
@@ -747,7 +710,6 @@ const closeEditModal = () => {
     const userName = document.getElementById('medical-edit-user-name').innerText;
 };
 
-// Eventi di chiusura Modale Modifica
 document.getElementById('medical-edit-cancel-btn').addEventListener('click', closeEditModal);
 document.querySelector('.close-edit-modal').addEventListener('click', closeEditModal);
 
@@ -780,7 +742,6 @@ document.getElementById('medical-edit-form').addEventListener('submit', async (e
         const response = await fetch(`/api/admin/medical-records/${recordId}`, { method: 'PUT', body: formData });
         
         if (response.ok) {
-            // Se va a buon fine, chiudiamo e riapriamo il fascicolo
             closeEditModal(); 
             loadDashboardAlerts(); 
             loadUsers();
@@ -794,13 +755,10 @@ document.getElementById('medical-edit-form').addEventListener('submit', async (e
     }
 });
 
-// GESTIONE CATALOGO CORSI (Impostazioni)
-
 const catalogModal = document.getElementById('catalog-modal');
 const btnManageCatalog = document.getElementById('btn-manage-catalog');
 const closeCatalogBtn = document.querySelector('.close-catalog-modal');
 
-// Apri e Chiudi Modale
 btnManageCatalog.addEventListener('click', (e) => {
     e.preventDefault(); 
     catalogModal.style.display = 'block';
@@ -829,12 +787,10 @@ async function loadCatalogList() {
 
             li.innerHTML = `<div><span style="${nameStyle}">${codeBadge}${escapeHTML(course.name)} ${badge}</span>${validityText}</div>`;
 
-            // Contenitore Pulsanti Azione
             const actionsDiv = document.createElement('div');
             actionsDiv.style.display = 'flex';
             actionsDiv.style.gap = '10px';
 
-            // Bottone Edit (Sempre Abilitato, anche per ID 1)
             const editBtn = document.createElement('button');
             editBtn.className = 'btn-icon-action btn-edit-record';
             editBtn.innerHTML = '<i class="fas fa-edit"></i>';
@@ -842,7 +798,6 @@ async function loadCatalogList() {
             editBtn.addEventListener('click', () => openCatalogEditModal(course));
             actionsDiv.appendChild(editBtn);
 
-            // Bottone Delete (Disabilitato per ID 1)
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn-icon-action btn-delete-record';
             if (isSystemCourse) {
@@ -869,7 +824,6 @@ async function loadCatalogList() {
     } catch (error) { listUl.innerHTML = '<li style="padding: 10px; color: red;">Errore caricamento.</li>'; }
 }
 
-// LOGICA MODALE MODIFICA CATALOGO
 const catalogEditModal = document.getElementById('catalog-edit-modal');
 const closeCatalogEditBtn = document.querySelector('.close-catalog-edit-modal');
 
@@ -880,7 +834,6 @@ function openCatalogEditModal(course) {
     const nameInput = document.getElementById('edit_catalog_course_name');
     nameInput.value = course.name;
     
-    // Se è il corso ID 1, blocca il nome
     if (course.id === 1) {
         nameInput.readOnly = true;
         nameInput.style.opacity = '0.7';
@@ -916,7 +869,6 @@ document.getElementById('catalog-edit-form').addEventListener('submit', async (e
     }
 });
 
-// Aggiungi un nuovo corso
 document.getElementById('catalog-add-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const course_code = document.getElementById('new_course_code').value;
@@ -938,7 +890,6 @@ document.getElementById('catalog-add-form').addEventListener('submit', async (e)
     }
 });
 
-// Apri Modale Modifica Corso
 function loadEditCourseRecord(course, userId, userName) {
     document.getElementById('courses-modal').style.display = 'none';
 
@@ -959,7 +910,6 @@ function loadEditCourseRecord(course, userId, userName) {
     document.getElementById('course-edit-modal').style.display = 'block';
 }
 
-// Chiudi Modale Modifica Corso
 const closeEditCourseModal = () => {
     document.getElementById('course-edit-modal').style.display = 'none';
     const userId = document.getElementById('edit-course-user-id').value;
@@ -1010,7 +960,6 @@ document.getElementById('course-edit-form').addEventListener('submit', async (e)
     }
 });
 
-// Elimina Corso (DELETE)
 async function deleteCourseRecord(recordId, userId, userName) {
     if (!confirm("Sei sicuro di voler eliminare questo corso dal fascicolo? L'attestato verrà perso definitivamente.")) return;
     
@@ -1036,7 +985,6 @@ function mostraFotoDettaglio(url) {
 function mostraQrDettaglio(token) {
     const qrContainer = document.getElementById('detail-qrcode-container');
     qrContainer.innerHTML = '';
-    // QR spenti dall'amministrazione: niente riquadro e niente "Rigenera".
     document.getElementById('blocco-qr-dettaglio').hidden = !token;
     const rigenera = document.getElementById('btn-rigenera-qr');
     if (rigenera) rigenera.hidden = !token;
@@ -1047,7 +995,6 @@ function mostraQrDettaglio(token) {
     });
 }
 
-// La foto la cambia anche la segreteria: è lei che stampa il tesserino.
 document.getElementById('detail-photo-upload')?.addEventListener('change', async (e) => {
     const scelta = e.target.files[0];
     e.target.value = '';
@@ -1075,7 +1022,6 @@ const mainView = document.getElementById('main-dashboard-view');
 const detailView = document.getElementById('user-detail-view');
 const btnBack = document.getElementById('btn-back-to-list');
 
-// Tasto Indietro
 btnBack.addEventListener('click', () => {
     detailView.style.display = 'none';
     mainView.style.display = 'block';
@@ -1084,7 +1030,6 @@ btnBack.addEventListener('click', () => {
     loadUsers();
 });
 
-// Apre la schermata dell'utente
 async function showUserDetailView(user) {
     currentUserViewId = user.id;
     currentUserViewName = `${user.nome} ${user.cognome}`;
@@ -1096,8 +1041,6 @@ async function showUserDetailView(user) {
     document.getElementById('detail-user-cf').textContent = user.codice_fiscale || 'Non inserito';
     document.getElementById('detail-user-phone').textContent = user.telefono || 'Non inserito';
     
-    // Foto e QR non stanno nell'elenco degli utenti: si leggono qui, per
-    // questa persona sola.
     const qrContainer = document.getElementById('detail-qrcode-container');
     qrContainer.innerHTML = '<span style="color: var(--text-muted); font-size:0.8rem;">Caricamento...</span>';
     mostraFotoDettaglio(user.photo_url);
@@ -1113,7 +1056,6 @@ async function showUserDetailView(user) {
 
     mainView.style.display = 'none';
     detailView.style.display = 'block';
-    // Il fascicolo si legge dall'inizio, anche se la riga era in fondo all'elenco.
     window.scrollTo(0, 0);
 
     await refreshUserDetailLists();
@@ -1140,7 +1082,6 @@ async function refreshUserDetailLists() {
         const data = await fetchApi(`/api/users/${currentUserViewId}/libretto`);
         currentLibrettoViewData = data;
         medList.innerHTML = '';
-        // Senza il permesso dei dati sanitari visite e corsi non arrivano.
         const senzaSanitari = data.dati_sanitari === false;
         document.querySelectorAll('#btn-add-course, #btn-add-medical').forEach(e => { e.hidden = senzaSanitari; });
         if (senzaSanitari) {
@@ -1157,7 +1098,6 @@ async function refreshUserDetailLists() {
         }
         const rawMedical = Array.isArray(data.medical_records) ? data.medical_records : (data.medical_record ? [data.medical_record] : []);
         
-        // Raggruppamento: la prima visita che incontriamo per ogni tipo è quella "Attiva", le altre sono "Storico"
         const seenMedTypes = new Set();
         const medicalRecords = rawMedical.map(m => {
             const isLatest = !seenMedTypes.has(m.visit_type_id);
@@ -1171,8 +1111,7 @@ async function refreshUserDetailLists() {
                 const expDate = new Date(m.expiry_date).toLocaleDateString('it-IT');
                 const badge = m.isLatest ? getStatusBadge(m.expiry_date) : '<span class="status-badge" style="background: var(--secondary-bg-color); color: var(--text-muted); border:none; margin-top:5px;"><i class="fas fa-archive"></i> Precedente</span>';
 
-                // Il nome del tipo arriva con il libretto: il catalogo in
-                // memoria c'è solo dopo aver aperto una finestra.
+                // Il catalogo in memoria c'è solo dopo aver aperto una finestra.
                 const visitTypeObj = window.catalogsData?.medicalVisits?.find(v => v.id == m.visit_type_id);
                 const visitName = m.visit_name || (visitTypeObj ? visitTypeObj.name : 'Visita');
 
@@ -1200,7 +1139,6 @@ async function refreshUserDetailLists() {
                     rightDiv.innerHTML += `<a href="${escapeHTML(m.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri il certificato"><i class="fas fa-paperclip"></i> Certificato</a>`;
                 }
 
-                // Tasto RINNOVA (Solo per l'ultimo record valido)
                 if (m.isLatest) {
                     const renewBtn = document.createElement('button');
                     renewBtn.className = 'btn-icon-action';
@@ -1238,7 +1176,6 @@ async function refreshUserDetailLists() {
         courseList.innerHTML = '';
         const rawCourses = data.courses || [];
         
-        // Raggruppamento Corsi
         const seenCourseTypes = new Set();
         const courses = rawCourses.map(c => {
             const isLatest = !seenCourseTypes.has(c.course_id);
@@ -1276,7 +1213,6 @@ async function refreshUserDetailLists() {
                     rightDiv.innerHTML += `<a href="${escapeHTML(c.document_url)}" target="_blank" class="btn-icon-action btn-view-record" title="Apri l'attestato"><i class="fas fa-paperclip"></i> Attestato</a>`;
                 }
 
-                // Tasto RINNOVA
                 if (c.isLatest) {
                     const renewBtn = document.createElement('button');
                     renewBtn.className = 'btn-icon-action';
@@ -1311,14 +1247,11 @@ async function refreshUserDetailLists() {
             courseList.innerHTML = '<li style="color: var(--text-muted); justify-content:center; padding: 12px 0;">Nessun corso registrato.</li>';
         }
 
-        // I DPI, con la stessa funzione del profilo del volontario.
         const cardDpi = document.getElementById('card-dpi-volontario');
         if (cardDpi) {
             cardDpi.hidden = !data.magazzino_attivo;
             if (data.magazzino_attivo) {
                 disegnaDpiInDotazione(document.getElementById('detail-dpi-list'), data.equipment);
-                // Le consegne si registrano dal magazzino, non da qui: il
-                // collegamento porta già sulla persona giusta.
                 const vai = document.getElementById('btn-vai-magazzino');
                 if (vai) vai.href = `/magazzino.html?persona=${currentUserViewId}`;
             }
@@ -1330,14 +1263,12 @@ async function refreshUserDetailLists() {
     }
 }
 
-// Bottone Aggiungi Visita (nella vista dettaglio)
 document.getElementById('btn-add-medical').addEventListener('click', async () => {
     document.getElementById('medical-user-id').value = currentUserViewId;
     document.getElementById('medical-user-name').innerText = `Nuova visita per ${currentUserViewName}`;
     document.getElementById('medical-form').reset();
     document.getElementById('current-medical-list').style.display = 'none'; 
 
-    // FIX: Scarichiamo il catalogo e lo salviamo nella memoria globale
     try {
         window.catalogsData.medicalVisits = await fetchApi('/api/admin/medical-visit-types');
         const selectType = document.getElementById('visit_type_id');
@@ -1346,7 +1277,6 @@ document.getElementById('btn-add-medical').addEventListener('click', async () =>
             window.catalogsData.medicalVisits.forEach(v => {
                 selectType.innerHTML += `<option value="${escapeHTML(v.id)}">${escapeHTML(v.name)}</option>`;
             });
-            // Un solo tipo di visita (il caso di tutti, all'inizio): già scelto.
             if (window.catalogsData.medicalVisits.length === 1) selectType.value = String(window.catalogsData.medicalVisits[0].id);
         }
     } catch(e) { console.error("Errore caricamento tipi visita", e); }
@@ -1354,14 +1284,12 @@ document.getElementById('btn-add-medical').addEventListener('click', async () =>
     document.getElementById('medical-modal').style.display = 'block';
 });
 
-// Bottone Aggiungi Corso (nella vista dettaglio)
 document.getElementById('btn-add-course').addEventListener('click', async () => {
     document.getElementById('course-user-id').value = currentUserViewId;
     document.getElementById('courses-user-name').innerText = `Nuovo corso per ${currentUserViewName}`;
     document.getElementById('course-form').reset();
     document.getElementById('current-courses-list').style.display = 'none'; 
     
-    // FIX: Usiamo fetchApi e salviamo nella memoria globale per il calcolo delle date!
     try {
         window.catalogsData.courses = await fetchApi('/api/admin/courses-catalog');
         const select = document.getElementById('course_id');
@@ -1375,7 +1303,6 @@ document.getElementById('btn-add-course').addEventListener('click', async () => 
     document.getElementById('courses-modal').style.display = 'block';
 });
 
-// Intercettiamo i submit dei modali per ricaricare la pagina dinamica
 document.getElementById('medical-form').addEventListener('submit', function() {
     setTimeout(() => { if (currentUserViewId) refreshUserDetailLists(); }, 500);
 });
@@ -1389,7 +1316,6 @@ document.getElementById('course-edit-form').addEventListener('submit', function(
     setTimeout(() => { if (currentUserViewId) refreshUserDetailLists(); }, 500);
 });
 
-// Sovrascriviamo le funzioni di eliminazione (già esistenti) per fare il refresh automatico
 const originalDeleteMedical = deleteMedicalRecord;
 deleteMedicalRecord = async function(recordId, userId, userName) {
     await originalDeleteMedical(recordId, userId, userName);
@@ -1406,7 +1332,6 @@ const medCatalogModal = document.getElementById('medical-catalog-modal');
 const btnManageMedCatalog = document.getElementById('btn-manage-medical-catalog');
 const closeMedCatalogBtn = document.querySelector('.close-medical-catalog-modal');
 
-// Apri e Chiudi Modale Visite
 if (btnManageMedCatalog) {
     btnManageMedCatalog.addEventListener('click', (e) => {
         e.preventDefault(); 
@@ -1455,7 +1380,6 @@ async function loadMedicalCatalogList() {
     } catch (error) { listUl.innerHTML = '<li style="padding: 10px; color: red;">Errore caricamento.</li>'; }
 }
 
-// Aggiungi Nuova Visita al Catalogo
 document.getElementById('medical-catalog-add-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = document.getElementById('new_visit_name').value;
@@ -1476,13 +1400,11 @@ document.getElementById('medical-catalog-add-form').addEventListener('submit', a
     }
 });
 
-// GESTIONE ANAGRAFICA
 const anagraficaModal = document.getElementById('anagrafica-modal');
 
 document.getElementById('btn-edit-anagrafica').addEventListener('click', () => {
     document.getElementById('anagrafica-user-name').textContent = currentUserViewName;
     
-    // Precompila con i dati attuali letti dall'interfaccia
     const currentCF = document.getElementById('detail-user-cf').textContent;
     const currentPhone = document.getElementById('detail-user-phone').textContent;
     
@@ -1525,11 +1447,9 @@ document.getElementById('anagrafica-form').addEventListener('submit', async (e) 
     }
 });
 
-// GENERAZIONE PDF DALLA SEGRETERIA
 document.getElementById('btn-print-user-badge')?.addEventListener('click', generateAdminPDFLibretto);
 
-// La foto ritagliata come una fototessera, al centro: con "fit" una foto larga
-// lascerebbe una fascia vuota sotto.
+// Ritagliata come una fototessera: con "fit" una foto larga lascerebbe una fascia vuota.
 async function ritagliaFototessera(url, larghezza, altezza) {
     const dati = await getBase64ImageFromUrl(url);
     if (!dati) return null;
@@ -1572,8 +1492,6 @@ async function getBase64ImageFromUrl(imageUrl) {
     }
 }
 
-// Il contenuto del fascicolo di una persona (anagrafica, visite, corsi), per
-// il PDF di uno solo o di più fascicoli insieme, uno per pagina.
 async function contenutoFascicolo(utente, libretto, logoBase64) {
     const currentUserViewData = utente, currentLibrettoViewData = libretto;
     const photoBase64 = utente.photo_url ? await getBase64ImageFromUrl(utente.photo_url) : null;
@@ -1724,8 +1642,191 @@ async function generateAdminPDFLibretto() {
     }
 }
 
-// I fascicoli dei selezionati in un PDF solo, uno per pagina: per l'archivio
-// cartaceo, per l'assicurazione, per una verifica dell'ente.
+document.getElementById('btn-print-status-card')?.addEventListener('click', generateSyntheticStatusCard);
+
+// L'array arriva già ordinato per last_visit_date DESC dal server.
+function getCurrentValidMedicalRecords(data) {
+    const raw = Array.isArray(data?.medical_records) ? data.medical_records : (data?.medical_record ? [data.medical_record] : []);
+    const seenTypes = new Set();
+    const current = [];
+    for (const m of raw) {
+        if (seenTypes.has(m.visit_type_id)) continue;
+        seenTypes.add(m.visit_type_id);
+        const isExpired = !m.expiry_date || new Date(m.expiry_date) < new Date();
+        if (!isExpired && m.status === 'Idoneo') current.push(m);
+    }
+    return current;
+}
+
+function getCurrentValidCourses(data) {
+    const raw = data?.courses || [];
+    const seenCourses = new Set();
+    const current = [];
+    for (const c of raw) {
+        if (seenCourses.has(c.course_id)) continue;
+        seenCourses.add(c.course_id);
+        const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date();
+        if (!isExpired) current.push(c);
+    }
+    return current;
+}
+
+async function generateSyntheticStatusCard() {
+    if (!currentUserViewData || !currentLibrettoViewData) {
+        notifica('Attendi il caricamento completo dei dati del volontario.', 'attenzione'); return;
+    }
+
+    const btn = document.getElementById('btn-print-status-card');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generazione...';
+
+    try {
+        const logoBase64 = await getBase64ImageFromUrl('/logo.png');
+        const photoBase64 = currentUserViewData.photo_url ? await getBase64ImageFromUrl(currentUserViewData.photo_url) : null;
+
+        const validMedical = getCurrentValidMedicalRecords(currentLibrettoViewData);
+        const validCourses = getCurrentValidCourses(currentLibrettoViewData);
+
+        // Stessa logica di operatività del tesserino pubblico.
+        const isMedOk = validMedical.some(m => (m.visit_name || '').toLowerCase() === 'visita di idoneità fisica');
+        const isCourseBaseOk = validCourses.some(c => c.course_id === 1);
+        const isOperativo = isMedOk && isCourseBaseOk;
+
+        const headerColumns = [];
+        if (logoBase64) headerColumns.push({ image: logoBase64, width: 50, alignment: 'left' });
+        headerColumns.push({
+            text: [
+                { text: (brandingSettings.association_name || 'Protezione Civile').toUpperCase() + '\n', style: 'headerTitle' },
+                { text: 'SCHEDA VOLONTARIO - STATO ATTUALE', style: 'documentTitle' }
+            ],
+            alignment: logoBase64 ? 'right' : 'center',
+            margin: [0, 5, 0, 0]
+        });
+
+        const profileColumns = [];
+        if (photoBase64) profileColumns.push({ width: 'auto', image: photoBase64, fit: [75, 75], margin: [0, 0, 20, 0] });
+        profileColumns.push({
+            width: '*',
+            stack: [
+                { text: `${currentUserViewData.nome} ${currentUserViewData.cognome}`, fontSize: 15, bold: true, color: '#1e293b' },
+                { text: (currentUserViewData.role || '').toUpperCase(), fontSize: 9, color: '#64748b', margin: [0, 2, 0, 8] },
+                { text: isOperativo ? 'OPERATIVO' : 'NON OPERATIVO', bold: true, fontSize: 12, color: isOperativo ? '#10b981' : '#ef4444' }
+            ]
+        });
+
+        const medicalRows = validMedical.map(m => [
+            { text: m.visit_name || 'Visita di idoneità', margin: [0, 4, 0, 4] },
+            { text: new Date(m.last_visit_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] },
+            { text: new Date(m.expiry_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] }
+        ]);
+        const courseRows = validCourses.map(c => [
+            { text: c.name, margin: [0, 4, 0, 4] },
+            { text: new Date(c.acquisition_date).toLocaleDateString('it-IT'), margin: [0, 4, 0, 4] },
+            { text: c.expiry_date ? new Date(c.expiry_date).toLocaleDateString('it-IT') : 'Senza scadenza', margin: [0, 4, 0, 4] }
+        ]);
+
+        const docDefinition = {
+            pageSize: 'A5',
+            pageMargins: [30, 30, 30, 30],
+            content: [
+                { columns: headerColumns, margin: [0, 0, 0, 12] },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 355, y2: 0, lineWidth: 1.5, lineColor: '#3b82f6' }], margin: [0, 0, 0, 15] },
+                { columns: profileColumns, margin: [0, 0, 0, 20] },
+
+                { text: 'VISITA MEDICA VALIDA', style: 'sectionHeader' },
+                medicalRows.length > 0
+                    ? { table: { headerRows: 1, widths: ['*', 'auto', 'auto'], body: [[{ text: 'Tipo', style: 'tableHeader' }, { text: 'Data', style: 'tableHeader' }, { text: 'Scadenza', style: 'tableHeader' }], ...medicalRows] }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 20] }
+                    : { text: 'Nessuna visita valida al momento.', italics: true, color: '#ef4444', margin: [0, 0, 0, 20] },
+
+                { text: 'CORSI ATTIVI', style: 'sectionHeader' },
+                courseRows.length > 0
+                    ? { table: { headerRows: 1, widths: ['*', 'auto', 'auto'], body: [[{ text: 'Corso', style: 'tableHeader' }, { text: 'Acquisito', style: 'tableHeader' }, { text: 'Scadenza', style: 'tableHeader' }], ...courseRows] }, layout: 'lightHorizontalLines' }
+                    : { text: 'Nessun corso attivo al momento.', italics: true, color: '#ef4444' },
+
+                { text: `Documento generato il ${new Date().toLocaleDateString('it-IT')} - fotografia dello stato attuale, non sostituisce il fascicolo completo.`, fontSize: 7, color: '#94a3b8', margin: [0, 20, 0, 0] }
+            ],
+            styles: {
+                headerTitle: { fontSize: 13, bold: true, color: '#1e293b' },
+                documentTitle: { fontSize: 9, bold: true, color: '#3b82f6' },
+                sectionHeader: { fontSize: 10, bold: true, color: '#334155', margin: [0, 8, 0, 6] },
+                tableHeader: { bold: true, fontSize: 8, color: '#64748b', fillColor: '#f1f5f9' }
+            },
+            defaultStyle: { fontSize: 9, color: '#334155' }
+        };
+
+        pdfMake.createPdf(docDefinition).download(`Scheda_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
+
+    } catch (error) {
+        console.error("Errore generazione scheda stato attuale:", error);
+        notifica("Si è verificato un errore durante la generazione della scheda.", 'errore');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+document.getElementById('btn-print-id-card')?.addEventListener('click', generateIDCard);
+
+document.getElementById('btn-rigenera-qr')?.addEventListener('click', async () => {
+    if (!currentUserViewId || !currentUserViewData) return;
+    if (!confirm(`Rigenerare il QR del tesserino di ${currentUserViewName}?\n\nIl tesserino stampato finora smette di funzionare e va ristampato.`)) return;
+    try {
+        const esito = await fetchApi(`/api/admin/users/${currentUserViewId}/rigenera-tesserino`, { method: 'POST' });
+        currentUserViewData.public_token = esito.public_token;
+        mostraQrDettaglio(esito.public_token);
+        notifica(esito.message, 'successo');
+    } catch (e) {
+        notifica(`Errore: ${e.message}`, 'errore');
+    }
+});
+
+async function generateIDCard() {
+    if (!currentUserViewData) {
+        notifica('Attendi il caricamento dei dati del volontario.', 'attenzione');
+        return;
+    }
+
+    const btn = document.getElementById('btn-print-id-card');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generazione...';
+
+    try {
+        if (currentUserViewData.qr_attivo === undefined) {
+            const t = await fetchApi(`/api/admin/users/${currentUserViewData.id}/tesserino`);
+            Object.assign(currentUserViewData, { public_token: t.public_token, photo_url: t.photo_url, qr_attivo: t.qr_attivo !== false });
+        }
+        const [logo, logo2] = await Promise.all([
+            getBase64ImageFromUrl('/logo.png'),
+            brandingLogos.logo2Url ? getBase64ImageFromUrl(brandingLogos.logo2Url) : null,
+            Tesserino.caratteri()
+        ]);
+        // Senza token (QR spenti) il tesserino si stampa senza QR.
+        const cf = String(currentUserViewData.codice_fiscale || '').trim().toUpperCase();
+        const dati = {
+            nome: `${currentUserViewData.cognome || ''} ${currentUserViewData.nome || ''}`,
+            distretto: brandingSettings.card_district_label || '',
+            ente: brandingSettings.card_regional_entity_name || '',
+            qr: currentUserViewData.public_token ? `${window.location.origin}/badge.html?token=${currentUserViewData.public_token}` : null,
+            cf: brandingSettings.badge_cf_barcode !== false && /^[A-Z0-9]{16}$/.test(cf) ? cf : null,
+            loghi: [logo2, logo]
+        };
+        const riquadro = Tesserino.posizioni(brandingSettings.badge_modello, Tesserino.varianti(dati)).foto;
+        if (currentUserViewData.photo_url) dati.foto = await ritagliaFototessera(currentUserViewData.photo_url, riquadro.w, riquadro.h);
+
+        const docDefinition = Tesserino.inPdf(Tesserino.componi(brandingSettings.badge_modello, dati));
+        pdfMake.createPdf(docDefinition).download(`Tesserino_PC_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
+
+    } catch (error) {
+        console.error("Errore generazione Tesserino:", error);
+        notifica("Errore durante la generazione del tesserino.", 'errore');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
 async function stampaFascicoliScelti() {
     const ids = [...sceltiMultipla.keys()];
     if (!ids.length) return;
@@ -1762,11 +1863,6 @@ async function stampaFascicoliScelti() {
 }
 document.getElementById('btn-stampa-fascicoli')?.addEventListener('click', stampaFascicoliScelti);
 
-// --- Registrazioni multiple ---------------------------------------------------
-// La stessa visita o lo stesso corso a più volontari con la stessa data: la
-// visita collettiva dal medico, il corso base fatto insieme. Per ognuno si usa
-// la stessa rotta del fascicolo; il certificato, se c'è, si allega dopo
-// persona per persona.
 const sceltiMultipla = new Map();
 
 function aggiornaAzioniMultiple() {
@@ -1781,7 +1877,6 @@ function aggiornaAzioniMultiple() {
 }
 
 document.getElementById('scegli-tutti').addEventListener('change', (ev) => {
-    // Solo quelli in elenco: con la ricerca si scelgono i partecipanti.
     document.querySelectorAll('#segreteria-users-table tr').forEach(r => {
         if (r.style.display === 'none') return;
         const c = r.querySelector('.scelta-volontario');
@@ -1876,8 +1971,6 @@ document.getElementById('form-multipla').addEventListener('submit', async (ev) =
     loadUsers();
 });
 
-// Le presenze dell'anno di un volontario (src/presenze.js), con l'attestato
-// di ognuna: per chi gestisce l'anagrafica o organizza le attività.
 async function disegnaPresenzeVolontario(userId) {
     const card = document.getElementById('card-presenze-volontario');
     const lista = document.getElementById('detail-presenze-list');
@@ -1909,7 +2002,6 @@ async function disegnaPresenzeVolontario(userId) {
     }
 }
 
-// "Annulla" in ogni finestra: chiude quella in cui sta, senza salvare.
 document.querySelectorAll('.annulla-finestra').forEach(b => b.addEventListener('click', () => {
     const finestra = b.closest('.modal');
     if (finestra) finestra.style.display = 'none';

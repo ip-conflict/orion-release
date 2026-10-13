@@ -1,5 +1,4 @@
-// Profilo personale e gestione degli utenti.
-
+import { controllaPassword } from './password.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -63,14 +62,12 @@ export function registraRotteUtenti(app) {
                 [req.user.id]
             );
             if (result.rows.length === 0) return res.status(404).json({ message: 'Utente non trovato' });
-            // QR spenti: il profilo (web e app) non ha niente da mostrare.
             if (!await qrVolontariAttivi()) result.rows[0].public_token = null;
             res.json(result.rows[0]);
         } catch (error) { res.status(500).json({ message: 'Errore server' }); }
     });
 
     app.put('/api/users/me/anagrafica', authenticateToken, async (req, res) => {
-        // Solo i campi inviati: quelli mancanti restano come sono.
         const { valori, errore } = leggiCampiAnagrafici(req.body, ['indirizzo', 'citta', 'cap', 'telefono', 'codice_fiscale']);
         if (errore) return res.status(400).json({ message: errore });
         const campi = Object.keys(valori);
@@ -96,7 +93,6 @@ export function registraRotteUtenti(app) {
         const photoUrl = `/api/photos/${req.file.filename}`;
 
         try {
-            // La foto di prima non serve più: si toglie dal disco.
             const r = await pool.query(
                 `UPDATE users u SET photo_url = $1 FROM (SELECT photo_url AS vecchia FROM users WHERE id = $2) v
                   WHERE u.id = $2 RETURNING v.vecchia`, [photoUrl, req.user.id]);
@@ -122,10 +118,9 @@ export function registraRotteUtenti(app) {
              return res.status(400).json({ message: "La nuova password non può essere uguale a quella attuale." });
          }
 
-         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|\\;:'",.<>\/?~]).{12,}$/;
-         if (newPassword.length < 12 || !passwordRegex.test(newPassword)) {
-             return res.status(400).json({ message: "La nuova password non rispetta i criteri di complessità minimi (min. 12 caratteri, maiuscola, minuscola, numero, carattere speciale)." });
-         }
+         const persona = (await pool.query('SELECT username, nome, cognome, email FROM users WHERE id = $1', [userId]).catch(() => ({ rows: [] }))).rows[0] || { username: req.user.username };
+         const problemaPassword = controllaPassword(newPassword, persona);
+         if (problemaPassword) return res.status(400).json({ message: problemaPassword });
 
           const forbiddenPasswordsExamples = [
               "Pr0t3z10n3C1v1l3!",
@@ -154,8 +149,8 @@ export function registraRotteUtenti(app) {
 
             const newPasswordHash = await bcrypt.hash(newPassword, COSTO_BCRYPT); 
 
-            // Le altre sessioni si chiudono (la password poteva essere rubata);
-            // questa continua con un token nuovo.
+            // Le altre sessioni si chiudono (la password poteva essere rubata); questa continua
+            // con un token nuovo.
             await pool.query('UPDATE users SET password = $1 WHERE id = $2', [newPasswordHash, userId]);
             await chiudiSessioni(userId);
             const { token } = emettiSessione(res, req.user, req.user.ruoli, { mfa: req.user.mfa });
@@ -184,13 +179,9 @@ export function registraRotteUtenti(app) {
         } catch (error) { logger.error('Errore GET /api/admin/users:', error); res.status(500).json({ message: 'Errore recupero utenti admin' }); }
     });
 
-    // Gli accessi esterni temporanei nascono e finiscono con l'emergenza:
-    // password, sospensione e dati si gestiscono dal centro operativo
-    // ("Accesso esterno"), non da qui. Si possono solo eliminare.
+    // Gli accessi temporanei si gestiscono dal centro operativo: qui si possono solo eliminare.
     async function rifiutaSeTemporaneo(userId, res) {
         const r = await pool.query('SELECT temporaneo, eliminato_il FROM users WHERE id = $1', [userId]);
-        // Chi è stato eliminato non si riattiva e non si modifica: di lui restano
-        // solo nome e cognome nello storico.
         if (r.rows[0]?.eliminato_il) {
             res.status(404).json({ message: 'Utente non trovato.' });
             return true;
@@ -234,8 +225,6 @@ export function registraRotteUtenti(app) {
         }
     });
 
-    // Iscrive una persona. Chi gestisce l'anagrafica iscrive i volontari;
-    // ruoli diversi (e permessi) li assegna solo l'amministratore.
     app.post('/api/users', adminLimiter, richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const { nome, cognome, email } = req.body;
         const ruoliRichiesti = ruoliDaRichiesta(req.body);
@@ -262,8 +251,7 @@ export function registraRotteUtenti(app) {
             
             const finalUsername = await generateUsername(cleanNomeTrimmed, cleanCognomeTrimmed, client);
             
-            // L'utente nasce senza password, con un link di attivazione di 7 giorni (si consegna anche a mano, stampato),
-            // mandato per email se si può e comunque restituito all'amministratore.
+            // Il link si consegna anche a mano, stampato.
             const resetToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = await bcrypt.hash(resetToken, 10);
             const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
@@ -357,7 +345,6 @@ export function registraRotteUtenti(app) {
                 }
             }
             
-            // Lo username non cambia; il ruolo lo scrive scriviRuoli().
             const result = await client.query(
                 'UPDATE users SET nome = $1, cognome = $2, email = $3 WHERE id = $4 RETURNING id, username, nome, cognome, email', 
                 [String(nome).trim(), String(cognome).trim(), sanitizedEmail, userId]
@@ -407,16 +394,13 @@ export function registraRotteUtenti(app) {
         try {
             await client.query('BEGIN');
 
-            // Prima il materiale che ha in carico (vedi beniInUscita.js).
             const beniSistemati = await sistemaBeniInCarico(client, req, 'persona', userIdToDelete, req.body?.beni);
 
             const persona = (await client.query('SELECT username FROM users WHERE id = $1 AND eliminato_il IS NULL', [userIdToDelete])).rows[0];
             if (!persona) throw new Error('Utente non trovato.');
             const file = await fileDellaPersona(client, userIdToDelete);
 
-            // Si cancella del tutto, con visite e corsi. Chi compare nello
-            // storico (segnalazioni, aggiornamenti, documenti: 23503) resta
-            // solo con nome e cognome, e il resto dei suoi dati si cancella.
+            // Chi compare nello storico (23503) resta solo con nome e cognome.
             let modo = 'cancellato';
             await client.query('SAVEPOINT eliminazione');
             try {
@@ -444,7 +428,6 @@ export function registraRotteUtenti(app) {
         } catch (error) {
             await client.query('ROLLBACK');
 
-            // Materiale da sistemare è un esito normale: avviso, non errore.
             if (error.beniInCarico) {
                 logger.warn(`[Magazzino] Cancellazione dell'utente ${userIdToDelete} sospesa: ${error.beniInCarico.length} beni da sistemare.`);
                 return res.status(409).json({ message: error.message, beni_in_carico: error.beniInCarico });
@@ -541,7 +524,6 @@ export function registraRotteUtenti(app) {
             try {
                 const importResults = await importUsersFromExcel(req.file.path, req.file.originalname);
 
-                // I link per email dove c'è un indirizzo; gli altri si consegnano a mano.
                 let emailsSent = 0;
                 for (const account of importResults.importati) {
                     account.email_inviata = false;
@@ -563,7 +545,6 @@ export function registraRotteUtenti(app) {
                 registraAudit(req, 'utenti.importati', { tipo: 'utente', dettagli: { importati: importResults.imported, username: importResults.importati.map(u => u.username) } });
 
             } catch (error) {
-                // Un file illeggibile è un 400, con la frase che spiega cosa fare.
                 if (error.richiestaNonValida) {
                     logger.warn(`Importazione utenti rifiutata: ${error.message}`);
                     return res.status(400).json({ message: error.message });

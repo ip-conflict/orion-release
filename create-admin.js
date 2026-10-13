@@ -1,14 +1,13 @@
 import pg from 'pg';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
+import { opzioniSslDatabase } from './src/sslDatabase.js';
 
-// Carica le variabili d'ambiente (per le credenziali DB)
 dotenv.config({ quiet: true });
 
 const { Pool } = pg;
 
 const createAdmin = async () => {
-  // 1. Leggi i dati dell'admin e del DB dalle variabili d'ambiente
   const adminUsername = process.env.ADMIN_USERNAME;
   const adminPassword = process.env.ADMIN_PASSWORD;
   const adminNome = process.env.ADMIN_NOME || 'Admin';
@@ -22,27 +21,24 @@ const createAdmin = async () => {
 
   const pool = new Pool({
     connectionString: `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD)}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+    ssl: opzioniSslDatabase()
   });
 
   const client = await pool.connect();
   console.log('Connesso al database per creare utente admin...');
 
   try {
-    // 2. Controlla se l'utente esiste già per rendere lo script rieseguibile
+    // Rieseguibile: se l'utente c'è già si ferma.
     const checkUser = await client.query('SELECT 1 FROM users WHERE username = $1', [adminUsername.toLowerCase()]);
     if (checkUser.rowCount > 0) {
       console.log(`L'utente admin '${adminUsername}' esiste già. Salto la creazione.`);
       return; // Esce con successo se l'utente esiste già
     }
 
-    // 3. Crittografa la password
     console.log('Crittografia della password...');
-    // Lo stesso costo delle password cambiate dal programma (12): con 10 la
-    // password dell'amministratore era la piu' debole di tutte.
+    // Lo stesso costo delle password cambiate dal programma.
     const hashedPassword = await bcrypt.hash(adminPassword, 12);
 
-    // 4. Inserisci il nuovo utente admin nel database
     console.log(`Inserimento utente '${adminUsername}' nel database...`);
     const insertQuery = `
       INSERT INTO users (username, password, role, nome, cognome, email)
@@ -68,5 +64,4 @@ const createAdmin = async () => {
   }
 };
 
-// Esegui la funzione
 createAdmin();

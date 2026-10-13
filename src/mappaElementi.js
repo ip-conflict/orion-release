@@ -1,14 +1,5 @@
-// Le zone e le strade disegnate sulla mappa.
-//   Del piano (emergency_id NULL): zone di pericolosità, aree di attesa, di
-//   accoglienza, di ammassamento. Restano fra un'emergenza e l'altra; le
-//   mette l'amministratore, a mano o importandole da QGIS (GeoJSON o KML).
-//   Dell'emergenza: strade chiuse, zone interdette. Le disegna chi lavora
-//   in sala; quando la situazione cambia si tolgono, e nel registro resta
-//   chi le ha messe e tolte, e quando. Quelle segnate "oltre l'emergenza"
-//   (oltre_emergenza) restano in vigore dopo la chiusura, finché qualcuno
-//   non le toglie.
-// Le vedono tutti quelli che vedono la mappa, esterni compresi: una squadra
-// deve sapere quale strada non prendere.
+// Zone e strade sulla mappa: quelle del piano (emergency_id NULL) restano fra le
+// emergenze, quelle dell'emergenza finiscono con lei salvo oltre_emergenza.
 
 import { aggiornaRischi, eTipoPericolo } from './rischiZone.js';
 import { haPermesso, richiedePermesso } from './permessi.js';
@@ -18,7 +9,6 @@ export const TIPI_ELEMENTO = {
     zona_interdetta: { etichetta: 'Zona interdetta', forme: ['Polygon', 'MultiPolygon'] },
     pericolo_alluvione: { etichetta: 'Pericolo alluvione', forme: ['Polygon', 'MultiPolygon'] },
     pericolo_frana: { etichetta: 'Pericolo frana', forme: ['Polygon', 'MultiPolygon'] },
-    // Incendio, crollo, valanga, fuga di gas...: lo dicono livello e note.
     pericolo_generico: { etichetta: 'Zona di pericolo', forme: ['Polygon', 'MultiPolygon'] },
     area_attesa: { etichetta: 'Area di attesa', forme: ['Polygon', 'MultiPolygon', 'Point'] },
     area_accoglienza: { etichetta: 'Area di accoglienza', forme: ['Polygon', 'MultiPolygon', 'Point'] },
@@ -32,8 +22,7 @@ const tipoValido = (tipo) => typeof tipo === 'string' && Object.hasOwn(TIPI_ELEM
 const MAX_PUNTI = 50000;
 const MAX_IMPORT = 3000;
 
-// La forma, controllata e alleggerita (sei decimali: dieci centimetri).
-// Restituisce { geometria } o { errore }.
+// Sei decimali: dieci centimetri.
 export function leggiGeometria(g, tipo) {
     const ammesse = tipoValido(tipo) ? TIPI_ELEMENTO[tipo].forme : null;
     if (!g || typeof g !== 'object' || !ammesse) return { errore: 'Forma mancante.' };
@@ -74,7 +63,6 @@ export function registraRotteMappaElementi(app, ctx) {
     const testo = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '') || null;
     const COLONNE = `id, emergency_id, tipo, nome, livello, note, geometria, origine, creato_il, creato_da,
                      modificato_il, modificato_da, rimosso_il, rimosso_da, oltre_emergenza`;
-    // Solo questi possono restare in vigore dopo l'emergenza.
     const DURANO = ['strada_chiusa', 'zona_interdetta'];
 
     function leggiDati(corpo, { serveGeometria }) {
@@ -89,8 +77,6 @@ export function registraRotteMappaElementi(app, ctx) {
         return { dati };
     }
 
-    // Chi può toccare un elemento: quelli del piano l'amministratore, quelli
-    // dell'emergenza in corso chi lavora in sala.
     function permesso(req, elemento) {
         if (elemento.oltre_emergenza) return interno(req) ? null : 'Strade chiuse e zone le gestiscono gli operatori del COC.';
         if (elemento.emergency_id == null) return haPermesso(req, 'emergenze.piano') ? null : "Gli elementi del piano li gestisce chi ha il permesso del piano di emergenza.";
@@ -101,8 +87,6 @@ export function registraRotteMappaElementi(app, ctx) {
     }
 
     const avvisa = () => avvisaClienti('reload_mappa');
-    // Una zona di pericolo nuova, cambiata o tolta: si rivedono i rischi
-    // delle segnalazioni dell'emergenza in corso.
     const rivediRischi = (req, ...tipi) => {
         const attiva = emergenzaAttiva();
         if (attiva && tipi.some(eTipoPericolo)) aggiornaRischi({ emergencyId: attiva.id, userId: req.user.id });
@@ -118,7 +102,6 @@ export function registraRotteMappaElementi(app, ctx) {
             res.json({
                 tipi: Object.fromEntries(Object.entries(TIPI_ELEMENTO).map(([k, v]) => [k, v.etichetta])),
                 piano: rows.filter(delPiano),
-                // Quelle dell'emergenza in corso e quelle rimaste in vigore da prima.
                 emergenza: rows.filter(r => !delPiano(r))
             });
         } catch (e) {
@@ -162,7 +145,6 @@ export function registraRotteMappaElementi(app, ctx) {
             if (negato) return res.status(403).json({ message: negato });
             const { dati, errore } = leggiDati({ ...prima, ...req.body, tipo: req.body?.tipo || prima.tipo, geometria: req.body?.geometria || prima.geometria }, { serveGeometria: true });
             if (errore) return res.status(400).json({ message: errore });
-            // Restare dopo l'emergenza: solo strade chiuse e zone interdette.
             const oltre = typeof req.body?.oltre_emergenza === 'boolean' ? req.body.oltre_emergenza : prima.oltre_emergenza;
             if (oltre && !DURANO.includes(dati.tipo)) {
                 return res.status(400).json({ message: "Dopo l'emergenza restano in vigore solo strade chiuse e zone interdette." });
@@ -187,8 +169,7 @@ export function registraRotteMappaElementi(app, ctx) {
         }
     });
 
-    // Togliere: una strada riaperta resta nel registro dell'emergenza (chi e
-    // quando); un elemento del piano si cancella.
+    // Una strada riaperta resta nel registro dell'emergenza; un elemento del piano si cancella.
     app.delete('/api/mappa/elementi/:id', async (req, res) => {
         const id = Number.parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Elemento non valido.' });
@@ -210,8 +191,6 @@ export function registraRotteMappaElementi(app, ctx) {
         }
     });
 
-    // L'importazione del piano, da un file letto nel browser (GeoJSON o KML
-    // esportato da QGIS): un tipo per volta, tutto o niente.
     app.post('/api/mappa/importa', richiedePermesso('emergenze.piano'), async (req, res) => {
         const tipo = req.body?.tipo;
         const elementi = req.body?.elementi;
@@ -249,11 +228,9 @@ export function registraRotteMappaElementi(app, ctx) {
         }
     });
 
-    // Per reimportare un livello aggiornato: via tutti gli elementi del piano di un tipo (o di un file).
     app.delete('/api/mappa/piano', richiedePermesso('emergenze.piano'), async (req, res) => {
         const tipo = req.query.tipo;
         if (!tipoValido(tipo)) return res.status(400).json({ message: 'Tipo non valido.' });
-        // ?origine=file per un file importato, ?disegnati=1 per quelli fatti a mano.
         const origine = typeof req.query.origine === 'string' && req.query.origine ? req.query.origine : null;
         const disegnati = req.query.disegnati === '1';
         if (!origine && !disegnati) return res.status(400).json({ message: 'Indica il file importato o gli elementi disegnati a mano.' });

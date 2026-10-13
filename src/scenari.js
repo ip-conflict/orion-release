@@ -1,11 +1,4 @@
-// La biblioteca degli scenari delle simulazioni (pagina Simulazioni): chi
-// organizza le attività prepara con calma uno scenario (titolo, natura,
-// durata, la situazione, gli obiettivi, gli enti coinvolti) e il suo copione,
-// sulla stessa pagina del copione delle attività (src/copione.js, rotte
-// /api/scenari/:id/copione...). Quando è pronto lo pianifica: dal calendario
-// nasce un'attività con il copione copiato dentro (POST /api/attivita con
-// scenario_id), oppure lo apre al volo dal centro operativo. Ogni uso ha la
-// sua copia: la regia la ritocca senza cambiare lo scenario, che resta per la
+// Biblioteca degli scenari: ogni uso ne copia il copione, così lo scenario resta per la
 // volta dopo.
 
 import logger from './logger.js';
@@ -37,7 +30,6 @@ function leggiScenario(corpo) {
     };
 }
 
-// Gli scenari con quanti eventi hanno, quante volte sono stati usati e quando.
 const SQL_SCENARI = `
     SELECT s.id, s.titolo, s.natura, s.durata_ore, s.scenario, s.obiettivi, s.enti, s.creato_il, s.aggiornato_il,
            NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), '') AS creato_da_nome,
@@ -47,7 +39,6 @@ const SQL_SCENARI = `
            (SELECT MIN(a.inizio) FROM attivita a WHERE a.scenario_id = s.id AND a.stato = 'programmata' AND a.inizio > NOW()) AS prossimo_uso
       FROM scenari s LEFT JOIN users u ON u.id = s.creato_da`;
 
-// Le simulazioni del calendario: quelle in programma e le ultime svolte.
 const SQL_SIMULAZIONI = `
     SELECT a.id, a.titolo, a.inizio, a.fine, a.stato, a.simulazione, a.scenario_id, s.titolo AS scenario_titolo,
            t.nome AS tipo,
@@ -128,7 +119,6 @@ export function registraRotteScenari(app) {
         }
     });
 
-    // Una copia da cui partire per una variante: stesso testo, stesso copione.
     app.post('/api/scenari/:id/duplica', ...base, async (req, res) => {
         const scenarioId = id(req.params.id);
         if (!scenarioId) return res.status(400).json({ message: 'Scenario non valido.' });
@@ -155,7 +145,6 @@ export function registraRotteScenari(app) {
         }
     });
 
-    // Togliere uno scenario: le attività già nate da lui restano con la loro copia.
     app.delete('/api/scenari/:id', ...base, async (req, res) => {
         const scenarioId = id(req.params.id);
         if (!scenarioId) return res.status(400).json({ message: 'Scenario non valido.' });
@@ -170,8 +159,6 @@ export function registraRotteScenari(app) {
         }
     });
 
-    // Gli scenari da cui aprire una simulazione al volo (src/emergenze.js):
-    // per chi apre le emergenze o organizza le attività.
     app.get('/api/simulazioni/scenari', async (req, res) => {
         if (esterno(req) || !haPermesso(req, 'emergenze.apertura', 'gruppo.attivita')) {
             return res.status(403).json({ message: 'Una simulazione la apre chi apre le emergenze o organizza le attività.' });

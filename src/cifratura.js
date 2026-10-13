@@ -1,23 +1,5 @@
-// La cifratura dei dati che escono più facilmente dal server: i file caricati
-// (certificati medici, documenti, foto, verbali firmati, resoconti), i backup
-// del database e la password della posta.
-//
-// La chiave (AES-256) la genera ORION al primo avvio e la tiene in un file a
-// sé, chiave-dati.key nella cartella dell'applicazione (o ORION_CHIAVE_FILE),
-// leggibile solo dal suo utente: non sta nel database e non finisce nei
-// backup, così un backup copiato o rubato non si legge. Gli aggiornamenti non
-// la toccano.
-//
-// Persa la chiave, i dati cifrati sono persi: per questo l'amministratore
-// scarica una volta la chiave di recupero (la stessa chiave, scritta in
-// gruppi di lettere da stampare) e la mette in cassaforte. Con quella si
-// rimette la chiave su una macchina nuova, dalla pagina Sistema.
-//
-// Nel database resta solo l'impronta della chiave (cifratura_impronta): dice
-// se la chiave sul disco è quella giusta, senza rivelarla.
-//
-// Il formato dei file cifrati è in formatoCifrato.js. I file in chiaro di
-// prima continuano a funzionare e si cifrano piano piano.
+// Cifratura di file caricati, backup e segreti nel database: vedi "La cifratura" nel
+// manuale tecnico. La chiave sta in chiave-dati.key, mai nel database né nei backup.
 
 import crypto from 'crypto';
 import fs from 'fs';
@@ -39,7 +21,7 @@ export const FILE_CHIAVE = process.env.ORION_CHIAVE_FILE || path.join(RADICE, 'c
 
 const PREFISSO_TESTO = 'enc1:';
 
-// Le cartelle dei file da proteggere. I loghi restano in chiaro: sono pubblici.
+// I loghi restano in chiaro: sono pubblici.
 export const CARTELLE_PROTETTE = [
     path.join(RADICE, 'protected_uploads', 'certificates'),
     path.join(RADICE, 'protected_uploads', 'documents'),
@@ -74,7 +56,6 @@ function scriviFileChiave(k) {
     fs.renameSync(temporaneo, FILE_CHIAVE);
 }
 
-// All'avvio, dopo le migrazioni.
 export async function preparaCifratura() {
     const registrata = await leggiImpostazione('cifratura_impronta');
     const suDisco = leggiFileChiave();
@@ -113,13 +94,11 @@ export class ChiaveNonDisponibile extends Error {
     }
 }
 
-// --- La chiave di recupero ---------------------------------------------------
 export function chiaveDiRecupero() {
     if (!chiave) throw new ChiaveNonDisponibile();
     return scriviChiaveDiRecupero(chiave);
 }
 
-// La chiave di recupero rimette la chiave sul disco, se è quella dei dati.
 export async function inserisciChiaveDiRecupero(testo) {
     const k = leggiChiaveDiRecupero(testo);
     if (!k) return { ok: false, message: 'La chiave di recupero ha 52 caratteri (lettere e cifre, a gruppi di quattro): controlla di averla copiata tutta.' };
@@ -143,7 +122,6 @@ export async function recuperoSalvato() {
     return (await leggiImpostazione('cifratura_recupero_salvata')) !== 'false';
 }
 
-// --- Dati in memoria ---------------------------------------------------------
 export function cifra(buf) {
     if (!chiave) throw new ChiaveNonDisponibile();
     return cifraCon(chiave, buf);
@@ -155,7 +133,6 @@ export function decifra(buf) {
     return decifraCon(chiave, buf);
 }
 
-// Un segreto da tenere nel database (la password della posta).
 export function cifraTesto(testo) {
     if (testo == null || testo === '' || String(testo).startsWith(PREFISSO_TESTO) || !chiave) return testo;
     return PREFISSO_TESTO + cifra(Buffer.from(String(testo), 'utf8')).toString('base64');
@@ -172,14 +149,12 @@ async function cifraSegretiInChiaro() {
         await scriviImpostazione('smtp_pass', cifraTesto(v));
         logger.info('[Cifratura] Password della posta cifrata nel database.');
     }
-    // La chiave di Firebase salvata mentre mancava la chiave dei dati.
     const f = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'firebase_account'");
     const fv = f.rows[0]?.setting_value;
     if (fv && !fv.startsWith(PREFISSO_TESTO)) {
         await scriviImpostazione('firebase_account', cifraTesto(fv));
         logger.info('[Cifratura] Chiave di Firebase cifrata nel database.');
     }
-    // I segreti della verifica in due passaggi salvati mentre mancava la chiave.
     const m = await pool.query("SELECT id, mfa_segreto FROM users WHERE mfa_segreto IS NOT NULL AND mfa_segreto NOT LIKE 'enc1:%'");
     for (const u of m.rows) {
         await pool.query('UPDATE users SET mfa_segreto = $2 WHERE id = $1 AND mfa_segreto = $3', [u.id, cifraTesto(u.mfa_segreto), u.mfa_segreto]);
@@ -187,9 +162,7 @@ async function cifraSegretiInChiaro() {
     if (m.rowCount) logger.info(`[Cifratura] Cifrati ${m.rowCount} segreti della verifica in due passaggi.`);
 }
 
-// --- File --------------------------------------------------------------------
-// Cifra un file al suo posto (scrive accanto e poi rinomina: un'interruzione
-// non lascia mezzo file). Senza chiave non fa niente.
+// Scrive accanto e poi rinomina: un'interruzione non lascia mezzo file.
 export async function cifraFile(percorso) {
     if (!chiave) return false;
     const dati = await fs.promises.readFile(percorso);
@@ -201,8 +174,7 @@ export async function cifraFile(percorso) {
     return true;
 }
 
-// I file appena caricati e controllati: si cifrano subito. Un errore non fa
-// fallire il caricamento: il file resta in chiaro e lo prende il giro orario.
+// Un errore non fa fallire il caricamento: il file resta in chiaro e lo prende il giro orario.
 export async function proteggiCaricati(...file) {
     for (const f of file.flat().filter(Boolean)) {
         try {
@@ -217,8 +189,7 @@ export async function leggiFile(percorso) {
     return decifra(await fs.promises.readFile(percorso));
 }
 
-// Al posto di res.sendFile: decifra e manda. Il tag GCM si controlla prima di
-// mandare un solo byte, quindi un file alterato non arriva a metà.
+// Il tag GCM si controlla prima di mandare un solo byte: un file alterato non arriva a metà.
 export async function inviaFile(res, percorso, { headers = {} } = {}) {
     let dati;
     try {
@@ -233,8 +204,6 @@ export async function inviaFile(res, percorso, { headers = {} } = {}) {
     res.send(dati);
 }
 
-// Il giro: cifra i file rimasti in chiaro (quelli di prima della cifratura, o
-// un caricamento non andato a buon fine), lasciando stare gli ultimissimi.
 export async function cifraFileInChiaro({ etaMinimaMs = 2 * 60 * 1000 } = {}) {
     if (!chiave) return 0;
     let cifrati = 0;
@@ -265,13 +234,11 @@ export async function cifraFileInChiaro({ etaMinimaMs = 2 * 60 * 1000 } = {}) {
     return cifrati;
 }
 
-// --- Flussi (i backup) -------------------------------------------------------
 export function flussoCifrato() {
     if (!chiave) throw new ChiaveNonDisponibile();
     return flussoCifratoCon(chiave);
 }
 
-// Il contenuto di un file (un backup) come flusso, cifrato o no.
 export async function apriFile(percorso) {
     if (!chiave && await fileCifrato(percorso)) throw new ChiaveNonDisponibile();
     return apriFileCon(chiave, percorso);
@@ -288,7 +255,6 @@ export async function fileCifrato(percorso) {
     }
 }
 
-// --- Il riquadro "Cifratura" della pagina Sistema -----------------------------
 export function registraRotteCifratura(app, { soloAdmin, registraAudit }) {
     async function passwordGiusta(req) {
         const r = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
@@ -315,7 +281,6 @@ export function registraRotteCifratura(app, { soloAdmin, registraAudit }) {
         }
     });
 
-    // La chiave di recupero si mostra solo con la password di chi la chiede.
     app.post('/api/sistema/cifratura/recupero', soloAdmin, async (req, res) => {
         try {
             if (!(await passwordGiusta(req))) return res.status(403).json({ message: 'Password sbagliata.' });
@@ -335,7 +300,6 @@ export function registraRotteCifratura(app, { soloAdmin, registraAudit }) {
         res.json({ message: 'Bene: ORION non lo chiederà più.' });
     });
 
-    // Rimettere la chiave (macchina nuova, file perso, ripristino da un'altra installazione).
     app.post('/api/sistema/cifratura/chiave', soloAdmin, async (req, res) => {
         try {
             if (!(await passwordGiusta(req))) return res.status(403).json({ message: 'Password sbagliata.' });

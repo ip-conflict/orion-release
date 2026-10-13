@@ -1,7 +1,3 @@
-// La rubrica d'emergenza: i numeri che in sala servono subito, per chi lavora
-// al centro operativo. La tengono aggiornata tutti gli operatori interni,
-// come le squadre: è un lavoro di sala, e ogni modifica finisce nel registro.
-
 export const CATEGORIE_RUBRICA = ['istituzioni', 'soccorso', 'reperibili', 'ditte', 'associazione', 'altro'];
 
 const LIMITI = { nome: 150, ruolo: 150, ente: 150, telefono: 40, telefono_alt: 40, email: 150, note: 2000 };
@@ -28,8 +24,7 @@ function leggiContatto(corpo) {
 export function registraRotteRubrica(app, { pool, logger, nonEsterni, registraAudit, nomeUtente, avvisaClienti }) {
     const COLONNE = 'id, nome, ruolo, ente, categoria, telefono, telefono_alt, email, note, aggiornato_il, aggiornato_da';
 
-    // La leggono anche gli esterni (Croce Rossa, 118...): in sala i numeri
-    // servono a tutti. La scrivono solo gli interni.
+    // La leggono anche gli esterni: in sala i numeri servono a tutti.
     app.get('/api/rubrica', async (req, res) => {
         try {
             const { rows } = await pool.query(`SELECT ${COLONNE} FROM rubrica

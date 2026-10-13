@@ -1,5 +1,3 @@
-// tests/stato-squadre.mjs
-//
 // Lo stato di una segnalazione segue le squadre: la prima squadra assegnata
 // porta una segnalazione "Nuova" a "In corso", togliere l'ultima la riporta ad
 // "Aperta", e il diario lo scrive. L'elenco porta l'ultima nota scritta da

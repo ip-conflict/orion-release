@@ -1,9 +1,4 @@
-// L'archivio dei documenti del gruppo (src/documenti.js). Tutti gli interni lo
-// consultano: cartelle, ricerca, apertura del file, versioni vecchie. Chi ha
-// il permesso gruppo.documenti carica, cambia, sostituisce con una versione
-// nuova, toglie e ordina le cartelle; chi tiene il magazzino collega i
-// libretti ai beni. Il server decide comunque chi vede cosa: la pagina mostra
-// quello che riceve.
+// Il server decide chi vede cosa: la pagina mostra quello che riceve.
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const RUOLI = [['volontario', 'Volontari'], ['coordinatore', 'Coordinatori'], ['segreteria', 'Segreteria'], ['magazziniere', 'Magazzinieri'], ['admin', 'Amministratori']];
@@ -48,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return box;
     }
 
-    // --- L'elenco -------------------------------------------------------------
     function disegna() {
         const box = $('elenco-documenti');
         box.replaceChildren();
@@ -62,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let mostrati = 0;
         for (const { cartella, documenti } of gruppi) {
-            // Cercando, le cartelle vuote non servono; chi tiene l'archivio le vede sempre.
             if (!documenti.length && (cerca || !archivio.gestisce)) continue;
             mostrati += documenti.length;
             const sezione = elemento('section', 'cartella');
@@ -150,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('cerca-documenti').addEventListener('input', disegna);
 
-    // --- Le modali --------------------------------------------------------------
     function chiudi(modale) { modale.hidden = true; }
     document.querySelectorAll('.modale').forEach(m => {
         m.addEventListener('click', (e) => { if (e.target === m || e.target.closest('[data-chiudi]')) chiudi(m); });
@@ -159,7 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') document.querySelectorAll('.modale').forEach(chiudi);
     });
 
-    // --- Caricare e modificare -----------------------------------------------------
     function riempiCartelle(scelta) {
         const select = $('doc-cartella');
         select.replaceChildren(new Option('(nessuna cartella)', ''));
@@ -205,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('doc-titolo').focus();
     }
 
-    // Il titolo proposto dal nome del file, se non è già stato scritto.
     $('doc-file').addEventListener('change', () => {
         const file = $('doc-file').files[0];
         if (file && !$('doc-titolo').value.trim()) $('doc-titolo').value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
@@ -250,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Le cartelle -------------------------------------------------------------
     $('btn-nuova-cartella').addEventListener('click', async () => {
         const nome = prompt('Nome della cartella nuova:');
         if (!nome?.trim()) return;
@@ -277,7 +266,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { notifica(e.message, 'errore'); }
     }
 
-    // --- La scheda di un documento ------------------------------------------------
     async function apriDettaglio(id) {
         let doc;
         try {
@@ -412,14 +400,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { notifica(e.message, 'errore'); }
     });
 
-    // --- Avvio -------------------------------------------------------------------
     fetch('/api/branding/settings', { credentials: 'same-origin' })
         .then(r => (r.ok ? r.json() : {}))
         .then(impostazioni => { magazzinoAcceso = String(impostazioni.magazzino_enabled) === 'true'; })
         .catch(() => {})
         .finally(async () => {
             await carica();
-            // Arrivo da un collegamento (?documento=ID): si apre la sua scheda.
             const chiesto = parseInt(new URLSearchParams(window.location.search).get('documento'), 10);
             if (chiesto) apriDettaglio(chiesto);
         });

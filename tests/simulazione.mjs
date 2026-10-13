@@ -1,5 +1,3 @@
-// tests/simulazione.mjs
-//
 // La simulazione in sala: la natura dei tipi di attività, i campi della
 // simulazione e la regia; l'apertura della sala dall'attività (chi, quando);
 // il segno di simulazione dappertutto (stato, app, notifiche, chiamata); la
@@ -95,7 +93,6 @@ try {
     verifica('la sala non si apre giorni prima -> 409', (await chiama(`/api/attivita/${futura.corpo?.id}/apri-sala`, { method: 'POST', token: org.token, body: {} })).stato === 409);
     verifica('un volontario non apre la sala -> 403', (await chiama(`/api/attivita/${idAdd}/apri-sala`, { method: 'POST', token: a.token, body: {} })).stato === 403);
 
-    // Bruno in una squadra preparata prima.
     const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
     const radio = ['Zulu', 'Yankee', 'Whiskey', 'Victor', 'Uniform', 'Tango'].find(x => !usati.has(x));
     const sq = await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: radio, nome: 'Idrovore', membri: [{ username: b.username }] } });
@@ -148,7 +145,6 @@ try {
     const inArchivio = archivio.find(e => e.id === idSim);
     verifica("nell'archivio con il segno e l'attività", inArchivio?.simulazione === true && inArchivio?.attivita_id === idAdd && !inArchivio?.interrotta_il, inArchivio);
 
-    // Un'emergenza vera durante una simulazione.
     const add2 = await chiama('/api/attivita', { method: 'POST', token: org.token, body: { tipo_id: tipo('Esercitazione').id, titolo: `Esercitazione sala ${suffisso}`, inizio: fra(-0.2), fine: fra(2), simulazione: 'sala', avviso_app: false } });
     if (add2.corpo?.id) attivita.push(add2.corpo.id);
     const sala2 = await chiama(`/api/attivita/${add2.corpo?.id}/apri-sala`, { method: 'POST', token: org.token, body: {} });
@@ -175,7 +171,6 @@ try {
     const pres2 = (await chiama(`/api/attivita/${add2.corpo?.id}`, { token: org.token })).corpo;
     verifica('le presenze della parte simulata vanno alla sua attività', pres2?.presenze?.some(p => p.user_id === b.id), pres2?.presenze);
 
-    // La simulazione al volo dal centro operativo: niente calendario prima.
     verifica('un volontario non apre una simulazione al volo -> 403', (await chiama('/api/simulazioni/al-volo', { method: 'POST', token: a.token, body: {} })).stato === 403);
     await chiama(`/api/attivita/${idAdd}/copione/eventi`, { method: 'POST', token: org.token, body: { tipo: 'comunicazione', minuto: 0, titolo: 'Allerta gialla' } });
     const copioni = (await chiama('/api/simulazioni/copioni', { token: org.token })).corpo || [];

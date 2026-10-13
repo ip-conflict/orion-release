@@ -1,9 +1,4 @@
-// "Accesso esterno": chi si presenta al COC durante un'emergenza (la Croce
-// Rossa con un'ambulanza, un tecnico del Comune) entra in ORION con un nome e
-// un QR, senza passare dalla segreteria. Finisce da solo con l'emergenza.
-//
-// La finestra si costruisce da sé: la usano il centro operativo e la pagina
-// delle squadre, e basta includere questo file e chiamare
+// La usano il centro operativo e la pagina delle squadre: basta includere il file e chiamare
 // EsterniTemporanei.apri().
 
 (function () {
@@ -69,9 +64,6 @@
         return v ? new Date(v).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     }
 
-    // Il QR, il link e i modi per farlo arrivare: inquadrarlo sul posto è il
-    // più rapido, il link va bene per chi è già ripartito. Con [id] anche
-    // l'email e il codice nuovo.
     function mostraCodice(contenitore, dati, nome, id = null, suNuovo = null) {
         contenitore.innerHTML = '';
         contenitore.classList.add('et-centrato');
@@ -135,7 +127,6 @@
             el('label', { class: 'et-campo' }, 'Nome radio', nomeRadio),
             el('label', { class: 'et-campo' }, 'Nome della squadra', nomeSquadra));
         const email = el('input', { type: 'email', maxlength: 100, placeholder: 'facoltativa' });
-        // La funzione di supporto per cui arriva (il medico nella F2), se il modulo è acceso.
         const funzione = el('select', {}, el('option', { value: '', testo: 'Nessuna' }));
         const campoFunzione = el('label', { class: 'et-campo', hidden: true }, 'Funzione di supporto', funzione);
         fetchApi('/api/funzioni').then(dati => {
@@ -168,7 +159,6 @@
         document.body.append(velo);
         nome.focus();
 
-        // Le squadre esistenti, e i nomi radio ancora liberi per una nuova.
         try {
             const squadre = await fetchApi('/api/squadre');
             const usati = new Set(squadre.map(s => s.nome_radio));
@@ -186,8 +176,6 @@
             voci.forEach(v => elenco.append(schedaAccesso(v)));
         }
 
-        // Una persona dell'elenco: chi è, a che punto è, e cosa si può fare.
-        // I pannelli si aprono sotto la scheda, uno alla volta.
         function schedaAccesso(v) {
             const chi = `${v.nome || ''} ${v.cognome || ''}`.trim() || v.username;
             const dettagli = [v.ente, v.nome_radio ? `squadra ${v.nome_radio}` : 'senza squadra',
@@ -268,7 +256,6 @@
                 pannello.append(f);
                 nome.focus();
             };
-            // Dopo un cambio la riga in cima si aggiorna, il pannello resta aperto.
             const aggiornaStato = async () => {
                 try {
                     const tutte = await fetchApi('/api/esterni-temporanei');

@@ -1,5 +1,3 @@
-// tests/tesserino.mjs
-//
 // Il modello del tesserino scelto dall'amministratore (badge_modello): il
 // server lo salva solo ripulito, rifiuta colori, testi e misure assurdi, e
 // vuoto vuol dire il tesserino predefinito. Le pagine lo leggono fra le

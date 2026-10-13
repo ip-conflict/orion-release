@@ -1,14 +1,7 @@
 #!/usr/bin/env node
-// scripts/decifra-backup.mjs
-//
-// Decifra un backup di ORION fuori dall'applicazione, per un ripristino a mano
-// o su un'altra macchina. Serve la chiave dei dati: il suo file, oppure la
-// chiave di recupero che l'amministratore ha conservato.
-//
+// Decifra un backup fuori dall'applicazione, con il file della chiave o la chiave di recupero.
 //   node scripts/decifra-backup.mjs <backup cifrato> <uscita.sql.gz> [file della chiave]
 //   ORION_CHIAVE_RECUPERO='XXXX-XXXX-...' node scripts/decifra-backup.mjs <backup> <uscita.sql.gz>
-//
-// Poi, per esempio:  gunzip -c uscita.sql.gz | sudo -u postgres psql <database>
 
 import fs from 'fs';
 import path from 'path';

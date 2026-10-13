@@ -1,5 +1,3 @@
-// Il resoconto testuale di un'emergenza, scritto alla chiusura.
-
 import './config.js';
 import fs from 'fs';
 import logger from './logger.js';
@@ -14,8 +12,7 @@ import { cifra, cifraturaPronta } from './cifratura.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Un .txt a larghezza fissa: si stampa, si allega alla relazione e si apre
-// anche fra dieci anni, senza database né browser.
+// Un .txt a larghezza fissa: si apre anche fra dieci anni, senza database né browser.
 export const CARTELLA_RESOCONTI = path.join(__dirname, '..', 'protected_uploads', 'emergency_logs');
 const FUSO_ORARIO_RESOCONTO = process.env.TZ || 'Europe/Rome';
 const LARGHEZZA_RESOCONTO = 80;
@@ -42,7 +39,6 @@ function durataLeggibile(inizio, fine) {
     return pezzi.join(' ');
 }
 
-// Testo libero mandato a capo alla larghezza del foglio e rientrato.
 function testoRientrato(valore, rientro = '     ') {
     if (valore === null || valore === undefined || String(valore).trim() === '') return null;
     const larghezzaUtile = LARGHEZZA_RESOCONTO - rientro.length;
@@ -118,8 +114,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
                    COALESCE(NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), ''), 'ORION') AS autore
             FROM emergency_documents d LEFT JOIN users u ON d.uploader_user_id = u.id
             WHERE d.emergency_id = $1 ORDER BY d.uploaded_at ASC`, [emergencyId]),
-        // Le operazioni fra apertura e chiusura, senza quelle sui DPI: sono la
-        // dotazione dei volontari, non materiale dell'emergenza.
+        // Niente DPI: sono la dotazione dei volontari, non materiale dell'emergenza.
         pool.query(`
             SELECT a.occurred_at, a.username, a.action, a.entity_type, a.entity_id, a.details
             FROM audit_log a
@@ -140,8 +135,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             FROM emergency_team_log
             WHERE emergency_id = $1
             ORDER BY quando ASC, nome_radio ASC, cognome ASC`, [emergencyId]),
-        // Mezzi e materiali dell'emergenza, con i nomi scritti nel movimento
-        // (un mezzo venduto domani resta quello di allora). Niente DPI.
+        // I nomi scritti nel movimento: un mezzo venduto domani resta quello di allora.
         pool.query(`
             SELECT m.quando, m.tipo, m.quantita, m.bene_denominazione, m.destinatario_tipo,
                    m.destinatario_nome, m.note, m.eseguito_da, m.km_registrati,
@@ -149,7 +143,6 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             FROM movimenti m JOIN beni b ON b.id = m.bene_id
             WHERE m.emergency_id = $1 AND b.tipo <> 'dpi'
             ORDER BY m.quando ASC, m.id ASC`, [emergencyId]),
-        // Quello che è uscito per questa emergenza e non è ancora rientrato.
         pool.query(`
             SELECT b.denominazione, b.matricola, b.tipo AS famiglia, b.gestione, b.unita_misura,
                    s.destinatario_tipo, s.destinatario_nome, s.ultimo_movimento_il
@@ -162,8 +155,6 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'association_name'")
             .then(r => r.rows[0]?.setting_value || null)
             .catch(() => null),
-        // Gli incarichi alle funzioni di supporto: motivazione ed esito sono
-        // già nel diario di ogni segnalazione, qui serve lo stato.
         pool.query(`
             SELECT i.report_id, i.stato, f.sigla
             FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id JOIN reports r ON r.id = i.report_id
@@ -195,7 +186,6 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     if (nomeAssociazione) parti.push(nomeAssociazione);
     parti.push('='.repeat(LARGHEZZA_RESOCONTO));
     parti.push('');
-    // Una simulazione non deve mai poter sembrare un'emergenza vera.
     if (emergenza.simulazione) {
         parti.push("*** SIMULAZIONE: scenario simulato in sala, non un'emergenza reale ***");
         if (emergenza.attivita_titolo) parti.push(`Attivita' .........: ${emergenza.attivita_tipo ? `${emergenza.attivita_tipo}: ` : ''}${emergenza.attivita_titolo}`);
@@ -424,9 +414,6 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         });
     }
 
-    // Il sigillo dello storico preso alla chiusura (o, per le emergenze
-    // chiuse prima che esistesse, quello di adesso): con questa riga si
-    // dimostra in seguito che note e diario non sono stati cambiati.
     const sigillo = emergenza.sigillo_chiusura || await sigilloAttuale().then(testoSigillo).catch(() => null);
     if (sigillo) {
         parti.push('');
@@ -445,8 +432,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     return { testo: parti.join('\n'), emergenza };
 }
 
-// Scrive il resoconto su disco. Un errore non ferma la chiusura: il resoconto
-// si rigenera dall'archivio.
+// Un errore non ferma la chiusura: il resoconto si rigenera dall'archivio.
 
 export async function salvaResocontoEmergenza(emergencyId, autore = null) {
     try {
@@ -457,7 +443,6 @@ export async function salvaResocontoEmergenza(emergencyId, autore = null) {
         const marcaTemporale = new Date().toISOString().replace(/[:.]/g, '-');
         const nomeFile = `resoconto_${codiceSicuro}_${marcaTemporale}.txt`;
         const percorso = path.join(CARTELLA_RESOCONTI, nomeFile);
-        // Cifrato come gli altri file riservati, se la chiave c'è.
         await fs.promises.writeFile(percorso, cifraturaPronta() ? cifra(Buffer.from(risultato.testo, 'utf8')) : risultato.testo);
         await pool.query(
             'UPDATE emergencies SET log_file_path = $1, log_generated_at = NOW() WHERE id = $2',

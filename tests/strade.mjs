@@ -1,5 +1,3 @@
-// tests/strade.mjs
-//
 // Strade chiuse e zone interdette oltre l'emergenza: alla chiusura restano
 // sulla mappa quelle indicate, le altre finiscono con l'emergenza; quelle
 // rimaste si riaprono anche senza emergenza aperta, e il resoconto lo dice.
@@ -53,8 +51,6 @@ try {
     const segnata = await chiama(`/api/mappa/elementi/${zona.id}`, { method: 'PUT', token: admin, body: { oltre_emergenza: true } });
     verifica('una zona interdetta si segna durante l\'emergenza', segnata.stato === 200 && segnata.corpo?.oltre_emergenza === true, segnata);
 
-    // Alla chiusura si tiene solo la frana: la zona segnata prima si sgancia,
-    // perché l'elenco della chiusura è quello che vale.
     const chiusa = await chiama('/api/emergencies/close', { method: 'POST', token: admin, body: { tieni_in_vigore: [frana.id] } });
     verifica('emergenza chiusa', chiusa.stato === 200, chiusa);
     aperta = null;

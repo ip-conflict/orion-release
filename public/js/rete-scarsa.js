@@ -1,19 +1,5 @@
-// Il centro operativo con la rete che va e viene. Tre cose:
-//
-// la situazione salvata: le letture principali (segnalazioni, squadre, mappa,
-// eventi) si tengono nel browser, e se il server non risponde la pagina
-// mostra l'ultima situazione ricevuta, con l'ora, invece di svuotarsi;
-//
-// la coda: le scritture che contano (nuova segnalazione, nota, cambio di
-// stato, priorità, diario di sala) partono con una chiave di idempotenza; se
-// la risposta non arriva restano in coda e si rimandano da sole quando il
-// server torna, senza doppioni (il server riconosce la chiave);
-//
-// i conflitti: un cambio di stato rimandato porta lo stato che aveva davanti
-// chi l'ha deciso; se nel frattempo qualcun altro l'ha cambiato, il server
-// non scrive e la coda lo dice.
-//
-// Avvolge fetchApi di apiHelper.js: chi non chiede niente non vede differenze.
+// Rete che va e viene: situazione salvata nel browser, scritture in coda con chiave di
+// idempotenza, conflitti detti dal server. Avvolge fetchApi: chi non chiede niente non vede differenze.
 
 (function () {
     const fetchOriginale = window.fetchApi;
@@ -44,8 +30,7 @@
         try { localStorage.setItem(chiave, JSON.stringify(valore)); return true; } catch { return false; }
     }
 
-    // Il server non c'è (o non risponde in tempo): da non confondere con un
-    // "no" del server, che è una risposta e va mostrata com'è.
+    // Da non confondere con un "no" del server, che è una risposta e va mostrata com'è.
     function irraggiungibile(e) {
         if (!e) return false;
         if (e.manutenzione) return false;
@@ -76,8 +61,6 @@
         }
     }
 
-    // --- Situazione salvata -------------------------------------------------
-
     function salva(url, dati) {
         const indice = leggi(INDICE, []).filter(v => v.url !== url);
         indice.push({ url, quando: Date.now() });
@@ -107,8 +90,6 @@
         try { localStorage.removeItem(INDICE); } catch { /* niente */ }
     }
 
-    // --- Stato della rete ---------------------------------------------------
-
     function persa(quando) {
         if (quando && (!datiDel || quando < datiDel)) datiDel = quando;
         if (!senzaRete) {
@@ -127,7 +108,6 @@
         prova = null;
         disegna();
         inviaCoda().finally(() => {
-            // Chi mostra la situazione la ricarica: è cambiata mentre mancava.
             document.dispatchEvent(new CustomEvent('orion:rete', { detail: { senzaRete: false } }));
         });
     }
@@ -143,8 +123,6 @@
 
     window.addEventListener('online', provaServer);
     window.addEventListener('offline', () => persa());
-
-    // --- Coda ---------------------------------------------------------------
 
     function coda() { return leggi(CODA, []).filter(v => v.utente === utente()); }
     function salvaCoda(elenco) {
@@ -184,12 +162,9 @@
                     inviate++;
                 } catch (e) {
                     if (irraggiungibile(e)) { persa(); return; }
-                    // "La stessa richiesta è ancora in corso": si riprova al giro dopo.
                     if (e.status === 409 && e.body?.in_corso) return;
-                    // Sessione scaduta: resta in coda, partirà dopo il nuovo accesso.
                     if (e.status === 401) return;
-                    // Il server ha detto di no (un conflitto, un dato non più valido):
-                    // non si insiste, si lascia scritto perché qualcuno guardi.
+                    // Il server ha detto di no: non si insiste, si lascia scritto perché qualcuno guardi.
                     aggiungiEsito(voce, e.message || `Errore ${e.status}`);
                     notifica(`Non inviato: ${voce.descrizione}.\n${e.message || ''}`, 'errore', 12000);
                 }
@@ -202,8 +177,6 @@
             disegna();
         }
     }
-
-    // --- fetchApi avvolta ---------------------------------------------------
 
     window.fetchApi = async function (url, opzioni = {}) {
         const metodo = (opzioni.method || 'GET').toUpperCase();
@@ -233,7 +206,6 @@
             return dati;
         }
 
-        // Una scrittura che può aspettare: con la chiave, e in coda se non passa.
         const chiave = chiaveNuova();
         const conChiave = { ...resto, headers: { ...(resto.headers || {}), 'Idempotency-Key': chiave } };
         // Con altre cose già in coda si mette in fila dietro di loro: l'ordine conta.
@@ -252,8 +224,6 @@
             return { in_coda: true };
         }
     };
-
-    // --- Fascia in alto -----------------------------------------------------
 
     function ora(ms) {
         return new Date(ms).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -314,7 +284,6 @@
     }
 
     window.OrionRete = {
-        /** Le letture (espressioni sull'indirizzo) da tenere per quando manca il server. */
         salvaLetture(espressioni) { salvabili = espressioni; },
         get senzaRete() { return senzaRete; },
         coda,
@@ -322,7 +291,6 @@
         dimenticaTutto
     };
 
-    // Rimasta in coda da prima di chiudere la pagina: si prova subito.
     document.addEventListener('DOMContentLoaded', () => {
         disegna();
         if (coda().length) inviaCoda();

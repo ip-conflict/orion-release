@@ -1,7 +1,3 @@
-// Funzioni di supporto, per l'amministratore: quali sono accese, come si
-// chiamano e chi ne fa parte (con il referente). La stessa pagina vale prima
-// di accendere il modulo: le funzioni si preparano in tempo di pace.
-
 (function () {
     const elenco = document.getElementById('fz-elenco');
     const listaUtenti = document.getElementById('fz-utenti');
@@ -19,8 +15,6 @@
         return e;
     }
 
-    // "Rossi Mario · rossim (Croce Rossa, temporaneo)": quello che si scrive
-    // nella casella e che si ritrova nel datalist.
     const etichettaUtente = (u) => {
         const extra = [u.ente, u.temporaneo ? 'temporaneo' : null].filter(Boolean).join(', ');
         return `${[u.cognome, u.nome].filter(Boolean).join(' ')} · ${u.username}${extra ? ` (${extra})` : ''}`;
@@ -31,7 +25,6 @@
             const [dati, tutti] = await Promise.all([fetchApi('/api/admin/funzioni'), fetchApi('/api/admin/funzioni/persone')]);
             document.getElementById('fz-spento').hidden = dati.attivo;
             funzioni = dati.funzioni;
-            // Si propongono le persone attive: interne, esterne e temporanee.
             utenti = tutti.filter(u => u.is_active);
             listaUtenti.replaceChildren(...utenti.map(u => el('option', { value: etichettaUtente(u) })));
             disegna();
@@ -42,6 +35,24 @@
 
     function disegna() {
         elenco.replaceChildren(...funzioni.map(schedaFunzione));
+    }
+
+    // Le posizioni si rinumerano da capo: due funzioni con lo stesso numero non restano appaiate.
+    async function sposta(f, verso) {
+        const ordinate = [...funzioni];
+        const i = ordinate.indexOf(f);
+        const j = i + verso;
+        if (i < 0 || j < 0 || j >= ordinate.length) return;
+        [ordinate[i], ordinate[j]] = [ordinate[j], ordinate[i]];
+        try {
+            for (const [posizione, x] of ordinate.entries()) {
+                if (x.ordine === posizione) continue;
+                await fetchApi(`/api/admin/funzioni/${x.id}`, { method: 'PUT', body: JSON.stringify({ sigla: x.sigla, nome: x.nome, descrizione: x.descrizione, attiva: x.attiva, ordine: posizione }) });
+            }
+        } catch (e) {
+            notifica(e.message, 'errore');
+        }
+        await carica();
     }
 
     function schedaFunzione(f) {
@@ -57,6 +68,9 @@
                 el('span', { class: 'fz-sigla', testo: f.sigla }),
                 el('div', { class: 'fz-nome' }, el('strong', { testo: f.nome }), f.descrizione ? el('span', { testo: f.descrizione }) : null),
                 el('label', { class: 'fz-interruttore' }, interruttore, f.attiva ? 'Accesa' : 'Spenta'),
+                el('span', { class: 'fz-sposta' },
+                    el('button', { type: 'button', title: 'Sposta su', 'aria-label': `Sposta su la ${f.sigla}`, testo: '↑', disabled: funzioni[0] === f, suClick: () => sposta(f, -1) }),
+                    el('button', { type: 'button', title: 'Sposta giù', 'aria-label': `Sposta giù la ${f.sigla}`, testo: '↓', disabled: funzioni[funzioni.length - 1] === f, suClick: () => sposta(f, 1) })),
                 el('button', { type: 'button', class: 'button-style button-small button-secondary', testo: 'Modifica', suClick: () => modifica(scheda, f) })),
             membri,
             el('div', { class: 'fz-aggiungi' }, casella, aggiungi));
@@ -105,10 +119,9 @@
         }
     }
 
-    // La modifica (o la creazione) di sigla, nome e descrizione, al posto della scheda.
     function modulo(f, suAnnulla) {
         const sigla = el('input', { type: 'text', maxlength: 10, required: true, value: f?.sigla || '', placeholder: 'F10' });
-        const nome = el('input', { type: 'text', maxlength: 120, required: true, value: f?.nome || '' });
+        const nome = el('input', { type: 'text', maxlength: 120, required: true, value: f?.nome || '', placeholder: 'Volontariato' });
         const descrizione = el('textarea', { rows: 2, maxlength: 2000 });
         descrizione.value = f?.descrizione || '';
         const form = el('form', { class: 'fz-modulo' },

@@ -1,4 +1,3 @@
-/* Stile specifico per le liste nel libretto personale (replica lo stile Segreteria) */
 .modern-alert-card ul li {
     display: flex;
     justify-content: space-between;
@@ -11,7 +10,6 @@
     border-bottom: none;
 }
 
-/* Stile per i badge di stato (uguale a Segreteria) */
 .status-badge { 
     padding: 5px 10px; 
     border-radius: 12px; 
@@ -33,7 +31,6 @@
     color: #d97706; 
 }
 
-/* Icone per il download/visualizzazione (Stile Segreteria) */
 .btn-icon-action {
     background: none !important;
     border: none !important;
@@ -54,7 +51,6 @@
     .btn-view-record { color: #34d399; }
 }
 
-/* Fix colori input nel form password */
 #change-password-form input {
     width: 100%;
     padding: 10px;
@@ -68,13 +64,11 @@
     outline: none;
 }
 
-/* Effetto hover per il pulsante di stampa del PDF */
 #btn-print-badge:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4) !important;
 }
 
-/* --- Materiale da confermare --- */
 .box-da-confermare {
     margin-bottom: 24px;
     padding: 18px 20px;

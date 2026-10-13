@@ -1,5 +1,3 @@
-// tests/limiti.mjs
-//
 // I limiti di frequenza, provati da soli: un'app Express minima con i
 // limitatori veri e un'autenticazione finta, niente database.
 //
@@ -22,7 +20,6 @@ function verifica(descrizione, condizione, dettaglio = '') {
 // Stesso ordine di server.js: guardia per rete, autenticazione, limite per persona.
 const app = express();
 app.set('trust proxy', 1);
-// Il login finto: la password giusta è "giusta".
 app.post('/login', express.json(), passwordLimiter, (req, res) => req.body?.password === 'giusta' ? res.json({ ok: true }) : res.status(401).json({ message: 'Credenziali non valide.' }));
 app.use('/api/', limitePerRete);
 app.use((req, res, next) => {

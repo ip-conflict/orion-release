@@ -1,26 +1,4 @@
-// Le attività del gruppo fuori emergenza e il calendario.
-//
-// Un'attività (esercitazione, addestramento, servizio, riunione,
-// manutenzione) ha un modo di convocare: tutti gli interni, solo alcuni
-// scelti, oppure "aperta" (la vedono tutti e aderisce chi vuole, fino ai
-// posti). La convocazione arriva con l'avviso nell'app, con l'email, con
-// entrambi o con niente; chi la riceve risponde "Ci sono" o "Non posso". Chi
-// organizza vede le risposte e chi non è raggiungibile né dall'app né per
-// email, da chiamare a voce. Alla fine la si chiude con i presenti e gli
-// orari: le ore vanno nelle presenze di ognuno (src/presenze.js), e un
-// addestramento che vale come corso lo scrive nel libretto dei presenti.
-//
-// Chi vede un'attività: chi ha gruppo.attivita (il Coordinatore lo ha nel
-// pacchetto), il responsabile, e i convocati; con "tutti" e "aperta" ogni
-// interno. Gli esterni no.
-//
-// Il calendario mette insieme le attività, le emergenze e le scadenze: le
-// proprie (visite e corsi) per ognuno, quelle della segreteria a chi gestisce
-// visite e corsi, quelle del magazzino a chi lo gestisce. Le scadenze
-// arrivano raggruppate per giorno, per non riempire il calendario.
-//
-// Il modulo si spegne dalle impostazioni (attivita_enabled): spento, le rotte
-// rispondono 404 e le attività restano dove sono.
+// Attività del gruppo e calendario: vedi "Attività, calendario e presenze" nel manuale tecnico.
 
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
@@ -50,7 +28,6 @@ export async function attivitaAccese(esecutore = pool) {
     return String(r.rows[0]?.setting_value ?? 'true') !== 'false';
 }
 
-// Gli interni attivi: quelli che si possono convocare.
 const SQL_INTERNI = `
     SELECT u.id, u.username, u.nome, u.cognome, NULLIF(TRIM(u.email), '') AS email
       FROM users u
@@ -79,9 +56,7 @@ function interoOpzionale(valore) {
     return Number.isInteger(n) ? n : NaN;
 }
 
-// Gli allegati di un'attività (il programma, la scheda dell'esercitazione, la
-// circolare): stessi formati e stesso tetto dell'archivio dei documenti,
-// cifrati come gli altri file caricati.
+// Stessi formati e stesso tetto dell'archivio dei documenti, cifrati come gli altri caricati.
 export const cartellaAllegati = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'protected_uploads', 'attivita');
 fs.mkdirSync(cartellaAllegati, { recursive: true });
 const ALLEGATI_MASSIMI = 20;
@@ -120,7 +95,6 @@ export async function moduloAcceso(req, res, next) {
     }
 }
 
-// L'attività con il suo tipo, i conteggi delle risposte e la riga di chi chiede.
 const SELECT_ATTIVITA = `
     SELECT a.id, a.tipo_id, t.nome AS tipo, a.titolo, a.descrizione, a.luogo, a.inizio, a.fine,
            a.convocazione, a.posti, a.avviso_app, a.avviso_email, a.responsabile_id,
@@ -145,12 +119,10 @@ const SELECT_ATTIVITA = `
       LEFT JOIN courses_catalog c ON c.id = a.corso_id
       LEFT JOIN attivita_persone mia ON mia.attivita_id = a.id AND mia.user_id = $1`;
 
-// La condizione di visibilità, con $1 = chi chiede e $2 = se organizza.
 const VISIBILE = `($2::boolean OR a.convocazione IN ('tutti', 'aperta') OR a.responsabile_id = $1 OR mia.convocato
     OR EXISTS (SELECT 1 FROM attivita_regia g WHERE g.attivita_id = a.id AND g.user_id = $1))`;
 
-// Chi conduce un'attività (chi l'ha proposta, il responsabile, la regia) non
-// deve dire se c'è: la convocazione è per gli altri.
+// Chi conduce un'attività non deve dire se c'è: la convocazione è per gli altri.
 const conduceLei = (riga, userId) => riga.creato_da === userId || riga.responsabile_id === userId || !!riga.sono_regia;
 
 function forma(riga, req) {
@@ -159,9 +131,7 @@ function forma(riga, req) {
     return {
         ...riga,
         gestisce,
-        // La regia (e chi gestisce) prepara il copione e conduce la simulazione.
         regista: gestisce || !!riga.sono_regia,
-        // Chi non organizza vede quanti hanno aderito solo per le attività aperte (i posti).
         si: gestisce || riga.convocazione === 'aperta' ? riga.si : undefined,
         no: gestisce ? riga.no : undefined,
         convocati: gestisce ? riga.convocati : undefined,
@@ -178,8 +148,6 @@ async function leggiAttivita(req, id, esecutore = pool) {
     return r.rows[0] ? forma(r.rows[0], req) : null;
 }
 
-// Le persone di un'attività, per chi la organizza: chi è convocato, chi ha
-// risposto e come, e se lo si raggiunge (app con gli avvisi accesi, email).
 async function personeDi(attivita) {
     const base = attivita.convocazione === 'tutti'
         ? `${SQL_INTERNI}`
@@ -194,13 +162,11 @@ async function personeDi(attivita) {
     return r.rows.map(p => ({ ...p, raggiungibile: (attivita.avviso_app && p.app) || (attivita.avviso_email && p.email) }));
 }
 
-// Chi riceve gli avvisi di un'attività: i convocati, o tutti gli interni.
-// [soloInteressati] toglie chi ha già detto di no (per modifiche e annullamenti).
+// [soloInteressati] toglie chi ha già detto di no.
 async function destinatari(attivita, { soloInteressati = false } = {}) {
     const filtro = attivita.convocazione === 'scelti'
         ? 'AND EXISTS (SELECT 1 FROM attivita_persone p WHERE p.attivita_id = $1 AND p.user_id = u.id AND p.convocato)'
         : '';
-    // Chi la conduce non riceve la convocazione.
     const nonConduce = `AND NOT EXISTS (SELECT 1 FROM attivita x WHERE x.id = $1 AND (x.creato_da = u.id OR x.responsabile_id = u.id))
         AND NOT EXISTS (SELECT 1 FROM attivita_regia g WHERE g.attivita_id = $1 AND g.user_id = u.id)`;
     const noNo = soloInteressati
@@ -215,12 +181,10 @@ function quando(attivita) {
     return stessoGiorno ? `${inizio}-${oraItaliana(attivita.fine)}` : `dal ${inizio} al ${dataOraItaliana(attivita.fine)}`;
 }
 
-// Gli avvisi di un'attività, con i canali scelti per lei. Dopo la risposta
-// alla richiesta: una posta lenta non fa aspettare chi organizza.
+// Dopo la risposta alla richiesta: una posta lenta non fa aspettare chi organizza.
 async function avvisa(attivita, persone, { tipo, titolo, testo, oggetto }) {
     const indirizzo = `https://${domainName}/calendario.html?attivita=${attivita.id}`;
     if (attivita.avviso_app) {
-        // Valida fino alla fine dell'attività.
         const ore = Math.max(1, Math.ceil((new Date(String(attivita.fine).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00')) - Date.now()) / 3600000));
         for (const p of persone) {
             await notifiche.scadi({ tipo: 'convocazione', riferimento: { tipo: 'attivita', id: attivita.id }, userId: p.id });
@@ -253,7 +217,6 @@ function convocazioneTesto(a) {
     return { titolo: `Convocazione: ${a.tipo || a.titolo}`, testo: `${che}, ${quando(a)}${a.luogo ? `, ${a.luogo}` : ''}. Rispondi "Ci sono" o "Non posso".` };
 }
 
-// I campi di un'attività dalla richiesta, controllati.
 async function leggiCampi(corpo, client) {
     const campi = {
         tipo_id: interoOpzionale(corpo.tipo_id),
@@ -290,7 +253,6 @@ async function leggiCampi(corpo, client) {
         const r = await client.query(`${SQL_INTERNI} AND u.id = ANY($1::int[])`, [persone]);
         if (r.rowCount !== persone.length) return { errore: 'Fra i convocati c\'è chi non è un interno attivo.' };
     }
-    // La simulazione è degli addestramenti e delle esercitazioni.
     const natura = campi.tipo_id ? (await client.query('SELECT natura FROM attivita_tipi WHERE id = $1', [campi.tipo_id])).rows[0]?.natura : null;
     if (campi.simulazione && !['addestramento', 'esercitazione'].includes(natura)) {
         return { errore: 'La simulazione si fa negli addestramenti e nelle esercitazioni.' };
@@ -307,7 +269,6 @@ export function registraRotteAttivita(app) {
     const gestione = richiedePermesso('gruppo.attivita');
     const base = [moduloAcceso, soloInterni];
 
-    // Chi organizza o il responsabile di quell'attività.
     async function puoGestire(req, id) {
         if (organizza(req)) return true;
         const r = await pool.query('SELECT 1 FROM attivita WHERE id = $1 AND responsabile_id = $2', [id, req.user.id]);
@@ -357,7 +318,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Le attività di un periodo, quelle che chi chiede può vedere.
     app.get('/api/attivita', ...base, async (req, res) => {
         const da = giorno(req.query.da), a = giorno(req.query.a);
         if ((req.query.da && !da) || (req.query.a && !a)) return res.status(400).json({ message: 'Date non valide (AAAA-MM-GG).' });
@@ -374,7 +334,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Le attività a cui la persona deve ancora rispondere: la home dell'app le conta.
     app.get('/api/attivita/da-rispondere', ...base, async (req, res) => {
         try {
             const r = await pool.query(`${SELECT_ATTIVITA}
@@ -389,7 +348,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // I corsi del catalogo, per l'addestramento che vale come corso.
     app.get('/api/attivita/corsi', ...base, gestione, async (req, res) => {
         try {
             res.json((await pool.query('SELECT id, name AS nome, validity_months AS mesi FROM courses_catalog ORDER BY name')).rows);
@@ -425,8 +383,6 @@ export function registraRotteAttivita(app) {
             const letto = await leggiCampi(req.body || {}, client);
             if (letto.errore) return res.status(400).json({ message: letto.errore });
             const { campi, persone } = letto;
-            // Pianificata da uno scenario della biblioteca (src/scenari.js): il
-            // copione dello scenario si copia nell'attività, che poi lo ritocca da sé.
             const scenarioId = req.body?.scenario_id ? parseInt(req.body.scenario_id, 10) : null;
             if (scenarioId !== null) {
                 if (!Number.isInteger(scenarioId) || !(await client.query('SELECT 1 FROM scenari WHERE id = $1', [scenarioId])).rowCount) {
@@ -467,8 +423,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Cambiare un'attività. Con "avvisa" chi è convocato (e non ha detto di no)
-    // riceve l'avviso del cambio; i convocati nuovi la convocazione.
     app.put('/api/attivita/:id', ...base, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Attività non valida.' });
@@ -481,7 +435,6 @@ export function registraRotteAttivita(app) {
             const letto = await leggiCampi(req.body || {}, client);
             if (letto.errore) return res.status(400).json({ message: letto.errore });
             const { campi, persone } = letto;
-            // Il responsabile non diventa organizzatore di sé stesso: cambia solo chi ha il permesso.
             if (!organizza(req)) campi.responsabile_id = prima.responsabile_id;
             await client.query('BEGIN');
             await client.query(
@@ -504,7 +457,6 @@ export function registraRotteAttivita(app) {
                 await client.query(
                     `INSERT INTO attivita_persone (attivita_id, user_id, convocato) SELECT $1, unnest($2::int[]), true
                      ON CONFLICT (attivita_id, user_id) DO UPDATE SET convocato = true`, [id, persone]);
-                // Chi non è più convocato e non aveva risposto esce del tutto.
                 await client.query('DELETE FROM attivita_persone WHERE attivita_id = $1 AND NOT convocato', [id]);
             } else {
                 await client.query('UPDATE attivita_persone SET convocato = false WHERE attivita_id = $1', [id]);
@@ -561,7 +513,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Via del tutto: solo se nessuno risulta presente.
     app.delete('/api/attivita/:id', ...base, gestione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Attività non valida.' });
@@ -581,7 +532,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Gli allegati: li apre chi vede l'attività, li carica e li toglie chi la gestisce.
     app.post('/api/attivita/:id/allegati', ...base, (req, res, next) => {
         caricaAllegato(req, res, (errore) => {
             if (errore?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ message: `Il file supera i ${MB_MASSIMI} MB.` });
@@ -625,7 +575,6 @@ export function registraRotteAttivita(app) {
             if (!(await leggiAttivita(req, id))) return res.status(404).json({ message: 'Attività non trovata.' });
             const v = (await pool.query('SELECT file, nome_originale, tipo FROM attivita_allegati WHERE id = $1 AND attivita_id = $2', [aid, id])).rows[0];
             if (!v) return res.status(404).json({ message: 'Allegato non trovato.' });
-            // PDF e immagini si aprono nel browser; il resto si scarica.
             const inLinea = v.tipo === 'application/pdf' || v.tipo.startsWith('image/');
             await inviaFile(res, path.join(cartellaAllegati, path.basename(v.file)), { headers: {
                 'X-Content-Type-Options': 'nosniff',
@@ -654,7 +603,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // La risposta di chi è convocato: "si" (ci sono, o aderisco) o "no".
     app.post('/api/attivita/:id/risposta', ...base, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const risposta = req.body?.risposta;
@@ -679,7 +627,6 @@ export function registraRotteAttivita(app) {
                  ON CONFLICT (attivita_id, user_id) DO UPDATE SET risposta = EXCLUDED.risposta, risposto_il = NOW(), nota = EXCLUDED.nota`,
                 [id, req.user.id, risposta, testo(req.body?.nota, LIMITE.nota)]);
             await client.query('COMMIT');
-            // Risposto: la convocazione non chiede più niente.
             await notifiche.scadi({ tipo: 'convocazione', riferimento: { tipo: 'attivita', id }, userId: req.user.id });
             res.json(await leggiAttivita(req, id));
         } catch (e) {
@@ -691,9 +638,8 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Chiudere l'attività con i presenti e gli orari (di partenza quelli
-    // dell'attività). Si può ripetere per correggere: chi non c'è più esce
-    // dalle presenze, e il corso che l'attività gli aveva scritto si toglie.
+    // Si può ripetere per correggere: chi non c'è più esce dalle presenze, e il corso
+    // che l'attività gli aveva scritto si toglie.
     app.post('/api/attivita/:id/concludi', ...base, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Attività non valida.' });
@@ -712,7 +658,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Il calendario di un periodo: attività, emergenze e scadenze per chi le può vedere.
     app.get('/api/calendario', ...base, async (req, res) => {
         const da = giorno(req.query.da), a = giorno(req.query.a);
         if (!da || !a) return res.status(400).json({ message: 'Servono "da" e "a" (AAAA-MM-GG).' });
@@ -746,7 +691,6 @@ export function registraRotteAttivita(app) {
                 }
                 for (const [g, voci] of perGiorno) scadenze.push({ giorno: g, categoria, conteggio: voci.length, voci });
             };
-            // L'ultima visita di ogni tipo e l'ultimo corso di ogni tipo: quelli che contano.
             const sqlVisite = (soloMe) => `
                 SELECT DISTINCT ON (v.user_id, v.visit_type_id) v.user_id, v.expiry_date::text AS giorno, t.name AS titolo,
                        NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), '') AS chi
@@ -779,8 +723,6 @@ export function registraRotteAttivita(app) {
             }
             scadenze.sort((x, y) => x.giorno.localeCompare(y.giorno) || x.categoria.localeCompare(y.categoria));
 
-            // Reperibilità e assenze, giorno per giorno: le proprie per tutti,
-            // quelle di tutti per chi organizza.
             const turniRighe = (await pool.query(`
                 SELECT g::date::text AS giorno, x.categoria, x.id, x.user_id, x.nota,
                        NULLIF(TRIM(CONCAT(u.nome, ' ', u.cognome)), '') AS chi
@@ -812,7 +754,6 @@ export function registraRotteAttivita(app) {
         }
     });
 
-    // Gli interni, per scegliere i convocati e il responsabile.
     app.get('/api/attivita-persone', ...base, async (req, res) => {
         if (!organizza(req)) {
             const r = await pool.query('SELECT 1 FROM attivita WHERE responsabile_id = $1 LIMIT 1', [req.user.id]);

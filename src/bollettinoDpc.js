@@ -1,21 +1,12 @@
-// Il bollettino di criticità nazionale del Dipartimento della Protezione
-// Civile: ogni giorno, di norma entro le 16, i livelli di allerta per rischio
-// idrogeologico, idraulico e temporali di oggi e domani su tutte le zone
-// d'allerta d'Italia. È la sintesi delle valutazioni dei Centri Funzionali
-// Decentrati delle Regioni, pubblicata con licenza CC-BY 4.0 in
-// github.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica.
-//
-// Si legge l'archivio dell'ultimo bollettino (latest_all.zip): dentro ci sono
-// gli attributi delle zone (un file DBF per oggi e uno per domani, con il
-// codice della zona), il messaggio CAP con l'ora di emissione e il PDF.
-// Niente dipendenze: lo zip e il DBF si leggono qui.
+// Il bollettino nazionale di criticità del DPC (CC-BY 4.0, github.com/pcm-dpc/
+// DPC-Bollettini-Criticita-Idrogeologica-Idraulica). Zip e DBF si leggono qui, senza dipendenze.
 
 import zlib from 'zlib';
 
 export const LIVELLI = ['verde', 'gialla', 'arancione', 'rossa'];
 export const RISCHI = ['idrogeologico', 'idraulico', 'temporali'];
 
-/** I file di un archivio zip: { nome: Buffer }. Solo "store" e "deflate". */
+// Solo "store" e "deflate".
 export function leggiZip(dati) {
     let fine = -1;
     for (let i = dati.length - 22; i >= Math.max(0, dati.length - 65557); i--) {
@@ -44,7 +35,7 @@ export function leggiZip(dati) {
     return file;
 }
 
-/** Le righe di un DBF (dBase III), con i testi in latin1 come li scrive il Dipartimento. */
+// Testi in latin1, come li scrive il Dipartimento.
 export function leggiDbf(dati) {
     const righe = dati.readUInt32LE(4);
     const testa = dati.readUInt16LE(8);
@@ -68,7 +59,6 @@ export function leggiDbf(dati) {
     return risultato;
 }
 
-/** "Moderata / ALLERTA ARANCIONE" -> "arancione"; null se la Regione non l'ha trasmessa. */
 export function livelloDa(testo) {
     const t = String(testo || '').toUpperCase();
     if (t.includes('ALLERTA ROSSA')) return 'rossa';
@@ -92,11 +82,6 @@ function livelliDelGiorno(dbf) {
     return zone;
 }
 
-/**
- * L'archivio dell'ultimo bollettino, letto: chiave (data e ora del file),
- * emissione, giorno di "oggi", tipo (first, update, ...), titolo, PDF e i
- * livelli di ogni zona per oggi e domani.
- */
 export function leggiBollettino(zip) {
     const file = leggiZip(zip);
     const nomi = Object.keys(file);
@@ -122,7 +107,6 @@ export function leggiBollettino(zip) {
     };
 }
 
-/** Il livello più alto fra i rischi; null se nessuno è stato trasmesso. */
 export function livelloMassimo(giorno) {
     if (!giorno) return null;
     const noti = RISCHI.map(r => giorno[r]).filter(Boolean);

@@ -1,5 +1,3 @@
-// tests/rete.mjs
-//
 // Rete scarsa: le scritture del centro operativo rimandate con la stessa
 // Idempotency-Key non scrivono due volte (segnalazione, nota, diario di sala,
 // cambio di stato), la stessa chiave per una richiesta diversa è rifiutata,
@@ -49,7 +47,6 @@ try {
     const aperta = (await chiama('/api/emergencies/open', { method: 'POST', token: admin, body: { external_code: `RETE-${suffisso}`, name: 'Prova rete scarsa' } })).corpo?.emergency;
     verifica('emergenza aperta', !!aperta?.id, aperta);
 
-    // Segnalazione: due invii, una sola scheda.
     const corpo = { title: `Allagamento ${suffisso}`, priority: 'Medium' };
     const prima = await chiama('/api/reports', { method: 'POST', token: admin, body: corpo, chiave: k('seg') });
     const seconda = await chiama('/api/reports', { method: 'POST', token: admin, body: corpo, chiave: k('seg') });
@@ -64,7 +61,6 @@ try {
     const storta = await chiama('/api/reports', { method: 'POST', token: admin, body: corpo, chiave: 'no' });
     verifica('chiave non valida: 400', storta.stato === 400, storta);
 
-    // Nota sulla segnalazione.
     const nota = { update_text: `Arrivati sul posto ${suffisso}` };
     await chiama(`/api/reports/${id}/updates`, { method: 'POST', token: admin, body: nota, chiave: k('nota') });
     const notaDoppia = await chiama(`/api/reports/${id}/updates`, { method: 'POST', token: admin, body: nota, chiave: k('nota') });
@@ -73,14 +69,12 @@ try {
     const note = (scheda?.updates || scheda?.report?.updates || []).filter(u => (u.update_text || '').includes(nota.update_text));
     verifica('una sola nota', note.length === 1, note.length);
 
-    // Diario di sala.
     const voce = { testo: `Sala: ponte chiuso ${suffisso}` };
     await chiama('/api/emergencies/diario-sala', { method: 'POST', token: admin, body: voce, chiave: k('diario') });
     await chiama('/api/emergencies/diario-sala', { method: 'POST', token: admin, body: voce, chiave: k('diario') });
     const eventi = (await chiama(`/api/emergencies/${aperta.id}/eventi?limit=60`, { token: admin })).corpo || [];
     verifica('una sola voce di diario', eventi.filter(e => (e.testo || '').includes(voce.testo)).length === 1, eventi.length);
 
-    // Cambio di stato con lo stato atteso.
     const avvia = await chiama(`/api/reports/${id}`, { method: 'PUT', token: admin, body: { status: 'InProgress', stato_atteso: 'New' }, chiave: k('stato1') });
     verifica('cambio di stato con lo stato atteso giusto', avvia.stato === 200, avvia);
     const vecchio = await chiama(`/api/reports/${id}`, { method: 'PUT', token: admin, body: { status: 'Closed', stato_atteso: 'New' }, chiave: k('stato2') });
@@ -94,7 +88,6 @@ try {
     const senza = await chiama(`/api/reports/${id}`, { method: 'PUT', token: admin, body: { status: 'Open' } });
     verifica('senza stato atteso si scrive come prima', senza.stato === 200, senza);
 
-    // La posizione che parte in ritardo arriva vecchia com'è, e non copre una più recente.
     const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(x => x.nome_radio));
     const nomeRadio = ['Sierra', 'Romeo', 'Quebec', 'Papa', 'Oscar', 'November'].find(n => !usati.has(n));
     squadraId = (await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: nomeRadio, nome: 'Prova rete', membri: [] } })).corpo?.squadraId;

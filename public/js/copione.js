@@ -1,19 +1,4 @@
-// La pagina del copione di una simulazione (/copione.html?attivita=N),
-// costruita come il centro operativo: a sinistra l'elenco degli eventi in
-// ordine di tempo, a destra la mappa con i loro punti e le strade. "Nuovo
-// evento" chiede il tipo con due parole di spiegazione; il modulo dell'evento
-// si apre sopra la mappa e cambia secondo il tipo. Il punto si mette con un
-// clic sulla mappa (o con "Trova" dall'indirizzo), la strada si disegna.
-// Excel: il modello da scaricare, il foglio compilato da caricare, il
-// copione attuale da scaricare. Dopo la simulazione, la scheda Valutazione:
-// i tempi di ogni segnalazione, le osservazioni della regia, il debriefing,
-// la pubblicazione ai partecipanti. Chi non è della regia, se il copione è
-// stato pubblicato, vede tutto in sola lettura.
-//
-// La stessa pagina scrive il copione di uno scenario della biblioteca
-// (/copione.html?scenario=N, dalla pagina Simulazioni): niente valutazione né
-// pubblicazione, che sono delle simulazioni svolte, e un pulsante per
-// pianificarlo nel calendario.
+// Copione di un'attività (?attivita=N) o di uno scenario della biblioteca (?scenario=N).
 
 import { cercaIndirizzi, creaRicerca, calcolaPercorso } from './mappa-strumenti.js';
 import { montaElementiMappa, creaControlloLivelli, aggiungiCartografia } from './mappa-elementi.js';
@@ -34,7 +19,6 @@ const TIPI = {
     pericolo: { nome: 'Zona di pericolo', icona: 'fa-house-flood-water', spiega: 'Alluvione, frana o altro: le segnalazioni dentro prendono il rischio' }
 };
 const COLORI = { segnalazione: '#c2410c', aggravamento: '#b91c1c', comunicazione: '#1d4ed8', imprevisto: '#a16207', strada: '#6d28d9', pericolo: '#be123c' };
-// Cosa disegna sulla mappa un evento, per tipo: la prima voce è quella di partenza.
 const ELEMENTI = {
     strada: { etichetta: 'Cosa', voci: { strada_chiusa: 'Strada chiusa', zona_interdetta: 'Zona interdetta' } },
     pericolo: { etichetta: 'Che pericolo', voci: { pericolo_generico: 'Altro (incendio, crollo, fuga di gas...)', pericolo_alluvione: 'Alluvione', pericolo_frana: 'Frana' } }
@@ -63,8 +47,6 @@ const ora = (minuti) => {
 const data = (v) => new Date(String(v).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));
 const oraDi = (v) => data(v).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
-// --- Il caricamento ---------------------------------------------------------------
-
 async function carica() {
     try {
         dati = await fetchApi(`${radice}/copione`);
@@ -89,8 +71,6 @@ async function carica() {
     disegnaMappa();
     if (!idScenario) disegnaValutazione();
 }
-
-// --- L'elenco -----------------------------------------------------------------------
 
 function descrizione(e) {
     switch (e.tipo) {
@@ -142,8 +122,6 @@ function disegnaElenco() {
     });
 }
 
-// --- La mappa -------------------------------------------------------------------------
-
 async function preparaMappa() {
     let centro = [41.9, 12.5], zoom = 13;
     try {
@@ -161,9 +139,6 @@ async function preparaMappa() {
     });
     strati = L.layerGroup().addTo(map);
     anteprima = L.layerGroup().addTo(map);
-    // I livelli come nel centro operativo: le zone di pericolosità e le aree del
-    // piano, le strade chiuse e le zone in vigore adesso. Qui si guardano soltanto:
-    // il copione si scrive sopra la situazione vera.
     const controllo = creaControlloLivelli({ 'Mappa Stradale': stradale, 'Satellite': satellite }, { 'Eventi del copione': strati }, { position: 'bottomleft' }).addTo(map);
     aggiungiCartografia(map, controllo, [stradale, satellite]);
     try {
@@ -176,7 +151,6 @@ async function preparaMappa() {
             .map(e => ({ nome: e.titolo, dettaglio: TIPI[e.tipo].nome, lat: e.lat, lng: e.lng, fonte: 'segnalazione' })),
         suScelta: (v) => {
             map.setView([v.lat, v.lng], Math.max(map.getZoom(), 16));
-            // Durante "metti sulla mappa" la ricerca mette anche il punto.
             if (annullaMappa && tipoModulo === 'segnalazione') impostaPunto({ lat: v.lat, lng: v.lng });
         }
     });
@@ -254,8 +228,6 @@ function impostaForma(g) {
     $('cp-disegna').innerHTML = g ? '<i class="fas fa-pen"></i> Ridisegna' : '<i class="fas fa-pen"></i> Disegna sulla mappa';
 }
 
-// La strada chiusa come nel centro operativo: si toccano i due capi e la
-// linea segue la strada. "A mano" resta per i casi in cui il percorso sbaglia.
 function disegnaStrada() {
     fermaMappa();
     const punti = [];
@@ -303,8 +275,6 @@ function disegnaForma(aMano = false) {
     annullaMappa = () => { map.off('pm:create', creato); map.pm.disableDraw(); };
 }
 
-// --- Il modulo di un evento ---------------------------------------------------------------
-
 function sceltaTipo() {
     const box = $('cp-scelta-tipo');
     if (!box.hidden) { box.hidden = true; return; }
@@ -334,7 +304,6 @@ function apriModulo(e) {
     f.querySelectorAll('[data-per]').forEach(d => { d.hidden = !d.dataset.per.split(' ').includes(e.tipo); });
     const aMano = !nuovo && e.minuto === null;
     f.querySelector(`input[name="cp-quando"][value="${aMano ? 'mano' : 'tempo'}"]`).checked = true;
-    // Di partenza un evento nuovo esce 10 minuti dopo l'ultimo.
     const ultimo = Math.max(-10, ...dati.eventi.filter(x => x.minuto !== null).map(x => x.minuto));
     $('cp-minuto').value = nuovo ? Math.max(0, ultimo + 10) : (e.minuto ?? 0);
     $('cp-f-titolo').value = e.titolo || '';
@@ -374,7 +343,6 @@ function apriModulo(e) {
     f.hidden = false;
     disegnaElenco();
     if (!sola) $('cp-f-titolo').focus();
-    // Una segnalazione nuova o senza punto: si comincia proprio dal punto.
     if (!sola && e.tipo === 'segnalazione' && !punto) mettiPunto();
     if (!sola && ELEMENTI[e.tipo] && !e.geometria) disegnaForma();
 }
@@ -442,8 +410,6 @@ async function trovaIndirizzo() {
     } catch { notifica('Il servizio degli indirizzi non risponde: metti il punto a mano.', 'attenzione'); }
 }
 
-// --- Excel e copia -----------------------------------------------------------------------------
-
 function apriExcel() {
     $('excel-esito').replaceChildren();
     $('excel-scarica').href = `${radice}/copione.xlsx`;
@@ -486,7 +452,6 @@ async function apriCopia() {
         const g = (d) => d.toISOString().slice(0, 10);
         attivita = (await fetchApi(`/api/attivita?da=${g(da)}&a=${g(a)}`)).filter(x => x.simulazione === 'sala' && x.regista && x.id !== idAttivita);
     } catch (e) { ul.replaceChildren(el('li', 'nota', e.message)); return; }
-    // Gli scenari della biblioteca li vede chi apre le simulazioni o le organizza.
     try { scenari = (await fetchApi('/api/simulazioni/scenari')).filter(x => x.eventi && x.id !== idScenario); } catch { /* niente scenari */ }
     ul.replaceChildren();
     if (!attivita.length && !scenari.length) ul.appendChild(el('li', 'nota', 'Nessuno scenario e nessuna altra attività con la simulazione in sala di cui fai la regia.'));
@@ -510,8 +475,6 @@ async function apriCopia() {
     if (scenari.length && attivita.length) ul.appendChild(el('li', 'cp-copia-gruppo', 'Attività'));
     for (const x of attivita.sort((p, q) => data(q.inizio) - data(p.inizio))) voce(`${data(x.inizio).toLocaleDateString('it-IT')} · ${x.titolo}`, { da: x.id });
 }
-
-// --- La valutazione ---------------------------------------------------------------------------------
 
 function disegnaValutazione() {
     const box = $('cp-valutazione');
@@ -605,15 +568,12 @@ function scheda(quale) {
     $('pannello-valutazione').hidden = !val;
 }
 
-// --- Avvio ---------------------------------------------------------------------------------------
-
 document.addEventListener('DOMContentLoaded', async () => {
     if (!idScenario && (!Number.isInteger(idAttivita) || idAttivita <= 0)) {
         document.querySelector('.cp-lavoro').replaceChildren(el('p', 'cp-pannello', "Manca l'attività: apri il copione dal calendario."));
         return;
     }
     if (idScenario) {
-        // Lo scenario: si torna alla biblioteca, niente valutazione, si pianifica.
         const indietro = document.querySelector('.cp-indietro');
         indietro.href = '/simulazioni.html';
         indietro.title = 'Torna alle simulazioni';
@@ -635,7 +595,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('cp-metti-punto').addEventListener('click', mettiPunto);
     $('cp-cerca-indirizzo').addEventListener('click', trovaIndirizzo);
     $('cp-disegna').addEventListener('click', () => disegnaForma());
-    // Da linea ad area (o viceversa) il disegno non vale più; fra due aree resta.
     $('cp-f-elemento').addEventListener('change', () => {
         const area = forma && /Polygon/.test(forma.type);
         if (forma && area !== disegnaArea($('cp-f-elemento').value)) impostaForma(null);

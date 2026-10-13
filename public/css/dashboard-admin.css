@@ -1,12 +1,6 @@
-/* /public/css/dashboard-admin */
-
-/* Le variabili colore (--bg-color, --surface-color, --link-color, ecc.) sono
-   definite in /css/theme.css, caricato prima di questo file su ogni pagina:
-   qui non le si ridefinisce più, per evitare che due fogli di stile abbiano
-   ciascuno la propria versione delle stesse variabili con valori diversi. */
+/* Le variabili colore stanno in theme.css, caricato prima. */
 
 
-/* Stili Generali per le Pagine Admin */
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
@@ -86,7 +80,6 @@ body {
 }
 
 
-/* Stili per il Form delle Impostazioni */
 .settings-panel h2 {
     margin-top: 0;
 }
@@ -160,9 +153,6 @@ body {
 .feedback-info { color: #2980b9; }
 
 
-/* Stili specifici per il MODALE della MAPPA (per evitare conflitti) */
-
-/* Overlay scuro che copre tutta la pagina */
 #mapPickerModal.modal-overlay {
     position: fixed;
     top: 0;
@@ -176,7 +166,6 @@ body {
     z-index: 1050; /* Sopra tutto il resto */
 }
 
-/* Contenitore del modale */
 #mapPickerModal .modal-content {
     background-color: var(--surface-color);
     padding: 0; /* Rimuovi padding per header/footer a tutta larghezza */
@@ -189,7 +178,6 @@ body {
     color: var(--text-color); /* Assicura che il testo nel modale sia leggibile */
 }
 
-/* Header del Modale */
 #mapPickerModal .modal-header {
     padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--border-color);
@@ -214,7 +202,6 @@ body {
     padding: 0 0.5rem;
 }
 
-/* Corpo del Modale */
 #mapPickerModal .modal-body {
     padding: 1.5rem;
     flex-grow: 1; /* Permette al corpo di espandersi */
@@ -226,7 +213,6 @@ body {
     opacity: 0.9;
 }
 
-/* Footer del Modale */
 #mapPickerModal .modal-footer {
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--border-color);
@@ -240,7 +226,6 @@ body {
     margin-right: 0.5rem;
 }
 
-/* --- Stili Toggle Switch Moderno --- */
         .modern-toggle {
             position: relative;
             display: inline-block;
@@ -275,20 +260,16 @@ body {
             border-radius: 50%;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
-        /* Colore quando attivo (Verde) */
         .modern-toggle input:checked + .toggle-slider {
             background-color: #10b981; 
         }
-        /* Movimento del pallino */
         .modern-toggle input:checked + .toggle-slider:before {
             transform: translateX(24px);
         }
-        /* Effetto Focus */
         .modern-toggle input:focus + .toggle-slider {
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
         }
 
-        /* --- Stili per le Card delle Opzioni Interne --- */
         .option-card {
             display: flex;
             align-items: center;
@@ -305,7 +286,6 @@ body {
             box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
         }
 
-/* Esito dell'importazione utenti */
 .esito-import { margin-top: 15px; font-size: 0.9rem; }
 .esito-import h3 { font-size: 1rem; margin: 16px 0 8px; }
 .esito-import-sintesi { font-weight: 600; }
@@ -315,7 +295,6 @@ body {
 .righe-saltate-import { margin: 0; padding-left: 20px; }
 .righe-saltate-import li { margin-bottom: 4px; }
 
-/* Sul telefono i riquadri delle impostazioni restano dentro lo schermo. */
 @media (max-width: 700px) {
     .settings-panel { padding: 18px 14px !important; }
 }

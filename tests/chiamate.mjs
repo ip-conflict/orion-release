@@ -1,5 +1,3 @@
-// tests/chiamate.mjs
-//
 // La chiamata dei volontari e la disponibilità (src/chiamate.js): chi può
 // chiamare, chi resta fuori (in squadra, assente), le risposte dal telefono,
 // chi va chiamato a voce, l'arrivo in sede e il congedo, la presenza di chi
@@ -54,7 +52,6 @@ try {
     const d = await nuovo('Dario');
     const est = await nuovo('Est', ['esterno']);
 
-    // Assenze e reperibilità, prima dell'emergenza.
     const assenza = await chiama('/api/assenze', { method: 'POST', token: d.token, body: { dal: giorno(0), al: giorno(3), nota: 'ferie' } });
     verifica('un volontario dichiara la sua assenza', assenza.stato === 201, assenza);
     verifica('e la ritrova fra le sue', ((await chiama('/api/assenze/mie', { token: d.token })).corpo || []).some(x => x.id === assenza.corpo?.id));
@@ -82,7 +79,6 @@ try {
         emergenza = (await chiama('/api/emergencies/open', { method: 'POST', token: coord.token, body: { external_code: `CHI-${suffisso}`, name: 'Prova chiamata' } })).corpo?.emergency?.id;
         verifica("l'emergenza si apre", !!emergenza);
 
-        // Anna è già in squadra: non si chiama.
         const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
         const radio = ['Zulu', 'Yankee', 'Whiskey', 'Victor', 'Uniform', 'Tango'].find(x => !usati.has(x));
         const sq = await chiama('/api/squadre', { method: 'POST', token: coord.token, body: { nome_radio: radio, nome: 'Campo', membri: [{ username: a.username }] } });
@@ -147,14 +143,11 @@ try {
         const qa = quadro?.persone?.find(p => p.id === a.id), qb = quadro?.persone?.find(p => p.id === b.id);
         verifica('in sede Bruno senza squadra; Anna in squadra', quadro?.conteggi?.in_sede === 1 && qa?.squadra === radio && qb?.stato === 'arrivato', quadro?.conteggi);
 
-        // Chi non risponde passa fra quelli da chiamare (attesa di un minuto, ma
-        // senza app né email lo è subito).
         const senza = quadro?.persone?.filter(p => p.stato === 'senza_risposta') || [];
         verifica('chi non risponde ed è irraggiungibile è da chiamare', senza.length > 0 && senza.every(p => p.da_chiamare), senza.map(p => [p.id, p.da_chiamare]));
         const ri = await chiama(`/api/chiamate/${idRep}/richiama`, { method: 'POST', token: coord.token, body: {} });
         verifica('quando hanno risposto tutti non si richiama -> 409', ri.stato === 409, ri);
 
-        // Carla arriva e poi viene congedata.
         await chiama(`/api/disponibilita/${c.id}`, { method: 'PUT', token: coord.token, body: { stato: 'arrivato' } });
         await attesa(1200);
         const cong = await chiama(`/api/disponibilita/${c.id}`, { method: 'PUT', token: coord.token, body: { stato: 'congedato' } });
@@ -176,7 +169,6 @@ try {
         verifica("Anna, in squadra e segnata in sede, conta una volta", !!pa && /Squadre:/.test(pa.dettaglio || ''), pa);
     }
 
-    // Allertamento per un'attività: la chiamata senza sala.
     const tipi = (await chiama('/api/attivita/tipi', { token: coord.token })).corpo || [];
     const att = await chiama('/api/attivita', { method: 'POST', token: coord.token, body: { tipo_id: tipi[0]?.id, titolo: `Allertamento ${suffisso}`, inizio: fra(-0.5), fine: fra(2), convocazione: 'tutti', avviso_app: false } });
     if (att.corpo?.id) attivita.push(att.corpo.id);

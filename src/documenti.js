@@ -1,17 +1,5 @@
-// L'archivio dei documenti del gruppo: il piano di protezione civile, le
-// procedure, i libretti d'uso e manutenzione, i moduli, i verbali.
-//
-// Li consultano tutti gli interni (dal web e dall'app); un documento si può
-// riservare a certi ruoli. Gli esterni vedono solo quelli segnati come
-// consultabili in emergenza, e solo mentre un'emergenza è aperta. Caricare,
-// ordinare, sostituire e togliere è di chi ha il permesso gruppo.documenti.
-//
-// Ogni documento ha le sue versioni: caricarne una nuova conserva le vecchie,
-// che restano consultabili. I file stanno in protected_uploads, cifrati come
-// gli altri caricati, e finiscono nei backup: per questo c'è un tetto alla
-// dimensione. L'impronta è quella del file in chiaro: il telefono la usa per
-// sapere se la copia che tiene è ancora l'ultima. Un documento si collega ai
-// beni del magazzino (il libretto della motosega), e dalla scheda del bene si apre.
+// Archivio dei documenti del gruppo: vedi il manuale tecnico. L'impronta è quella del
+// file in chiaro: il telefono la usa per sapere se la sua copia è l'ultima.
 
 import crypto from 'crypto';
 import fs from 'fs';
@@ -30,13 +18,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const cartellaDocumenti = path.join(__dirname, '..', 'protected_uploads', 'documenti-gruppo');
 fs.mkdirSync(cartellaDocumenti, { recursive: true });
 
-// Un file al massimo così: finisce in ogni backup.
+// Finisce in ogni backup.
 export const MB_MASSIMI = 25;
 const LIMITE_TESTI = { titolo: 200, descrizione: 2000, nota: 500, cartella: 100 };
 const RUOLI_RISERVABILI = ['admin', 'coordinatore', 'segreteria', 'magazziniere', 'volontario'];
 
-// I formati ammessi, per estensione, con il tipo che ci si aspetta di
-// riconoscere dal contenuto (null: testo semplice, senza firma).
+// null: testo semplice, senza firma riconoscibile.
 export const FORMATI = {
     '.pdf': ['application/pdf'], '.jpg': ['image/jpeg'], '.jpeg': ['image/jpeg'], '.png': ['image/png'], '.webp': ['image/webp'],
     '.doc': ['application/x-cfb'], '.xls': ['application/x-cfb'], '.ppt': ['application/x-cfb'],
@@ -71,7 +58,6 @@ const carica = multer({
     }
 }).single('file');
 
-// Il caricamento con i suoi errori detti chiaramente.
 function caricaFile(req, res, next) {
     carica(req, res, (errore) => {
         if (errore?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ message: `Il file supera i ${MB_MASSIMI} MB.` });
@@ -86,7 +72,6 @@ function togliFile(nome) {
     fs.promises.unlink(path.join(cartellaDocumenti, path.basename(nome))).catch(() => {});
 }
 
-// Il contenuto deve essere quello che l'estensione dice.
 export async function contenutoValido(file) {
     const attesi = FORMATI[path.extname(file.originalname).toLowerCase()];
     const trovato = await fileTypeFromFile(file.path).catch(() => null);
@@ -110,7 +95,6 @@ function vero(valore) {
     return valore === true || valore === 'true' || valore === '1' || valore === 'on';
 }
 
-// I campi del documento da una richiesta (JSON o modulo con il file).
 function leggiCampi(corpo) {
     const ruoli = (() => {
         const grezzi = Array.isArray(corpo.ruoli) ? corpo.ruoli
@@ -130,7 +114,6 @@ function leggiCampi(corpo) {
     };
 }
 
-// Chi vede un documento.
 export function puoVedere(req, documento, emergenzaAperta) {
     if (haPermesso(req, 'gruppo.documenti')) return true;
     const ruoli = ruoliDi(req.user);
@@ -149,8 +132,6 @@ const SELECT_DOCUMENTI = `
       FROM documenti d
       JOIN LATERAL (SELECT * FROM documenti_versioni v WHERE v.documento_id = d.id ORDER BY v.numero DESC LIMIT 1) v ON true`;
 
-// Collega un documento a un bene e, con [simili], agli altri beni dello stesso
-// tipo e con la stessa denominazione ancora in servizio. Ritorna gli id collegati.
 async function collegaBeni(esecutore, documentoId, beneId, simili) {
     const r = await esecutore.query(
         `INSERT INTO documenti_beni (documento_id, bene_id)
@@ -158,15 +139,13 @@ async function collegaBeni(esecutore, documentoId, beneId, simili) {
           WHERE o.id = $2 AND EXISTS (SELECT 1 FROM documenti WHERE id = $1)
             AND (b.id = o.id OR ($3::boolean AND b.tipo = o.tipo AND LOWER(b.denominazione) = LOWER(o.denominazione) AND b.dismesso_il IS NULL))
          ON CONFLICT DO NOTHING RETURNING bene_id`, [documentoId, beneId, simili === true]);
-    // Anche quelli già collegati contano come collegati.
     if (r.rowCount) return r.rows.map(x => x.bene_id);
     const gia = await esecutore.query('SELECT bene_id FROM documenti_beni WHERE documento_id = $1 AND bene_id = $2', [documentoId, beneId]);
     return gia.rows.map(x => x.bene_id);
 }
 
-// Gli id dei beni che una persona ha in carico adesso, a sé o alla sua
-// squadra: i pezzi singoli dalla situazione dei beni, gli sfusi dal saldo
-// delle detenzioni (come beniInCarico in magazzino.js).
+// I pezzi singoli dalla situazione dei beni, gli sfusi dal saldo delle detenzioni
+// (come beniInCarico in magazzino.js).
 async function beniDi(utente) {
     if (!utente?.id) return new Set();
     try {
@@ -200,8 +179,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         return r.rows[0] || null;
     }
 
-    // L'archivio, per quello che chi chiede può vedere. Con ?bene=ID solo i
-    // documenti collegati a quel bene.
     app.get('/api/documenti', async (req, res) => {
         try {
             const bene = req.query.bene ? parseInt(req.query.bene, 10) : null;
@@ -213,8 +190,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
                     ORDER BY d.titolo`, [bene])
             ]);
             const aperta = !!emergenzaAttiva();
-            // I libretti di quello che la persona ha in carico (lei o la sua
-            // squadra): l'app li tiene sul telefono finché lo ha.
             const mieiBeni = await beniDi(req.user);
             const visibili = documenti.rows.filter(d => puoVedere(req, d, aperta))
                 .map(d => ({ ...d, in_carico: d.beni.some(b => mieiBeni.has(b.id)) }));
@@ -225,7 +200,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
                 documenti: visibili,
                 gestisce,
                 mb_massimi: MB_MASSIMI,
-                // Quanto pesa l'archivio nei backup, per chi lo tiene.
                 byte_totali: gestisce ? Number((await pool.query('SELECT COALESCE(SUM(dimensione), 0) AS n FROM documenti_versioni')).rows[0].n) : undefined
             });
         } catch (e) {
@@ -250,7 +224,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Il file: l'ultima versione, o quella chiesta con ?versione=N.
     app.get('/api/documenti/:id/file', async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const numero = req.query.versione ? parseInt(req.query.versione, 10) : null;
@@ -264,7 +237,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
             if (!v) return res.status(404).json({ message: 'Versione non trovata.' });
             const percorso = path.join(cartellaDocumenti, path.basename(v.file));
             if (!fs.existsSync(percorso)) return res.status(404).json({ message: 'Il file non è più sul server.' });
-            // PDF e immagini si aprono nel browser; il resto si scarica.
             const inLinea = v.tipo === 'application/pdf' || v.tipo.startsWith('image/');
             await inviaFile(res, percorso, { headers: {
                 'X-Content-Type-Options': 'nosniff',
@@ -277,7 +249,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Un documento nuovo, con il suo primo file.
     app.post('/api/documenti', gestione, caricaFile, async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'Scegli il file da caricare.' });
         const campi = leggiCampi(req.body || {});
@@ -319,7 +290,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
              req.file.size, await impronta(req.file.path), testo(req.body?.nota, LIMITE_TESTI.nota), req.user.id, nomeUtente(req.user)]);
     }
 
-    // Una versione nuova: le vecchie restano.
     app.post('/api/documenti/:id/versioni', gestione, caricaFile, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!req.file) return res.status(400).json({ message: 'Scegli il file da caricare.' });
@@ -375,7 +345,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Via il documento con tutte le sue versioni e i loro file.
     app.delete('/api/documenti/:id', gestione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Documento non valido.' });
@@ -392,7 +361,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Le cartelle.
     app.post('/api/documenti-cartelle', gestione, async (req, res) => {
         const nome = testo(req.body?.nome, LIMITE_TESTI.cartella);
         if (!nome) return res.status(400).json({ message: 'Serve un nome.' });
@@ -426,7 +394,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Si toglie solo vuota: i documenti non spariscono per sbaglio.
     app.delete('/api/documenti-cartelle/:id', gestione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Cartella non valida.' });
@@ -443,11 +410,7 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Il collegamento ai beni del magazzino: lo fa chi tiene l'archivio o il magazzino.
     const collega = richiedePermesso('gruppo.documenti', 'magazzino.gestione');
-    // [simili]: anche agli altri beni uguali (stesso tipo e stessa
-    // denominazione, non dismessi): le dieci radio dello stesso modello hanno
-    // lo stesso libretto.
     app.post('/api/documenti/:id/beni', collega, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const bene = parseInt(req.body?.bene_id, 10);
@@ -464,10 +427,6 @@ export function registraRotteDocumenti(app, { emergenzaAttiva }) {
         }
     });
 
-    // Il libretto di un bene caricato dalla sua scheda, senza passare
-    // dall'archivio: un documento nuovo nella cartella dei libretti (creata la
-    // prima volta), per tutti gli interni, collegato al bene (e se si vuole ai
-    // beni uguali). Lo fa chi tiene l'archivio o il magazzino.
     app.post('/api/magazzino/beni/:id/libretto', collega, caricaFile, async (req, res) => {
         const bene = parseInt(req.params.id, 10);
         if (!req.file) return res.status(400).json({ message: 'Scegli il file del libretto.' });

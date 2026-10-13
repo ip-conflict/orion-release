@@ -1,10 +1,5 @@
-// I rischi di una segnalazione presi dalle zone di pericolo della mappa
-// (alluvione, frana, altri pericoli; del piano o disegnate in sala). Quando
-// una segnalazione nasce o si sposta, e quando una zona di pericolo si
-// disegna, si modifica o si toglie, nel campo dei rischi compaiono (o
-// spariscono) le righe che iniziano con PREFISSO. Il resto del campo,
-// scritto a mano, non si tocca. Ogni cambio lascia una nota di sistema nel
-// diario della segnalazione.
+// Le righe dei rischi che iniziano con PREFISSO le scrivono le zone di pericolo; il resto
+// del campo, scritto a mano, non si tocca.
 
 import logger from './logger.js';
 import { pool } from './db.js';
@@ -18,7 +13,6 @@ const ETICHETTA = {
 };
 export const eTipoPericolo = (tipo) => Object.hasOwn(ETICHETTA, tipo);
 
-// Un punto dentro un anello (raggio orizzontale, GeoJSON: [lon, lat]).
 function dentroAnello(lon, lat, anello) {
     let dentro = false;
     for (let i = 0, j = anello.length - 1; i < anello.length; j = i++) {
@@ -29,7 +23,6 @@ function dentroAnello(lon, lat, anello) {
     return dentro;
 }
 
-// Dentro il contorno e fuori dai buchi.
 function dentroPoligono(lon, lat, anelli) {
     if (!Array.isArray(anelli) || !anelli.length || !dentroAnello(lon, lat, anelli[0])) return false;
     return !anelli.slice(1).some(buco => dentroAnello(lon, lat, buco));
@@ -43,7 +36,6 @@ export function contiene(geometria, lat, lon) {
 
 const riga = (z) => `${PREFISSO}${ETICHETTA[z.tipo]}${z.nome ? `: ${z.nome}` : ''}${z.livello ? ` (livello ${z.livello})` : ''}`;
 
-// Il campo dei rischi con le righe delle zone al posto di quelle di prima.
 export function testoRischi(attuale, zone) {
     const scritte = String(attuale || '').split('\n').filter(l => l.trim() && !l.startsWith(PREFISSO));
     const testo = [...zone.map(riga), ...scritte].join('\n').trim();
@@ -68,9 +60,6 @@ function avvisa(reportId, nota) {
     });
 }
 
-// Ricalcola le segnalazioni indicate (o tutte quelle con coordinate
-// dell'emergenza) e scrive solo dove qualcosa cambia. userId: chi ha
-// provocato il cambio, per la nota nel diario.
 export async function aggiornaRischi({ emergencyId, reportIds = null, userId }) {
     if (!emergencyId || !userId) return 0;
     const client = await pool.connect();

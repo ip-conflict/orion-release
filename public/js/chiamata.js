@@ -1,6 +1,3 @@
-// La risposta a una chiamata della sala, aperta dal collegamento dell'email
-// (/chiamata.html?id=N): arrivo, arrivo fra..., non posso; una volta in
-// sede, "Sono arrivato". Dall'app si risponde dalla notifica.
 document.addEventListener('DOMContentLoaded', async () => {
     const scheda = document.getElementById('scheda');
     let id = Number(new URLSearchParams(location.search).get('id'));
@@ -74,8 +71,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         scheda.appendChild(risposte);
     }
 
-    // Aperta senza numero (dal menu, da un segnalibro): la chiamata aperta più
-    // recente per questa persona, se c'è.
     if (!Number.isInteger(id) || id <= 0) {
         let mie = [];
         try { mie = await fetchApi('/api/chiamate/mie'); } catch { /* si dice sotto */ }

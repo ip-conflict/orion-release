@@ -1,5 +1,3 @@
-// tests/quadro.mjs
-//
 // Il quadro della situazione: quello che la sala scrive per chi legge il
 // punto di situazione da fuori (che cosa succede, popolazione coinvolta,
 // servizi interrotti, richieste di supporto, recapito, prossimo
@@ -32,7 +30,6 @@ const errore = (f) => { try { f(); return null; } catch (e) { return e.message; 
 
 console.log('\nQuadro della situazione');
 
-// I controlli sui campi, senza server.
 const q = normalizzaQuadro({ descrizione: '  Piena del torrente  ', evacuati: '12', feriti: 0, dispersi: '', servizi: '   ', prossimo: '2026-10-07T18:00', altro: 'x' });
 verifica('testi ripuliti, numeri interi, vuoti tolti, campi estranei ignorati',
     JSON.stringify(q) === JSON.stringify({ descrizione: 'Piena del torrente', evacuati: 12, feriti: 0, prossimo: '2026-10-07T18:00' }), q);
@@ -71,7 +68,6 @@ try {
     const foglio = (await chiama('/api/situazione', { token: admin })).corpo;
     verifica('finisce nel punto di situazione', foglio?.quadro?.descrizione === dati.descrizione && foglio.quadro.recapito === dati.recapito, foglio?.quadro);
 
-    // Salvare di nuovo sostituisce: un campo svuotato sparisce.
     await chiama('/api/situazione/quadro', { method: 'PUT', token: admin, body: { ...dati, richieste: '', feriti: '' } });
     const dopo = (await chiama('/api/situazione/quadro', { token: admin })).corpo?.quadro;
     verifica('un campo svuotato sparisce', dopo && !('richieste' in dopo) && !('feriti' in dopo) && dopo.evacuati === 12, dopo);

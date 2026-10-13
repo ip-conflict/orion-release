@@ -1,15 +1,5 @@
-// La chiamata dei volontari nel centro operativo (src/chiamate.js):
-//   - il pulsante "Volontari" dell'intestazione, con quanti arrivano e un
-//     segno rosso se c'è qualcuno da chiamare a voce;
-//   - il pannello: chi è in sede senza squadra, chi sta arrivando, chi va
-//     chiamato a voce (col numero), chi non ha ancora risposto, chi non viene;
-//     "È arrivato", "Non viene", "Congeda"; le chiamate fatte, con "Richiama";
-//   - "Chiama volontari": tutti, i reperibili di oggi, chi ha un corso o un
-//     elenco, con il messaggio e il modo di avviso, e prima di mandare quante
-//     persone partiranno e chi resta fuori;
-//   - a chi è stato chiamato, una fascia per rispondere senza lasciare la sala.
-//
-// Il centro operativo chiama Chiamata.emergenza(emergenza) a ogni cambio.
+// La chiamata dei volontari nel centro operativo. Il centro operativo chiama
+// Chiamata.emergenza(emergenza) a ogni cambio.
 
 (function () {
     const STILE = `
@@ -85,7 +75,6 @@
     const nome = (p) => `${p.cognome || ''} ${p.nome || ''}`.trim() || p.username;
 
     let emergenza = null;
-    // L'allertamento di un'attività del calendario: la chiamata senza sala.
     let attivitaCtx = null;
     let quadro = null;
     let velo = null;
@@ -93,7 +82,6 @@
 
     const esterno = () => (typeof ruoliUtente === 'function' ? ruoliUtente() : []).includes('esterno');
 
-    // --- Il pulsante dell'intestazione ------------------------------------------------
     function aggiornaPulsante() {
         const btn = document.getElementById('chiamata-btn');
         if (!btn) return;
@@ -123,11 +111,9 @@
     }
 
 
-    // --- Il pannello ------------------------------------------------------------------
     function chiudiPannello() {
         velo?.remove();
         velo = null;
-        // Fuori dall'allertamento il pannello torna quello della sala.
         if (attivitaCtx) { attivitaCtx = null; caricaQuadro(); }
     }
 
@@ -276,7 +262,6 @@
         velo.replaceChildren(finestra);
     }
 
-    // --- Chi arriva senza chiamata ------------------------------------------------------
     async function apriArrivo() {
         let dati;
         try { dati = await fetchApi(conCtx('/api/chiamate/candidati')); } catch (e) { return notifica(e.message, 'errore'); }
@@ -321,7 +306,6 @@
         cerca.focus();
     }
 
-    // --- Comporre la chiamata ----------------------------------------------------------
     async function apriModulo() {
         let dati;
         try { dati = await fetchApi(conCtx('/api/chiamate/candidati')); } catch (e) { return notifica(e.message, 'errore'); }
@@ -477,7 +461,6 @@
         aggiorna();
     }
 
-    // --- La fascia di chi è stato chiamato ---------------------------------------------
     async function controllaMie() {
         document.querySelector('.ch-mia')?.remove();
         if (!emergenza || esterno()) return;
@@ -508,7 +491,6 @@
         document.body.appendChild(box);
     }
 
-    // --- Avvio ------------------------------------------------------------------------------
     const stile = document.createElement('style');
     stile.textContent = STILE;
     document.head.appendChild(stile);
@@ -525,7 +507,6 @@
                 caricaQuadro();
                 controllaMie();
                 clearInterval(timer);
-                // "Da chiamare" dipende dal tempo che passa: si rilegge ogni mezzo minuto.
                 if (emergenza) timer = setInterval(caricaQuadro, 30000);
             }
             aggiornaPulsante();

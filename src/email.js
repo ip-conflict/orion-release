@@ -1,11 +1,8 @@
-// La posta in uscita, con le impostazioni SMTP prese dal database.
-
 import logger from './logger.js';
 import nodemailer from 'nodemailer';
 import { pool } from './db.js';
 import { decifraTesto } from './cifratura.js';
 
-// I nomi finiscono nel corpo HTML dei riepiloghi: un < o > non deve diventare markup.
 export function escapeHtmlForEmail(value) {
     if (value === null || value === undefined) return '';
     return String(value)
@@ -16,12 +13,10 @@ export function escapeHtmlForEmail(value) {
         .replace(/'/g, '&#039;');
 }
 
-// Le impostazioni SMTP salvate nel pannello.
 async function leggiConfigSmtp() {
     const res = await pool.query("SELECT setting_key, setting_value FROM branding_settings WHERE setting_key LIKE 'smtp_%'");
     const settings = {};
     res.rows.forEach(r => settings[r.setting_key] = r.setting_value);
-    // Nel database è cifrata con la chiave dei dati.
     try {
         if (settings.smtp_pass) settings.smtp_pass = decifraTesto(settings.smtp_pass);
     } catch (e) {
@@ -40,15 +35,12 @@ function creaTrasporto(settings) {
             user: settings.smtp_user,
             pass: settings.smtp_pass
         },
-        // Un server di posta lento non deve bloccare chi aspetta.
         connectionTimeout: 10000,
         greetingTimeout: 10000,
         socketTimeout: 20000
     });
 }
 
-// Un errore di nodemailer detto in parole, con il suggerimento per gli
-// sbagli piu' comuni (porta e SSL scambiati, password normale su Gmail).
 function spiegaErrore(error, settings = {}) {
     const testo = `${error.message || ''} ${error.response || ''}`;
     const porta = parseInt(settings.smtp_port, 10) || 587;
@@ -72,7 +64,7 @@ function spiegaErrore(error, settings = {}) {
     return "Errore sconosciuto di rete.";
 }
 
-// Restituisce { success, error }: un invio fallito non lancia, lo dice.
+// Un invio fallito non lancia, lo dice.
 export async function sendEmailUtility(to, subject, text, html) {
     let settings = {};
     try {
@@ -87,7 +79,6 @@ export async function sendEmailUtility(to, subject, text, html) {
             to: to,
             subject: subject,
             text: text,
-            // Senza HTML esplicito l'email parte solo come testo.
             ...(html ? { html } : {})
         });
 
@@ -102,10 +93,7 @@ export async function sendEmailUtility(to, subject, text, html) {
     }
 }
 
-// L'email di prova del pannello. Le impostazioni arrivano dal modulo, anche
-// non ancora salvate: si prova prima di salvare. Un campo vuoto prende il
-// valore salvato (la password, di solito). Restituisce anche il testo
-// grezzo del server, che aiuta quando il suggerimento non basta.
+// Un campo vuoto prende il valore salvato (la password, di solito): si prova prima di salvare.
 export async function inviaEmailProva(modulo, destinatario) {
     const salvate = await leggiConfigSmtp();
     const settings = {};

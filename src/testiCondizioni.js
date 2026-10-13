@@ -1,12 +1,5 @@
-// Il testo predefinito delle condizioni d'uso, che chi usa ORION legge e
-// accetta al primo accesso e ogni volta che cambiano. Tutela chi lo usa e chi
-// l'ha scritto: dice chi risponde dell'installazione e dei dati, che il
-// programma è fornito così com'è, e quali dati personali restano dopo che una
-// persona viene eliminata (solo quelli che servono all'integrità dello
-// storico). L'amministratore può riscriverlo per intero dalle impostazioni.
-//
-// Il formato è testo semplice: "# " il titolo, "## " un capitolo, una riga
-// vuota fra i paragrafi. Web e app lo impaginano senza interpretare altro.
+// "# " il titolo, "## " un capitolo, una riga vuota fra i paragrafi: web e app non
+// interpretano altro.
 
 export function datiOrganizzazione(impostazioni) {
     return { associazione: String(impostazioni.association_name || '').trim() || "l'organizzazione che lo usa" };

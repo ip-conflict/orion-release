@@ -1,11 +1,4 @@
-/* /public/css/centro-operativo.css - Riorganizzato */
-
-/* ==========================================================================
-   1. Variabili CSS e Stili Globali di Base
-   ========================================================================== */
-/* Le variabili colore (--bg-color, --button-bg, --status-*, ecc.) sono
-   definite in /css/theme.css, caricato prima di questo file su ogni pagina:
-   qui non le si ridefinisce più (vedi nota equivalente in dashboard-admin.css). */
+/* Le variabili colore stanno in theme.css, caricato prima. */
 
 body {
     min-height: 100vh;
@@ -20,13 +13,11 @@ body {
     box-sizing: border-box;
 }
 
-/* L'aspetto dei pulsanti sta in componenti.css, condiviso da tutte le pagine. */
 button:disabled {
     cursor: not-allowed;
     opacity: 0.65;
 }
 
-/* Stile base per elementi form (verrà sovrascritto per modali se necessario) */
 input[type="text"],
 input[type="number"],
 input[type="search"],
@@ -52,16 +43,12 @@ hr {
     margin: 15px 0;
 }
 
-/* ==========================================================================
-   2. Layout Principale
-   ========================================================================== */
 body > header {
     flex-shrink: 0;
     padding: 5px 15px;
     background-color: var(--header-bg);
     border-bottom: 1px solid var(--border-color);
     color: var(--text-color);
-   /* Opzionale: per allineare meglio titolo e link su una riga */
     display: flex;
     align-items: center;
     gap: 15px;
@@ -80,19 +67,8 @@ body > header h1 {
     gap: 15px;
     padding: 15px;
     align-items: stretch;
-  /*  overflow: hidden; */
 }
 
-/* NUOVO: Colonna Sinistra (Mappa + Pannello Dettagli) */
-/*
-.left-column {
-    flex: 1; 
-    display: flex;
-    flex-direction: column; 
-    min-width: 0; */
-    /* L'altezza è determinata dal flex-grow del genitore .layout-container */
-
-/* Colonna Mappa */
 #map-container {
     flex: 1; /* Occupa lo spazio rimanente */
     display: flex;
@@ -109,7 +85,6 @@ body > header h1 {
     background-color: #ddd; /* Placeholder */
 }
 
-/* Colonna Gestione Report (Pannello Laterale) */
 #reports-management {
     flex: 0 1 600px; /* Larghezza fissa (base 450px), non cresce, può ridursi */
     min-width: 400px; /* Larghezza minima */
@@ -134,7 +109,6 @@ body > header h1 {
 
 #report-list-container {
     margin-top: 0; /* Rimuovi spazio sopra il contenitore lista */
-    /* Assicurati che le regole flex per farlo crescere siano ancora qui */
     flex-grow: 1;
     display: flex;
     flex-direction: column;
@@ -145,7 +119,6 @@ body > header h1 {
     width: auto; /* Rimuovi larghezza 100% */
     margin: 0; /* Rimuovi margini precedenti */
     flex-shrink: 0;
-    /* Opzionale: aggiusta padding/font-size se necessario */
     padding: 3px 6px;
     font-size: 0.9em;
 }
@@ -163,7 +136,6 @@ body > header h1 {
     margin: 0 !important; /* Rimuovi eventuali margini di default dei controlli */
 }
 
-/* Mantieni lo stile per l'immagine stessa per controllarne la dimensione */
 .leaflet-control-logo img {
     max-width: 80px; /* O la dimensione che preferisci */
     height: auto;
@@ -179,9 +151,6 @@ body > header h1 {
     line-height: 30px !important; 
 }
 
-/* --- Stili per Marker Personalizzati con DivIcon --- */
-
-/* Contenitore base per le nostre icone DivIcon */
 .report-marker-div-icon {
     position: relative; /* Permette posizionamento assoluto del numero */
     width: 30px;  /* <<< DEVE CORRISPONDERE a iconSize[0] */
@@ -195,8 +164,6 @@ body > header h1 {
     line-height: 1;
 }
 
-/* Immagine di sfondo di default e per stati specifici */
-/* Usa le classi aggiunte dinamicamente nel JS */
 .report-marker-div-icon {
     background-image: url('/leaflet/images/marker-icon.png'); /* Fallback blu standard */
 }
@@ -216,7 +183,6 @@ body > header h1 {
     background-image: url('/assets/icons/marker-icon-grey.png'); /* <<< IMMAGINE PER STATO CLOSED */
 }
 
-/* Stile e Posizionamento del numero ID */
 .report-marker-div-icon .marker-id {
     position: absolute;
     top: 7px;   /* <<< AGGIUSTA: Distanza dall'alto per centrare sulla parte tonda */
@@ -236,32 +202,27 @@ body > header h1 {
     border: 1.5px solid #0B233F;  /* Bordo Blu Scuro PC */
     border-radius: 50%; /* Cerchio */
     box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    /* Dimensioni Cerchio (DEVONO CORRISPONDERE a iconSize in JS) */
+    /* Deve corrispondere a iconSize nel JS. */
     width: 30px; 
     height: 30px; 
     box-sizing: border-box; 
     overflow: hidden; /* Nasconde eccessi triangolo */
-    /* Rimosse le proprietà di testo da qui */
 }
 
-/* Triangolo blu interno (::before) - INVARIATO */
 .team-marker-div-icon::before {
     content: '';
     position: absolute;
     width: 0; 
     height: 0; 
     border-style: solid;
-    /* Dimensioni triangolo */
     border-width: 0 13px 22.5px 13px; 
     border-color: transparent transparent #0B233F transparent; 
-    /* Posizionamento */
     top: 0; 
     left: 50%; 
     transform: translateX(-50%); 
     z-index: 0; /* Sta sotto lo span della lettera */
 }
 
-/* --- NUOVA REGOLA PER LO SPAN DELLA LETTERA --- */
 .team-marker-div-icon .marker-letter {
     position: absolute; /* Posiziona rispetto al cerchio */
     top: 0;
@@ -273,7 +234,6 @@ body > header h1 {
     align-items: center; /* Allinea verticalmente */
     justify-content: center; /* Allinea orizzontalmente */
 
-    /* Stili testo */
     color: white; 
     font-weight: bold;
     font-size: 16px; 
@@ -284,7 +244,6 @@ body > header h1 {
     z-index: 1; /* Metti sopra il ::before */
     pointer-events: none; /* Non bloccare click sul marker */
 
-    /* Evita selezione testo lettera */
     -webkit-user-select: none;
     -ms-user-select: none; 
     user-select: none; 
@@ -297,16 +256,8 @@ body > header h1 {
 
 .team-marker-div-icon.team-marker-stale {
     opacity: 0.6; /* Rende il marker semitrasparente */
-    /* Alternativa: filtro scala di grigi */
-    /* filter: grayscale(80%); */
-    /* Alternativa: cambia colore bordo/sfondo se preferisci */
-    /* border-color: #aaa; */
-    /* background-color: #ccc; */
 }
 
-/* ==========================================================================
-   3. Tabella Segnalazioni (Pannello Laterale)
-   ========================================================================== */
 #report-table-container { /* Nuovo contenitore per scroll tabella */
     flex-grow: 1; /* Occupa spazio rimanente nel pannello laterale */
     overflow-y: auto; /* Scrollbar solo per la tabella */
@@ -336,8 +287,6 @@ body > header h1 {
 #report-table td:nth-child(5) {
     white-space: normal; /* Permette al testo di andare a capo */
    /* word-break: break-word;*/ /* Opzionale: forza l'a capo anche per parole/nomi lunghissimi senza spazi */
-    /* Potresti voler dare una larghezza minima/massima a questa colonna se necessario */
-    /* min-width: 120px; */
 }
 
 #report-table th {
@@ -363,15 +312,12 @@ body > header h1 {
     font-weight: bold;
 }
 
-/* Stili Priorità */
 #report-table .priority-high { border-left: 4px solid var(--priority-high-border); }
 #report-table .priority-medium { border-left: 4px solid var(--priority-medium-border); }
 #report-table .priority-low { border-left: 4px solid var(--priority-low-border); }
-/* Aggiungi padding-left alle celle se usi border-left */
 #report-table td { padding-left: 12px; }
 #report-table td:first-child { padding-left: 8px; } /* Ripristina padding prima cella */
 
-/* Stili Stato (sul testo della cella stato) */
 #report-table .status-new td:nth-child(3),
 #report-table .status-verified td:nth-child(3) { color: var(--status-error-color); font-weight: bold; }
 #report-table .status-assigned td:nth-child(3),
@@ -380,7 +326,6 @@ body > header h1 {
 #report-table .status-closed td:nth-child(3),
 #report-table .status-cancelled td:nth-child(3) { color: var(--status-muted-color); text-decoration: line-through; }
 
-/* Stili per fade out/in tabella report */
 #report-table-wrapper { /* Applichiamo al contenitore con scroll */
    flex-grow: 1;
    overflow-y: auto;
@@ -408,14 +353,11 @@ body > header h1 {
     flex-shrink: 0; /* Non farlo restringere */
 }
 
-/* --- Stile per Segnalazioni Senza Coordinate --- */
 #report-table tbody tr.missing-coords {
     background-color: #fff0f1; /* Sfondo rosa/rosso molto chiaro */
-    /* Alternativa: bordo laterale rosso */
     border-left: 4px solid var(--status-error-color, #dc3545);
 }
 
-/* Rende l'ID più evidente per queste righe */
 #report-table tbody tr.missing-coords td:first-child {
     color: #a3111f; /* Rosso scuro per ID */
     font-weight: bold;
@@ -432,27 +374,17 @@ body > header h1 {
      #report-table tbody tr.missing-coords td:first-child {
          color: #f48fb1; /* Rosa/Rosso chiaro per ID */
      }
-     /* Assicura che il testo normale rimanga leggibile */
      #report-table tbody tr.missing-coords td {
-          /* Il colore testo generale dovrebbe andare bene,
-             ma puoi forzarlo se necessario */
-         /* color: var(--text-color); */
      }
-     /* Sovrascrive l'hover per mantenere l'evidenza */
      #report-table tbody tr.missing-coords:hover {
           background-color: #6b4548; /* Rosso scuro leggermente più chiaro al hover */
      }
-     /* Sovrascrivi riga selezionata se in conflitto col rosso */
       #report-table tbody tr.selected-row.missing-coords {
            background-color: #5a4266 !important; /* Es: Viola scuro? O mantieni il blu di selezione? */
       }
 }
 
-/* ==========================================================================
-   4. Pannello Dettagli Inferiore
-   ========================================================================== */
 #report-detail-bottom-panel {
-    /* RIMUOVI position:fixed, bottom, left, width:100% */
     position: fixed;
     flex-shrink: 0; /* Non farlo restringere verticalmente */
     height: 30vh; /* Altezza desiderata (aggiustabile) */
@@ -494,13 +426,11 @@ body > header h1 {
     display: flex;
     gap: 20px;
     padding: 15px;
-   /* overflow-y: auto; */
     flex-grow: 1;
     height: auto;
     overflow: hidden;
 }
 
-/* La parte alta scorre; il diario resta sempre visibile con un'altezza minima. */
 #bottom-detail-main { overflow-y: auto; overscroll-behavior: contain; }
 #bottom-detail-main p, #bottom-detail-main div { margin-bottom: 8px; }
 #bottom-detail-main strong { display: inline-block; min-width: 110px; font-weight: bold; } /* Etichette */
@@ -540,7 +470,6 @@ body > header h1 {
 }
 #bottom-add-update-form button { align-self: flex-end; }
 
-/* Stili per Anteprime Immagini Report */
 #detail-image-previews {
     display: flex;
     flex-wrap: wrap; /* Manda a capo se non ci stanno */
@@ -571,8 +500,6 @@ body > header h1 {
     padding: 8px;
     font-size: 1.2em; /* Dimensione base icona */
     line-height: 1;
-   /* min-width: 38px;
-    min-height: 38px; */
     margin: 5px;
     justify-content: center;
     gap: 0;
@@ -581,32 +508,19 @@ body > header h1 {
     align-items: center;
     vertical-align: middle;
 }
-/* --- MODIFICATO: Regola più specifica per l'icona e ::before --- */
-/* Applica a tutti gli elementi <i> con classe che inizia per "las" DENTRO .action-buttons .button-style */
 .action-buttons .button-style i.fas {
-    /* Proprietà Font */
-    /*font-family: "Line Awesome Free", sans-serif !important;  Forza il font corretto */
     font-weight: 900 !important; /* Necessario per 'las' (Solid) */
     font-style: normal !important; /* Assicura stile normale */
     font-variant: normal !important;
     text-rendering: auto !important;
     -webkit-font-smoothing: antialiased;
-    /* Proprietà Layout e Aspetto */
     display: inline-block !important; /* Forza display corretto per font icona */
     line-height: 1 !important; /* Centra verticalmente */
     color: inherit !important; /* Eredita colore dal bottone */
-  /*  margin: 0 !important;  Rimuovi margini */
- /*   padding: 0 !important;  Rimuovi padding */
     font-size: inherit !important; /* Usa dimensione font del bottone */
-    /* Rimuovi width/height auto, lascia che sia il font a determinare */
-  /*  width: auto;
-    height: auto; */
     vertical-align: middle; /* Allineamento verticale */
 }
 
-/* ==========================================================================
-   4.1. Pannello Dettagli Inferiore Squadre
-   ========================================================================== */
 #team-status-panel {
     position: fixed;
     bottom: 0;
@@ -637,13 +551,8 @@ body > header h1 {
     gap: 10px; /* Spazio tra elementi squadra */
     overflow-x: auto; /* Scrollbar orizzontale se le squadre non ci stanno */
     padding: 8px 0; /* Padding verticale per gli elementi interni */
-    /* Nasconde scrollbar standard se vuoi un look più pulito (opzionale) */
-    /* scrollbar-width: none;  Firefox */
-    /* -ms-overflow-style: none; IE/Edge */
 }
-/* #team-status-content::-webkit-scrollbar { display: none; } Chrome/Safari/Opera */
 
-/* Stile per singolo elemento squadra nella barra */
 .team-status-item {
     display: inline-block; /* O flex se vuoi più controllo interno */
     padding: 5px 10px;
@@ -674,37 +583,22 @@ body > header h1 {
     font-weight: bold;
 }
 
-/* --- Aggiustamento Padding Body --- */
-/* Aggiunge spazio sotto il contenuto principale per non essere coperto
-   dal pannello fisso #team-status-panel */
 body {
-    /* ... (display: flex, ecc. come prima) ... */
     padding-bottom: 0px; /* <<< AGGIUNGI: Deve corrispondere all'altezza di #team-status-panel */
     box-sizing: border-box; /* Assicura che il padding sia incluso nell'altezza totale */
 }
 
-/* --- Verifica Z-index Pannello Dettagli Report --- */
-/* Assicurati che il pannello dettagli report abbia uno z-index SUPERIORE
-   a quello del pannello stato squadre (es. 1010 vs 1000) */
 #report-detail-bottom-panel {
-    /* ... (position: fixed, ecc.) ... */
     z-index: 1010; /* << Verifica sia > 1000 */
 }
 
-/* --- Z-index Modali --- */
-/* Assicurati che i modali abbiano z-index SUPERIORE a entrambi i pannelli */
 .modal {
-    /* ... */
     z-index: 1050; /* << Verifica sia > 1010 */
 }
 .modal-content {
-     /* ... */
      z-index: 1051;
 }
 
-/* ==========================================================================
-   4.2. Pannello Documenti Emergenza
-   ========================================================================== */
 #emergency-docs-management {
     margin-top: 20px;
     border-top: 2px solid var(--border-color);
@@ -714,7 +608,6 @@ body {
     max-height: 30vh; 
 }
 
-/* Classe per mostrare il pannello via JS */
 #emergency-docs-management.is-visible {
     display: flex;
 }
@@ -725,7 +618,6 @@ body {
     padding-right: 5px; /* Spazio per la scrollbar */
 }
 
-/* Stile per il pulsante quando il pannello è attivo */
 #toggle-docs-panel-btn.is-active {
     background-color: var(--button-bg);
     color: var(--button-text);
@@ -735,7 +627,6 @@ body {
     background-color: var(--button-hover-bg);
 }
 
-/* Stile per ogni elemento della lista documenti */
 .doc-list-item {
     display: flex;
     align-items: center;
@@ -798,7 +689,6 @@ body {
     opacity: 1;
 }
 
-/* Placeholder per lista vuota o in caricamento */
 #emergency-docs-list-container .placeholder-text {
     padding: 20px;
     text-align: center;
@@ -806,7 +696,6 @@ body {
     font-style: italic;
 }
 
-/* Quando il contenitore principale ha la classe 'showing-docs'... */
 #reports-management.showing-docs #report-list-container {
     display: none; /* ...nascondi la lista delle segnalazioni... */
 }
@@ -816,9 +705,6 @@ body {
     flex-grow: 1; /* Permetti al pannello documenti di occupare lo spazio */
 }
 
-/* ==========================================================================
-   5. Stili Generali Modali
-   ========================================================================== */
 .modal {
     display: none; position: fixed; z-index: 1050; left: 0; top: 0;
     width: 100%; height: 100%; overflow: auto;
@@ -843,7 +729,6 @@ body {
 }
 .modal .close:hover { color: #e60000; }
 
-/* Stili elementi form DENTRO i modali */
 .modal-content form label { display: block; margin-bottom: 5px; font-weight: bold; }
 .modal-content form input[type="text"],
 .modal-content form input[type="number"],
@@ -873,18 +758,13 @@ body {
 }
 .modal-content form select[multiple] { min-height: 180px; }
 
-/* Contenitore bottoni finali modale */
 .modal-content form div[style*="text-align: right"] {
      padding-top: 15px; border-top: 1px solid var(--border-color); margin-top: 15px; text-align: right;
 }
 .modal-content form div[style*="text-align: right"] button {
     padding: 10px 20px; margin-left: 10px;
 }
-/* "Annulla" come negli altri modali: il pulsante secondario di componenti.css. */
 
-/* ==========================================================================
-   6. Stili Specifici Modale Assegnazione Squadre
-   ========================================================================== */
 #assignTeamModal .modal-content { max-width: 800px; } /* Più largo */
 #assign-team-container { display: flex; gap: 20px; margin-top: 15px; }
 #assign-team-container > div { /* Colonne */
@@ -920,8 +800,6 @@ body {
 .team-assignment-list .assign-team-btn:disabled { background-color: #a3d3b0; cursor: not-allowed;}
 
 #teamMembersModal .modal-content {
-    /* Usa la classe .small definita sopra o imposta max-width qui */
-    /* max-width: 450px; */
 }
 #teamMembersModalList {
     list-style: none;
@@ -944,32 +822,21 @@ body {
     display: none;
 }
 
-/* ==========================================================================
-   7. Dark Mode Overrides
-   ========================================================================== */
 @media (prefers-color-scheme: dark) {
-    /* Le variabili sono già ridefinite per il dark mode in /css/theme.css:
-       qui restano solo le regole dark specifiche dei componenti di questa pagina. */
-
-    /* Stili generali dark mode (es. link) */
     a { color: var(--link-color); }
 
-    /* Tabella Segnalazioni Dark */
     #report-table tbody tr.selected-row { background-color: #3b5a8a !important; color: #fff !important; }
 
-    /* Pannello Dettagli Inferiore Dark */
     #report-detail-bottom-panel #close-bottom-panel-btn { color: var(--text-color, #888); }
     #report-detail-bottom-panel #close-bottom-panel-btn:hover { color: #eee; }
     #bottom-updates-list li small { color: #aaa; }
 
-    /* Modali Generali Dark */
     .modal .close { color: var(--text-color, #888); }
     .modal .close:hover { color: #eee; }
     .modal-content form input::placeholder,
     .modal-content form textarea::placeholder { color: #bbb; }
     .modal-content form button[type="button"]:not(#enableEditBtn) { color: #eee; } /* Testo Annulla */
 
-    /* Modale Assegnazione Dark */
     #assign-team-container > div { background-color: var(--secondary-bg-color); }
     #assign-team-container h4 { border-bottom-color: var(--border-color); }
     .team-assignment-list { background-color: var(--form-input-bg); border-color: var(--form-input-border); }
@@ -988,8 +855,6 @@ body {
     #team-status-header {
         color: var(--text-color);
     }
-     /* Nascondi scrollbar standard in dark mode */
-     /* #team-status-content { scrollbar-color: #555 #333; } */
 
     .team-status-item.team-assigned {
         background-color: var(--status-assigned-bg);
@@ -1032,23 +897,15 @@ body {
     }
 }
 
-/* ==========================================================================
-   9. Blink Animation
-   ========================================================================== */
-
 .inbox-card.unread-blink {
     transition: background-color 0.4s ease, border-left-color 0.4s ease;
 }
 
-/* Quando il body ha la classe, accendi il rosso */
-/* Il lampeggio segnala "non ancora letta" pulsando lo sfondo. Non tocca più il
-   bordo sinistro, che ora indica stabilmente la priorità: due informazioni
-   diverse non devono contendersi lo stesso segnale. */
+/* Il lampeggio non tocca il bordo sinistro, che indica la priorità. */
 body.sync-blink-state .inbox-card.unread-blink {
     background-color: rgba(239, 68, 68, 0.15) !important;
 }
 
-/* Stessa cosa per i log nel pannello dettagli */
 #bottom-updates-list li.new-log-blink {
     cursor: pointer;
     border-left: 3px solid transparent;
@@ -1063,11 +920,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     border-left-color: var(--priority-high-border, #dc3545) !important;
 }
 
-/* ==========================================================================
-   10. Stampa
-   La stampa della sala è il punto di situazione (situazione.html), con i
-   suoi margini; qui la pagina si stampa com'è, senza menu né finestre.
-   ========================================================================== */
 @media print {
     @page { size: A4 landscape; margin: 10mm; }
     body > header, .modal, #top-menu-content { display: none !important; }
@@ -1089,18 +941,12 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     background-color: var(--button-secondary-hover-bg);
 }
 
-/* ==========================================================================
-   11. Override Stili Leaflet MarkerCluster (Cluster Rossi)
-   ========================================================================== */
-
-/* Colore dell'alone esterno (semitrasparente) per tutti i cluster */
 .marker-cluster-small,
 .marker-cluster-medium,
 .marker-cluster-large {
     background-color: rgba(220, 53, 69, 0.4) !important; 
 }
 
-/* Colore del cerchio interno (più solido) per tutti i cluster */
 .marker-cluster-small div,
 .marker-cluster-medium div,
 .marker-cluster-large div {
@@ -1109,15 +955,11 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     font-weight: bold;
 }
 
-/* Aggiunta di un'ombra per farli risaltare di più sulla mappa */
 .marker-cluster {
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     border-radius: 50%;
 }
 
-/* ==========================================================================
-   STILI TIMELINE / CHAT BUBBLES
-   ========================================================================== */
 .chat-bubble {
     max-width: 85%;
     padding: 10px 14px;
@@ -1134,7 +976,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Messaggi degli altri utenti (Allineati a sinistra, grigio/blu chiaro) */
 .chat-others {
     align-self: flex-start;
     background-color: var(--surface-color, #ffffff);
@@ -1143,7 +984,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     color: var(--text-color);
 }
 
-/* Messaggi dell'utente loggato (Allineati a destra, blu/verde PC) */
 .chat-me {
     align-self: flex-end;
     background-color: #dbeafe; /* Azzurro chiaro */
@@ -1158,7 +998,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
         border-color: #1e40af;
         color: #dbeafe;
     }
-   /* Stili Leaflet Popups per Dark Mode */
     .leaflet-popup-content-wrapper, .leaflet-popup-tip {
         background-color: var(--surface-color);
         color: var(--text-color);
@@ -1172,7 +1011,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     }
 }
 
-/* Messaggi di Sistema (Assegnazioni, Cambi di stato - Centrati, piccoli) */
 .chat-system {
     align-self: center;
     background-color: transparent;
@@ -1194,18 +1032,12 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     justify-content: space-between;
     gap: 15px;
 }
-/* Blocca l'effetto hover sulle card nel pannello dei dettagli per favorire la lettura statica */
 .static-card:hover {
     transform: none !important;
     box-shadow: 0 2px 4px var(--shadow-color-light) !important;
 }
 
-/* ==========================================================================
-   STILI INBOX CARDS (LISTA LATERALE) E LAMPEGGIO SINCRONIZZATO
-   ========================================================================== */
-
-/* L'animazione globale gira in continuazione in background.
-   Così tutti gli elementi che prendono la classe 'unread-blink' pulseranno all'unisono */
+/* Un'animazione globale: tutti gli elementi con unread-blink pulsano all'unisono. */
 @keyframes syncPulse {
     0% { background-color: var(--surface-color); }
     50% { background-color: rgba(239, 68, 68, 0.15); border-left-color: #ef4444; }
@@ -1224,9 +1056,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     gap: 6px;
 }
 
-/* --- Priorità: il bordo sinistro la rende leggibile senza aprire la scheda ---
-   Usa le variabili già definite in theme.css, che hanno la loro variante per il
-   tema scuro: il colore resta corretto qualunque tema scelga l'utente. */
 .inbox-card.prio-alta  { border-left-color: var(--priority-high-border); }
 .inbox-card.prio-media { border-left-color: var(--priority-medium-border); }
 .inbox-card.prio-bassa { border-left-color: var(--priority-low-border); }
@@ -1244,8 +1073,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
 .prio-tag-media { color: var(--priority-medium-text); }
 .prio-tag-bassa { color: var(--priority-low-text); }
 
-/* Squadra assegnata: neutra. Squadra mancante: deve saltare all'occhio, è la
-   cosa che l'operatore deve ancora fare. */
 .squadra-tag {
     display: inline-flex;
     align-items: center;
@@ -1264,9 +1091,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     font-weight: 700;
 }
 
-/* "Non aspetta nessuna squadra": deve leggersi come un'informazione, non come
-   una cosa da fare. Niente riempimento, solo un contorno tenue: sparisce dalla
-   scansione veloce della coda, che è esattamente il punto. */
 .squadra-tag.squadra-non-richiesta {
     background: transparent;
     color: var(--text-muted);
@@ -1274,10 +1098,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     font-weight: 600;
 }
 
-/* Attesa troppo lunga senza squadra: il tempo si accende da solo, e con lui il
-   cartellino "DA ASSEGNARE". La priorità nella pratica resta spesso quella
-   predefinita, quindi questo è l'unico segnale di urgenza che il sistema può
-   alzare da sé: deve pesare quanto un'alta priorità dichiarata. */
 .inbox-time.attesa-critica {
     color: var(--danger-color);
     font-weight: 700;
@@ -1287,9 +1107,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     color: var(--overdue-text);
 }
 
-/* --- Segnalatori di novità ---------------------------------------------------
-   Contatore: quanti aggiornamenti sono arrivati e non hai ancora aperto.
-   Pallino: non hai mai aperto questa segnalazione da quando è cambiata. */
 .segnalatore-novita {
     flex-shrink: 0;
     display: inline-flex;
@@ -1315,7 +1132,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     background: var(--primary-color, #3498db);
 }
 
-/* Contatore sulla sezione che non è in vista (Documenti / Segnalazioni) */
 .badge-sezione {
     display: inline-flex;
     align-items: center;
@@ -1332,9 +1148,6 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     line-height: 1;
 }
 
-/* --- Colonna eventi in tempo reale ------------------------------------------
-   Chi arriva a metà turno, o torna dopo dieci minuti, capisce cosa è successo
-   senza chiedere. Sta sopra la mappa ed è richiudibile con un clic. */
 #pannello-eventi {
     position: absolute;
     top: 0;
@@ -1374,15 +1187,11 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     box-shadow: -4px 0 16px var(--shadow-color, rgba(0,0,0,0.2));
 }
 #pannello-eventi.chiuso #contenuto-eventi { display: none; }
-/* Livelli e ricerca stanno in basso a sinistra: la linguetta sale in cima,
-   alla stessa altezza degli avvisi a comparsa. */
 #pannello-eventi.chiuso #toggle-eventi-btn {
     border-right: 1px solid var(--border-color);
     border-radius: 10px 0 0 10px;
     margin-top: 12px;
 }
-/* A colonna aperta la linguetta sparisce: per chiudere basta la X
-   nell'intestazione. */
 #pannello-eventi:not(.chiuso) #toggle-eventi-btn { display: none; }
 #chiudi-eventi-btn {
     border: none;
@@ -1458,13 +1267,8 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
 .evento-cliccabile { cursor: pointer; }
 .evento-cliccabile:hover { background: var(--list-item-hover-bg); }
 
-/* --- Avvisi a comparsa -------------------------------------------------------
-   In alto a destra, sopra la mappa ma senza coprire i comandi. Non bloccano
-   nulla: chi sta scrivendo l'indirizzo di un intervento continua a scrivere. */
 #contenitore-avvisi {
     position: fixed;
-    /* In cima alla mappa, accanto alla linguetta degli eventi e alla sua
-       altezza (intestazione 60px + 12px). */
     top: 72px;
     right: 136px;
     z-index: 4000;
@@ -1474,10 +1278,7 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     width: min(380px, calc(100vw - 32px));
     pointer-events: none;
 }
-/* Con la colonna eventi aperta tutto quello che sta in alto a destra trasla
-   della larghezza della colonna: i comandi della mappa (livelli, ricerca)
-   hanno uno z-index superiore e le finirebbero sopra, coprendo proprio gli
-   eventi più recenti, e l'avviso a comparsa ne coprirebbe l'intestazione. */
+/* I comandi della mappa hanno uno z-index superiore e finirebbero sopra la colonna aperta. */
 body.eventi-aperti .leaflet-top.leaflet-right,
 body.eventi-aperti .leaflet-bottom.leaflet-right {
     right: 320px;
@@ -1553,7 +1354,6 @@ body.eventi-aperti #contenitore-avvisi {
 }
 .avviso-chiudi:hover { background: var(--list-item-hover-bg); }
 
-/* Separatore fra ciò che avevi già letto e ciò che è arrivato dopo */
 .separatore-nuovi {
     display: flex;
     align-items: center;
@@ -1584,13 +1384,11 @@ body.eventi-aperti #contenitore-avvisi {
     border-left-color: #3b82f6; /* Riga blu per segnalazione selezionata */
 }
 
-/* Classe che attiva il lampeggio per gli aggiornamenti non letti */
 .inbox-card.unread-blink {
     animation: syncPulse 2s infinite ease-in-out;
     border-left-color: #ef4444;
 }
 
-/* Elementi interni della card */
 .inbox-header {
     display: flex;
     justify-content: space-between;
@@ -1601,8 +1399,7 @@ body.eventi-aperti #contenitore-avvisi {
     font-weight: 600;
     font-size: 0.95rem;
     color: var(--text-color);
-    /* Due righe invece di una troncata: la fine del titolo è spesso il luogo,
-       che distingue una segnalazione dall'altra. */
+    /* Due righe invece di una troncata: la fine del titolo è spesso il luogo. */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -1633,13 +1430,10 @@ body.eventi-aperti #contenitore-avvisi {
     margin-top: 4px;
 }
 
-/* Stile per Nascondere la scrollbar nel dock squadre in basso */
 #team-status-content::-webkit-scrollbar {
     display: none;
 }
 
-/* Pulsanti piccoli nella testata della colonna: devono stare accanto al
- * titolo e a "Nuova" senza toccarli. */
 .interruttore-sezione {
     padding: 6px 10px !important;
     font-size: 0.82rem !important;
@@ -1652,7 +1446,6 @@ body.eventi-aperti #contenitore-avvisi {
     gap: 5px;
 }
 
-/* --- Menu di una squadra, dalla barra in basso --- */
 .team-status-item { cursor: pointer; }
 
 .menu-squadra {
@@ -1711,7 +1504,6 @@ body.eventi-aperti #contenitore-avvisi {
 .scorciatoia-squadre:hover { border-color: var(--primary-color, #2563eb); }
 .menu-squadra > *, .elenco-menu-squadra > * { flex-shrink: 0; }
 
-/* Diario di sala: la nota si scrive in cima alla colonna degli eventi. */
 #form-diario-sala {
     flex-shrink: 0;
     display: flex;
@@ -1734,10 +1526,7 @@ body.eventi-aperti #contenitore-avvisi {
 #form-diario-sala button { align-self: flex-end; padding: 4px 14px; }
 #lista-eventi li.evento-sala { border-left-color: var(--warning-color, #e0a800); }
 
-/* ==========================================================================
-   Telefono: la mappa in alto, le segnalazioni sotto. Gli stili della pagina
-   sono in linea, da qui gli !important.
-   ========================================================================== */
+/* Gli stili della pagina sono in linea: da qui gli !important. */
 @media (max-width: 760px) {
     body { height: 100dvh !important; }
     body > header {
@@ -1749,7 +1538,6 @@ body.eventi-aperti #contenitore-avvisi {
     }
     body > header { flex-wrap: nowrap; }
     body > header > div:first-child { gap: 6px !important; min-width: 0; flex: 1 1 auto; }
-    /* Del titolo resta il logo: la scritta ORION non ci sta. */
     body > header h1 { font-size: 0 !important; gap: 0 !important; flex-shrink: 0; }
     body > header h1 img { height: 26px !important; }
     #emergency-status-display {
@@ -1771,7 +1559,6 @@ body.eventi-aperti #contenitore-avvisi {
     body > header > div:last-child { gap: 0 !important; flex-shrink: 0; }
     .leaflet-control-logo img { max-width: 44px !important; }
 
-    /* Due righe: in alto logo, stato dell'emergenza e Menu; sotto i comandi. */
     body > header { flex-wrap: wrap !important; justify-content: flex-start !important; row-gap: 6px !important; column-gap: 6px !important; }
     body > header > div { display: contents !important; }
     body > header h1 { order: 1; }
@@ -1780,7 +1567,6 @@ body.eventi-aperti #contenitore-avvisi {
     body > header::before { content: ''; order: 4; flex-basis: 100%; height: 0; }
     body > header > div > :not(h1):not(#emergency-status-display):not(.top-menu-dropdown) { order: 5; }
     body > header > div > button { padding: 6px 10px !important; font-size: 0.82rem !important; white-space: nowrap; }
-    /* Gli avvisi sotto l'intestazione a due righe, non sopra i suoi pulsanti. */
     #contenitore-avvisi { top: calc(var(--fondo-testata, 112px) + 6px) !important; right: 8px !important; left: 8px; max-width: none !important; }
 
     #area-lavoro { flex-direction: column; }
@@ -1811,18 +1597,12 @@ body.eventi-aperti #contenitore-avvisi {
     }
     #team-status-header { margin-right: 8px !important; }
 
-    /* Il dettaglio di una segnalazione prende tutta l'area sotto l'intestazione. */
     body.dettaglio-aperto #reports-inbox-sidebar { display: none !important; }
     body.dettaglio-aperto #map-container { flex: 1 1 auto !important; }
     #report-detail-side-panel { max-width: none !important; }
 }
 
-/* ==========================================================================
-   Strumenti della mappa: ricerca e livelli in basso a sinistra, riquadro
-   delle squadre, percorso verso la segnalazione.
-   ========================================================================== */
 .leaflet-bottom.leaflet-left .leaflet-control { margin-left: 12px; margin-bottom: 12px; }
-/* La barra delle squadre non arriva sotto ai comandi degli angoli. */
 #team-status-panel { max-width: min(800px, calc(100% - 150px)) !important; }
 
 .ricerca-mappa {
@@ -1894,7 +1674,6 @@ body.eventi-aperti #contenitore-avvisi {
 .ricerca-dettaglio { grid-column: 2; font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ricerca-nota { font-size: 0.8rem; color: var(--text-muted); padding: 6px 10px; }
 
-/* I livelli come la ricerca: stessa forma. */
 .leaflet-bottom.leaflet-left .leaflet-control-layers {
     border-radius: 10px;
     border: 1px solid var(--border-color);
@@ -1906,7 +1685,6 @@ body.eventi-aperti #contenitore-avvisi {
     width: 38px !important; height: 38px !important; border-radius: 10px;
 }
 
-/* --- Il riquadro di una squadra ------------------------------------------- */
 .popup-orion .leaflet-popup-content-wrapper {
     background: var(--surface-color);
     color: var(--text-color);
@@ -1943,15 +1721,12 @@ body.eventi-aperti #contenitore-avvisi {
 .rs-azioni { display: flex; gap: 8px; justify-content: flex-end; }
 .rs-azioni .button-style { padding: 6px 12px; font-size: 0.85rem; }
 
-/* La squadra appena cercata pulsa per qualche istante. */
 .team-marker-div-icon.team-marker-cercato { animation: squadraCercata 0.8s ease-out 4; }
 @keyframes squadraCercata {
     0%   { box-shadow: 0 0 0 0 rgba(36, 119, 179, 0.7); }
     100% { box-shadow: 0 0 0 18px rgba(36, 119, 179, 0); }
 }
 
-/* --- Il percorso in corso di visione -------------------------------------- */
-/* In basso, sopra la barra delle squadre: in alto stanno gli avvisi. */
 #info-percorso {
     position: absolute;
     bottom: 88px;
@@ -1980,7 +1755,6 @@ body.eventi-aperti #contenitore-avvisi {
 #info-percorso button:hover { color: var(--text-color); }
 
 @media (max-width: 760px) {
-    /* Sopra alla barra delle squadre, che sul telefono prende tutta la larghezza. */
     .leaflet-bottom.leaflet-left { bottom: 64px; }
     .ricerca-campo { width: min(240px, calc(100vw - 90px)); }
     .ricerca-risultati { width: min(300px, calc(100vw - 32px)); }
@@ -1988,10 +1762,8 @@ body.eventi-aperti #contenitore-avvisi {
     #team-status-panel { max-width: none !important; }
 }
 
-/* Le sigle delle funzioni di supporto al lavoro sulla segnalazione. */
 .inbox-funzioni { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
 
-/* Il sigillo dello storico alla chiusura dell'emergenza */
 dialog.sigillo-chiusura {
     max-width: 560px; width: calc(100% - 32px); border: 1px solid var(--border-color); border-radius: 12px;
     padding: 22px 24px; background: var(--surface-color, var(--bg-color)); color: var(--text-color);
@@ -2008,7 +1780,6 @@ dialog.sigillo-chiusura code {
 dialog.sigillo-chiusura .sigillo-azioni { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
 dialog.sigillo-chiusura .sigillo-esito { font-size: 0.85rem; color: var(--success-text); }
 
-/* Il caposquadra: stella, nome e telefono da chiamare se la radio non va. */
 .contatto-caposquadra { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
 .contatto-caposquadra .fa-star, .membro-squadra.caposquadra .stella-caposquadra { color: #d97706; }
 .contatto-caposquadra a, .membro-squadra a { font-weight: 600; color: var(--link-color); white-space: nowrap; }
@@ -2022,16 +1793,11 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 #teamMembersModalList .membro-squadra.caposquadra .stella-caposquadra,
 #teamMembersModalList button.stella-caposquadra:hover,
 #teamMembersModalList button.stella-caposquadra:focus-visible { color: #d97706; background: none; }
-/* Le squadre assegnate a una segnalazione, con il loro caposquadra. */
 .squadra-assegnata { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .squadra-assegnata-capo { font-size: 0.85rem; }
 
-/* Il menu in alto a destra: una voce per riga, sempre. */
 #top-menu-content > a { width: 100%; box-sizing: border-box; white-space: nowrap; }
 
-/* ==========================================================================
-   Segnaposto delle segnalazioni: colore per situazione, anello per le novità
-   ========================================================================== */
 :root {
     --sit-da-assegnare: #dc2626;
     --sit-con-squadra: #2563eb;
@@ -2056,8 +1822,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 }
 .pin-segnalazione.prio-alta .marker-id { top: 8px; font-size: 15px; }
 
-/* Novità non viste: prevalgono su tutto. Il segnaposto salta e un anello
-   giallo pulsa attorno alla testa: si vede su ogni colore e su ogni mappa. */
 .anello-novita {
     display: none; position: absolute; left: 50%; top: 14px;
     width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%;
@@ -2070,7 +1834,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 @keyframes anelloNovita { 0% { transform: scale(0.55); opacity: 1; } 100% { transform: scale(1.45); opacity: 0; } }
 @keyframes saltoNovita { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 
-/* Un gruppo di segnaposto vicini: il colore della situazione più urgente. */
 .gruppo-segnalazioni {
     position: relative; width: 38px; height: 38px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -2085,9 +1848,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 .gruppo-segnalazioni .anello-novita { top: 50%; }
 .gruppo-segnalazioni.con-novita { animation: saltoNovita 1.2s ease-in-out infinite; }
 
-/* ==========================================================================
-   Ultima notizia sulla scheda: una riga sola, il resto si tronca
-   ========================================================================== */
 .inbox-ultima {
     display: flex; align-items: baseline; gap: 6px; min-width: 0;
     font-size: 0.78rem; color: var(--text-color); line-height: 1.3;
@@ -2100,9 +1860,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 }
 .inbox-card[hidden] { display: none !important; }
 
-/* ==========================================================================
-   Riepilogo sopra l'elenco: conteggi e filtri, con i colori dei segnaposto
-   ========================================================================== */
 .riepilogo-segnalazioni { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .voce-riepilogo {
     display: inline-flex; align-items: center; gap: 5px;
@@ -2122,8 +1879,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 .voce-novita .pallino-riepilogo { background: var(--novita-anello); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
 .voce-novita.con-novita { border-color: #ef4444; animation: syncPulse 2s infinite ease-in-out; }
 
-/* Menu di stato e priorità: chiuso ha il tono della voce scelta, aperto
-   ogni voce ha il suo, così si vede subito che cosa si sta scegliendo. */
 .scelta-colorata { border: 1px solid; }
 .scelta-colorata.tono-rosso, .scelta-colorata option.tono-rosso { color: #b91c1c; background-color: #fee2e2; border-color: #fca5a5; }
 .scelta-colorata.tono-ambra, .scelta-colorata option.tono-ambra { color: #92400e; background-color: #fef3c7; border-color: #fde68a; }
@@ -2131,8 +1886,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 .scelta-colorata.tono-grigio, .scelta-colorata option.tono-grigio { color: #475569; background-color: #f1f5f9; border-color: #cbd5e1; }
 .scelta-colorata option { font-weight: 700; }
 
-/* Gli avvisi restano finché qualcuno li chiude: se sono tanti, la colonna
-   scorre invece di uscire dallo schermo, e in cima c'è "Chiudi tutti". */
 #contenitore-avvisi { max-height: calc(100vh - 160px); overflow-y: auto; overscroll-behavior: contain; }
 .avvisi-chiudi-tutti {
     pointer-events: auto; align-self: flex-end;
@@ -2143,9 +1896,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 }
 .avvisi-chiudi-tutti:hover { background: var(--list-item-hover-bg); }
 
-/* Con molti pulsanti nell'intestazione, sotto i 1440 pixel il nome va sotto
-   l'icona, piccolo: le icone da sole non dicono niente a chi non le conosce,
-   e lo stato dell'emergenza non si schiaccia. */
 @media (max-width: 1440px) {
     body > header .etichetta-testata { display: none; }
     body > header button:has(> .etichetta-testata) {
@@ -2157,8 +1907,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
     }
 }
 
-/* Rete scarsa: la fascia che dice che il server non risponde, cosa si sta
-   guardando e cosa aspetta di partire. */
 #rete-scarsa {
     position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 99990;
     width: min(760px, calc(100vw - 24px)); margin-top: 6px; padding: 8px 12px;
@@ -2185,9 +1933,6 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
 #rete-scarsa .rete-elenco li small { opacity: .8; }
 #rete-scarsa .rete-elenco li button { margin-left: auto; }
 
-/* Fra telefono e schermo largo i comandi, con il nome sotto l'icona, non
-   stanno sulla riga del logo e dello stato dell'emergenza: vanno a capo,
-   allineati a destra, invece di uscire dallo schermo. */
 @media (min-width: 761px) and (max-width: 1180px) {
     body > header { height: auto !important; min-height: 60px; flex-wrap: wrap !important; row-gap: 6px; padding: 6px 20px !important; }
     body > header > div:last-child { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }

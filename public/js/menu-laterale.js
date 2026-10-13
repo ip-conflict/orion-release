@@ -1,6 +1,4 @@
-// La barra laterale comune a tutte le pagine di lavoro; le pagine aggiungono in
-// fondo solo le proprie voci. Va caricato dopo apiHelper.js e prima dello
-// script della pagina.
+// Va caricato dopo apiHelper.js e prima dello script della pagina.
 (function () {
     const menu = document.querySelector('.admin-sidebar .sidebar-menu');
     if (!menu || typeof haRuolo !== 'function') return;
@@ -10,8 +8,7 @@
     const esterno = !admin && ruoli.includes('esterno');
     const puo = (...codici) => (typeof haPermesso === 'function' ? haPermesso(...codici) : admin);
 
-    // [id, indirizzo, icona, testo, chi la vede]. "moduli" arriva dopo, dalle
-    // impostazioni pubbliche: finché non si sa se il modulo è acceso, la voce
+    // [id, indirizzo, icona, testo, chi la vede]. Finché non si sa se il modulo è acceso, la voce
     // resta nascosta.
     const VOCI = [
         ['sidebar-centro', '/centro-operativo.html', 'fa-tachometer-alt', 'Centro Operativo', () => true],
@@ -91,8 +88,7 @@
         voci.forEach(({ li, vede }) => { li.style.display = vede(moduli) ? 'block' : 'none'; });
     }
 
-    // I moduli accesi dell'ultima pagina, per non far lampeggiare il menu
-    // mentre arrivano le impostazioni.
+    // Per non far lampeggiare il menu mentre arrivano le impostazioni.
     const CHIAVE = 'orion.menu.moduli';
     let ricordati = null;
     try { ricordati = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); } catch { /* niente */ }
@@ -133,7 +129,6 @@
             };
             mostra(moduli);
             try { localStorage.setItem(CHIAVE, JSON.stringify(moduli)); } catch { /* niente */ }
-            // Ruoli e permessi possono essere cambiati dall'ultimo accesso.
             if (typeof fetchApi === 'function' && typeof salvaRuoliEPermessi === 'function') {
                 fetchApi('/api/me/status').then(stato => { salvaRuoliEPermessi(stato); mostra(moduli); }).catch(() => {});
             }
@@ -141,8 +136,6 @@
         .catch(() => { /* senza impostazioni restano le voci di base */ });
 })();
 
-// Sul telefono una tabella più larga dello schermo diventa un elenco di schede,
-// così i pulsanti a destra restano visibili.
 (function () {
     const stretto = window.matchMedia('(max-width: 700px)');
     let inAttesa = false;

@@ -1,5 +1,3 @@
-// Loghi, impostazioni dell'associazione e registro delle operazioni.
-
 import fs from 'fs';
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
@@ -27,7 +25,6 @@ export function registraRotteImpostazioni(app) {
         }
         if (!(await verifySingleUploadedImage(req, res, ['image/jpeg', 'image/png', 'image/gif']))) return;
 
-        // Solo ora, verificato, sostituisce il logo in uso.
         try {
             await fs.promises.rename(req.file.path, LOGO_FILE_PATH);
         } catch (error) {
@@ -80,7 +77,6 @@ export function registraRotteImpostazioni(app) {
         });
     });
 
-    // Tutte le impostazioni, credenziali SMTP comprese: solo per l'amministratore.
     app.get('/api/branding/settings/full', checkAdminRole, async (req, res) => {
         try {
             const result = await pool.query('SELECT setting_key, setting_value FROM branding_settings');
@@ -88,11 +84,9 @@ export function registraRotteImpostazioni(app) {
                 acc[row.setting_key] = row.setting_value;
                 return acc;
             }, {});
-            // La password della posta non torna al browser: si dice solo se
-            // c'è. Un campo lasciato vuoto al salvataggio la lascia com'è.
+            // La password della posta non torna al browser.
             settings.smtp_pass_impostata = !!settings.smtp_pass;
             delete settings.smtp_pass;
-            // Firebase ha la sua pagina: la chiave non esce mai.
             for (const k of CHIAVI_FIREBASE) delete settings[k];
             res.status(200).json(settings);
         } catch (error) {
@@ -101,9 +95,7 @@ export function registraRotteImpostazioni(app) {
         }
     });
 
-    // Le chiavi che scrive solo il programma: lo stato degli aggiornamenti porta
-    // l'indirizzo del pacchetto e la sua impronta, e si cambia solo dalla pagina
-    // Sistema, che li verifica.
+    // Lo stato degli aggiornamenti porta l'indirizzo del pacchetto: lo scrive solo la pagina Sistema.
     const CHIAVI_INTERNE = new Set(['aggiornamenti_config', 'aggiornamenti_stato', 'cifratura_impronta', 'cifratura_recupero_salvata',
         'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il', ...CHIAVI_FIREBASE]);
 
@@ -130,13 +122,10 @@ export function registraRotteImpostazioni(app) {
             for (const key in settingsToUpdate) {
                 if (Object.hasOwnProperty.call(settingsToUpdate, key)) {
                     let value = settingsToUpdate[key];
-                    // La password della posta: vuota vuol dire "non cambiarla";
-                    // nel database va cifrata con la chiave dei dati.
                     if (key === 'smtp_pass') {
                         if (value == null || String(value).trim() === '') continue;
                         value = cifraTesto(String(value));
                     }
-                    // Il modello del tesserino: si salva solo ripulito.
                     if (key === 'badge_modello') {
                         try {
                             value = validaModelloTesserino(value);
@@ -150,7 +139,6 @@ export function registraRotteImpostazioni(app) {
                     if (key === 'minuti_attesa_critica' && String(value).trim() !== '') {
                         const minuti = Number(value);
                         if (!Number.isInteger(minuti) || minuti < 1 || minuti > MINUTI_ATTESA_CRITICA_MAX) {
-                            // Il client lo rilascia il finally.
                             await client.query('ROLLBACK');
                             return res.status(400).json({ message: `I minuti di attesa prima della segnalazione in ritardo devono essere un numero intero fra 1 e ${MINUTI_ATTESA_CRITICA_MAX}.` });
                         }
@@ -170,9 +158,8 @@ export function registraRotteImpostazioni(app) {
             logger.info(`Admin ${req.user.username} ha aggiornato le impostazioni di branding.`);
 
             res.status(200).json({ message: 'Impostazioni aggiornate con successo.' });
-            // Non registriamo i valori: fra le impostazioni ci sono le credenziali SMTP.
+            // Non si registrano i valori: fra le impostazioni ci sono le credenziali SMTP.
             registraAudit(req, 'impostazioni.modificate', { tipo: 'impostazioni', dettagli: { chiavi: Object.keys(settingsToUpdate) } });
-            // Regione nuova: il bollettino si legge subito (dentro ci sono le sue zone).
             if (settingsToUpdate.allerta_regione && settingsToUpdate.allerta_regione !== regioneSalvata) controllaAllerta({ forza: true });
 
         } catch (error) {
@@ -183,8 +170,6 @@ export function registraRotteImpostazioni(app) {
             client.release();
         }
     });
-    // L'email di prova: con le impostazioni del modulo, anche non salvate,
-    // all'indirizzo indicato o a quello dell'amministratore.
     app.post('/api/admin/email-prova', checkAdminRole, async (req, res) => {
         const corpo = (req.body && typeof req.body === 'object') ? req.body : {};
         let a = typeof corpo.a === 'string' ? corpo.a.trim() : '';
@@ -205,8 +190,6 @@ export function registraRotteImpostazioni(app) {
             res.status(500).json({ message: 'Errore interno del server.' });
         }
     });
-
-    // Il registro delle operazioni, per l'amministratore.
 
     app.get('/api/admin/audit-log', checkAdminRole, async (req, res) => {
         const pagina = Math.max(parseInt(req.query.page, 10) || 1, 1);

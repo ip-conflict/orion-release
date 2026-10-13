@@ -1,5 +1,3 @@
-// tests/cifratura.mjs
-//
 // La cifratura vista dal disco: un certificato caricato non è in chiaro ma si
 // riscarica uguale; un backup è cifrato, si verifica, e una sua copia alterata
 // viene rifiutata; la chiave di recupero si mostra solo con la password e
@@ -43,7 +41,6 @@ console.log('\nCifratura');
 let stato = (await api('/api/sistema/cifratura')).corpo;
 verifica('la cifratura è attiva', stato?.stato === 'pronta', stato);
 
-// 1. Un certificato: cifrato sul disco, uguale quando si riscarica.
 const pdf = Buffer.from('%PDF-1.4\n% certificato di prova per la cifratura\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
 const tipi = (await api('/api/admin/medical-visit-types')).corpo;
 let tipoVisita = tipi?.[0]?.id;
@@ -63,7 +60,6 @@ const scaricato = await api(visita.document_url);
 verifica('e si riscarica identico', scaricato.stato === 200 && Buffer.compare(scaricato.corpo, pdf) === 0, { stato: scaricato.stato, lunghezza: scaricato.corpo?.length });
 await api(`/api/admin/medical-records/${visita.id}`, { method: 'DELETE' });
 
-// 2. Un backup: cifrato, si verifica; una copia alterata no.
 const fatto = await api('/api/sistema/backup', { method: 'POST' });
 const elenco = (await api('/api/sistema/backup')).corpo.backup;
 const backup = elenco.find(b => b.cartella === 'app');
@@ -80,7 +76,6 @@ v = (await api(`/api/sistema/backup/app/${alterato}/verifica`, { method: 'POST' 
 verifica('una copia alterata del backup viene rifiutata', v?.valido === false, v);
 fs.rmSync(path.join(cartella, alterato), { force: true });
 
-// 3. La chiave di recupero: solo con la password, e decifra davvero i backup.
 let r = await api('/api/sistema/cifratura/recupero', { method: 'POST', body: { password: 'sbagliata' } });
 verifica('la chiave di recupero non si mostra con la password sbagliata', r.stato === 403, r.stato);
 r = await api('/api/sistema/cifratura/recupero', { method: 'POST', body: { password: PASSWORD } });
@@ -94,7 +89,6 @@ const testo = zlib.gunzipSync(fs.readFileSync(uscita)).toString('utf8', 0, 2000)
 verifica('con la chiave di recupero il backup si decifra fuori da ORION', /PostgreSQL database dump/.test(testo), testo.slice(0, 80));
 fs.rmSync(path.dirname(uscita), { recursive: true, force: true });
 
-// 4. La password della posta: cifrata nel database, mai al browser.
 const prima = (await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'smtp_pass'")).rows[0]?.setting_value ?? null;
 await api('/api/branding/settings', { method: 'PUT', body: { smtp_pass: 'segreta-di-prova' } });
 const nelDb = (await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'smtp_pass'")).rows[0]?.setting_value;

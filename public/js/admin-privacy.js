@@ -1,7 +1,3 @@
-// Impostazioni › Condizioni d'uso: il testo (vuoto = quello proposto da
-// ORION) e chi non ha ancora accettato la versione in vigore. "Pubblica" crea
-// una versione nuova, che tutti accettano di nuovo.
-
 (function () {
     const $ = (id) => document.getElementById(id);
     if (!$('pannello-privacy')) return;

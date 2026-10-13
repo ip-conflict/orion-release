@@ -1,11 +1,5 @@
-// Genera il catalogo delle zone d'allerta di una Regione (codice, nome,
-// comuni, confine semplificato) dai dati aperti del Dipartimento della
-// Protezione Civile. Da rilanciare quando la Regione ridisegna le sue zone.
-//
+// Genera src/dati/zone-allerta/<regione>.json dai dati aperti del DPC.
 //   node scripts/zone-allerta.mjs veneto
-//
-// Scrive src/dati/zone-allerta/<regione>.json. La Regione deve essere già
-// fra quelle di src/allertaRegioni.js.
 
 import fs from 'fs';
 import path from 'path';
@@ -27,7 +21,6 @@ async function scarica(url) {
     return Buffer.from(await r.arrayBuffer());
 }
 
-// Douglas-Peucker su un anello, tenendo chiuso il giro.
 function semplifica(punti) {
     if (punti.length <= 4) return punti;
     const tieni = new Array(punti.length).fill(false);

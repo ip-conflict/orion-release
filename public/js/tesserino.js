@@ -1,32 +1,14 @@
-// Il tesserino da divisa (formato CR80, 86x54 mm, cioè 243x153 punti PDF),
-// disegnato da un modello che l'amministratore può personalizzare: i colori
-// delle fasce e delle scritte, i due testi fissi, e se vuole la posizione e la
-// dimensione di ogni elemento.
-//
-// Il disegno si calcola una volta sola, come elenco di forme (rettangoli,
-// testi, immagini, QR, barre), e poi si traduce in due modi: in pdfMake per la
-// stampa e in SVG per l'anteprima del configuratore. Così quello che si vede
-// nel configuratore è quello che esce dalla stampante.
-//
-// Il modello:
-//   { colori: { fascia_alta: '#0b1f3a', ... },
-//     testi: { titolo: 'PROTEZIONE CIVILE', qualifica: 'VOLONTARIO' },
-//     posizioni: null | { qr: { x, y, w, h }, ... },
-//     nascosti: ['bandiera_ue', ...] }
-// Con posizioni null gli elementi si dispongono da soli e si adattano a quello
-// che c'è (QR, codice fiscale, nome dell'ente); con posizioni salvate restano
-// dove li ha messi l'amministratore, e quello che manca lascia il suo spazio.
-//
-// Va caricato dopo pdfmake e vfs_fonts (per i caratteri) e codice-barre.js.
+// Il disegno si calcola una volta, come elenco di forme, e si traduce in pdfMake per la
+// stampa e in SVG per il configuratore: quello che si vede è quello che si stampa.
+// Va caricato dopo pdfmake, vfs_fonts e codice-barre.js.
 
 (function () {
     const W = 243, H = 153;
-    // Un punto di una stampante per tesserini a 300 dpi.
+    // Una stampante per tesserini a 300 dpi.
     const PUNTO = 72 / 300;
-    // Code 128 di un codice fiscale: 16 caratteri, sempre 211 moduli, più
-    // dieci moduli bianchi per lato perché il lettore trovi l'inizio.
+    // Code 128 di un codice fiscale: sempre 211 moduli, più dieci bianchi per lato.
     const MODULI_CF = 211, RISPETTO = 10;
-    // Roboto, il carattere di pdfMake: altezza della riga e linea di base.
+    // Roboto, il carattere di pdfMake.
     const RIGA = 1.2, ASCESA = 0.928;
 
     const COLORI = {
@@ -46,9 +28,6 @@
     };
     const TESTI = { titolo: 'PROTEZIONE CIVILE', qualifica: 'VOLONTARIO' };
 
-    // Gli elementi, nell'ordine in cui si disegnano (i primi stanno sotto).
-    // min: la dimensione sotto cui non si scende (in punti); nascondibile: si
-    // può togliere dal tesserino; colori: quelli che lo riguardano.
     const ELEMENTI = [
         { id: 'fascia_alta', nome: 'Fascia in alto', fascia: true, min: [20, 6], nascondibile: true, colori: ['fascia_alta'] },
         { id: 'fascia_ente', nome: "Fascia dell'ente", fascia: true, min: [20, 6], nascondibile: true, colori: ['fascia_ente'] },
@@ -67,10 +46,6 @@
     ];
     const PER_ID = Object.fromEntries(ELEMENTI.map(e => [e.id, e]));
 
-    // Le posizioni automatiche: il layout A, con QR e loghi in alto e sotto il
-    // codice a barre largo quanto lo spazio a sinistra della foto. Senza QR la
-    // colonna centrale si allarga; senza codice fiscale QR e loghi prendono
-    // tutta la zona bianca.
     function automatiche(v) {
         const NAVY_H = 32, TEAL_Y = 104, TEAL_H = 18, YELLOW_Y = 122;
         const BIANCO_Y = NAVY_H, BIANCO_H = TEAL_Y - NAVY_H;
@@ -99,8 +74,6 @@
             bandiera_ue: { x: UE_X, y: B_Y, w: B_W, h: B_H }
         };
     }
-
-    // ---- Il modello: si accetta solo quello che ha senso ----------------------
 
     const COLORE = /^#[0-9a-f]{6}$/i;
     function normalizza(grezzo) {
@@ -132,15 +105,12 @@
         return { colori, testi, posizioni, nascosti };
     }
 
-    // ---- Misura dei testi, con lo stesso carattere del PDF ----------------------
-
     let misuratore = null;
     let pronto = null;
     function caratteri() {
         if (pronto) return pronto;
         pronto = (async () => {
-            // vfs_fonts.js dichiara i caratteri in una variabile globale "vfs";
-            // pdfMake 0.2 li copia dentro di sé senza esporli.
+            // vfs_fonts.js dichiara una globale "vfs"; pdfMake 0.2 la copia senza esporla.
             const vfs = window.pdfMake?.vfs || window.vfs;
             if (!vfs || typeof FontFace === 'undefined') return false;
             const carica = async (famiglia, file) => {
@@ -160,16 +130,12 @@
         })();
         return pronto;
     }
-    // Larghezza del testo a un punto di corpo, in punti.
     function larghezza(testo, grassetto) {
         if (!misuratore) return testo.length * (grassetto ? 0.64 : 0.56);
         misuratore.font = `100px ${grassetto ? 'OrionTesserinoMedium' : 'OrionTesserinoRegular'}`;
         return misuratore.measureText(testo).width / 100;
     }
 
-    // ---- Il disegno -----------------------------------------------------------
-
-    // Un testo su una riga, il più grande che sta nel riquadro.
     function testo(p, contenuto, o) {
         const spazio = o.spaziatura || 0;
         const perPunto = larghezza(contenuto, o.grassetto) + spazio * contenuto.length;
@@ -179,7 +145,6 @@
     }
 
     function segnapostoFoto(p) {
-        // La sagoma: testa e spalle, le spalle tagliate al bordo del riquadro.
         const cx = p.x + p.w / 2, cy = p.y + p.h * (68 / 66), r = p.w * 0.4;
         const a0 = Math.asin(Math.max(-1, Math.min(1, (p.y + p.h - cy) / r)));
         const punti = Array.from({ length: 41 }, (_, k) => {
@@ -194,15 +159,13 @@
     }
 
     function bandiera(p, europea) {
-        // Proporzioni ufficiali 3:2, centrata nel riquadro.
+        // Proporzioni ufficiali 3:2.
         const w = Math.min(p.w, p.h * 1.5), h = w / 1.5, x = p.x + (p.w - w) / 2, y = p.y + (p.h - h) / 2;
         if (!europea) return [
             { tipo: 'rett', x, y, w: w / 3, h, colore: '#009246' },
             { tipo: 'rett', x: x + w / 3, y, w: w / 3, h, colore: '#ffffff' },
             { tipo: 'rett', x: x + 2 * w / 3, y, w: w / 3, h, colore: '#ce2b37' }
         ];
-        // Dodici stelle d'oro su un cerchio di raggio un terzo dell'altezza,
-        // ognuna larga un nono dell'altezza, con una punta verso l'alto.
         const stella = (sx, sy, r) => ({
             tipo: 'poligono', colore: '#ffcc00',
             punti: Array.from({ length: 10 }, (_, k) => {
@@ -228,8 +191,7 @@
         const inizio = Math.round((p.x + (p.w - barre.moduli * modulo) / 2) / PUNTO) * PUNTO;
         const margine = RISPETTO * modulo;
         return [
-            // Sempre su bianco, con il suo margine: su un colore il lettore non
-            // legge. Il bianco copre le barre e i margini, non tutto il riquadro.
+            // Su un colore il lettore non legge.
             { tipo: 'rett', x: inizio - margine, y: p.y, w: barre.moduli * modulo + 2 * margine, h: p.h, colore: '#ffffff' },
             { tipo: 'barre', x: inizio, y: p.y, h: altezza, modulo, barre },
             { tipo: 'testo', x: p.x, y: p.y + altezza + 1, w: p.w, h: corpoTesto * RIGA, corpo: corpoTesto, testo: cf,
@@ -237,21 +199,16 @@
         ];
     }
 
-    // Che cosa c'è su questo tesserino: dipende dai dati e dalle impostazioni.
     function varianti(dati) {
         return { qr: !!dati.qr, codice: !!dati.cf, ente: !!String(dati.ente || '').trim() };
     }
 
-    // Dove sta ogni elemento, per questi dati.
     function posizioni(modello, v) {
         const m = normalizza(modello);
         if (!m.posizioni) return automatiche(v);
         return { ...automatiche({ qr: true, codice: true, ente: true }), ...m.posizioni };
     }
 
-    // Le forme del tesserino, dal basso verso l'alto.
-    //   dati: { nome, distretto, ente, qualifica?, foto (dataURL)?, qr (indirizzo)?,
-    //           qrImmagine (dataURL, solo anteprima)?, cf?, loghi: [dataURL...] }
     function componi(modello, dati) {
         const m = normalizza(modello);
         const v = varianti(dati);
@@ -304,8 +261,6 @@
         return { forme, posizioni: pos, varianti: v, modello: m };
     }
 
-    // ---- In pdfMake -------------------------------------------------------------
-
     function inPdf(disegno) {
         const sfondo = [], contenuto = [];
         for (const f of disegno.forme) {
@@ -319,8 +274,7 @@
                     break;
                 }
                 case 'testo':
-                    // Una colonna larga quanto il riquadro: con la sola posizione
-                    // assoluta pdfMake centrerebbe sul resto della pagina.
+                    // Con la sola posizione assoluta pdfMake centrerebbe sul resto della pagina.
                     contenuto.push({ columns: [{ width: f.w, text: f.testo, fontSize: f.corpo, bold: f.grassetto, color: f.colore, alignment: f.allinea,
                         characterSpacing: f.spaziatura || undefined, noWrap: true, lineHeight: 1 }], absolutePosition: { x: f.x, y: f.y + (f.h - f.corpo * 1.172) / 2 } });
                     break;
@@ -335,17 +289,13 @@
         return {
             pageSize: { width: W, height: H },
             pageMargins: [0, 0, 0, 0],
-            // Lo sfondo in un disegno solo: pdfMake impila i disegni separati
-            // uno sotto l'altro, e finirebbero fuori dal tesserino.
+            // pdfMake impila i disegni separati, che finirebbero fuori dal tesserino.
             background: { canvas: sfondo },
             content: contenuto
         };
     }
 
-    // ---- In SVG, per l'anteprima ----------------------------------------------
-
-    // Nodi costruiti uno per uno (niente markup composto a mano): i testi e le
-    // immagini arrivano dai dati e dalle impostazioni.
+    // Niente markup composto a mano: testi e immagini arrivano dai dati.
     const NS = 'http://www.w3.org/2000/svg';
     const n = (x) => String(Math.round(x * 100) / 100);
     function nodo(nome, attributi) {
@@ -396,8 +346,7 @@
     window.Tesserino = {
         LARGHEZZA: W, ALTEZZA: H, PUNTO, COLORI, NOMI_COLORI, TESTI, ELEMENTI, PER_ID,
         automatiche, normalizza, varianti, posizioni, componi, inPdf, inSvg, nodo, caratteri,
-        // La larghezza minima del codice a barre, perché ogni modulo sia di
-        // almeno tre punti (0,254 mm).
+        // Almeno tre punti (0,254 mm) per modulo.
         LARGHEZZA_MINIMA_CODICE: (MODULI_CF + 2 * RISPETTO) * 3 * PUNTO
     };
 })();

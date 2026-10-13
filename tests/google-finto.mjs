@@ -13,7 +13,6 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-/** Una chiave di account di servizio finta, come la scarica Firebase. */
 export function creaAccount(progetto, email = `orion@${progetto}.iam.gserviceaccount.com`) {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     return {
@@ -26,7 +25,6 @@ export function creaAccount(progetto, email = `orion@${progetto}.iam.gserviceacc
     };
 }
 
-/** google-services.json di un progetto con l'app ORION (o un'altra). */
 export function creaGoogleServices(progetto, { pacchetto = 'it.orion.app', numero = '987654321012' } = {}) {
     return {
         project_info: { project_number: numero, project_id: progetto, storage_bucket: `${progetto}.appspot.com` },

@@ -1,10 +1,5 @@
-// L'accesso degli esterni temporanei: la pagina che si apre inquadrando il QR
-// dato dal centro operativo (o toccando il link arrivato per email o copiato
-// e mandato in altro modo). Il codice è nell'indirizzo; il server lo scambia con una
-// sessione da esterno che vale fino alla chiusura dell'emergenza.
-//
-// Sul telefono Android propone l'app: in squadra, è lei che manda la
-// posizione al centro operativo anche con lo schermo spento.
+// Il codice è nell'indirizzo; il server lo scambia con una sessione da esterno che finisce con
+// l'emergenza.
 
 document.addEventListener('DOMContentLoaded', async () => {
     const $ = (id) => document.getElementById(id);
@@ -45,7 +40,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Gli stessi dati che salva la pagina di login: le altre pagine li leggono.
     try {
         localStorage.setItem('userId', String(dati.userId));
         localStorage.setItem('userRole', dati.role);
@@ -61,7 +55,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const mappa = aggiungi('a', 'Apri la mappa del centro operativo', 'pulsante');
     mappa.href = '/centro-operativo.html';
 
-    // L'app, sui telefoni Android e se l'associazione la distribuisce.
     if (!/Android/i.test(navigator.userAgent || '')) return;
     let offerta = null;
     try {
@@ -78,15 +71,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     perche.className = 'piccolo';
     perche.textContent = 'Se sei in una squadra, il centro operativo ti vede sulla mappa anche con il telefono in tasca, e ricevi gli interventi.';
     app.appendChild(perche);
-    // I passi precisi: l'app non viene dal Play Store e Android lo fa notare.
     if (typeof passiInstallaApp === 'function') app.appendChild(passiInstallaApp('codice'));
     const scarica = document.createElement('a');
     scarica.className = 'pulsante secondario';
     scarica.href = offerta.scarica;
     scarica.textContent = `Scarica Orion Mobile${offerta.versione ? ` ${offerta.versione}` : ''}`;
     app.appendChild(scarica);
-    // L'app riconosce questo indirizzo: server e codice, e chiede conferma
-    // prima di entrare.
     const apri = document.createElement('a');
     apri.className = 'pulsante';
     apri.href = `orionmobile://accesso?server=${encodeURIComponent(window.location.origin)}&c=${encodeURIComponent(codice)}`;

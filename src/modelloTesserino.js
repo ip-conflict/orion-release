@@ -1,22 +1,16 @@
-// Il controllo del modello del tesserino scelto dall'amministratore (la chiave
-// badge_modello delle impostazioni), prima di salvarlo. Il disegno vero sta in
-// public/js/tesserino.js, che rilegge il modello con le stesse regole: qui si
-// tiene solo quello che ha forma e misure sensate, così una pagina che lo legge
-// non trova mai valori assurdi. Gli elenchi delle chiavi vanno tenuti uguali.
+// Il disegno sta in public/js/tesserino.js, che rilegge il modello con le stesse regole:
+// gli elenchi delle chiavi vanno tenuti uguali.
 
 const COLORI = ['sfondo', 'fascia_alta', 'fascia_ente', 'fascia_qualifica', 'nome', 'distretto', 'titolo', 'ente', 'qualifica'];
 const TESTI = ['titolo', 'qualifica'];
 const ELEMENTI = ['fascia_alta', 'fascia_ente', 'fascia_qualifica', 'foto', 'qr', 'titolo', 'loghi', 'codice',
     'nome', 'distretto', 'ente', 'qualifica', 'bandiera_it', 'bandiera_ue'];
 const NASCONDIBILI = ['fascia_alta', 'fascia_ente', 'fascia_qualifica', 'titolo', 'loghi', 'distretto', 'ente', 'qualifica', 'bandiera_it', 'bandiera_ue'];
-// Il tesserino è 243x153 punti; un po' di margine per gli arrotondamenti.
 const LATO_MASSIMO = 260;
 const LUNGHEZZA_MASSIMA = 8000;
 
 export class ModelloNonValido extends Error {}
 
-// Vuoto: si torna al tesserino predefinito. Altrimenti il modello ripulito,
-// come testo JSON da salvare.
 export function validaModelloTesserino(valore) {
     const testo = String(valore ?? '').trim();
     if (!testo) return '';

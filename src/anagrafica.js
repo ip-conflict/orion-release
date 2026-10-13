@@ -1,5 +1,3 @@
-// Nomi utente, password temporanee e importazione dei volontari da un foglio.
-
 import ExcelJS from 'exceljs';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
@@ -12,9 +10,7 @@ import { erroreRichiesta } from './costanti.js';
 import { scriviRuoli } from './autenticazione.js';
 import { pool } from './db.js';
 
-// I campi dell'anagrafica con i limiti delle colonne del database. Un valore
-// troppo lungo o di tipo sbagliato è un errore di chi scrive (400), non un
-// guasto del server (500).
+// Un valore troppo lungo è un errore di chi scrive (400), non un guasto del server (500).
 const LIMITI_ANAGRAFICA = {
     nome: 50, cognome: 50, email: 100, telefono: 20, indirizzo: 255, citta: 100, cap: 10, codice_fiscale: 16
 };
@@ -23,8 +19,6 @@ const NOMI_CAMPI = {
     citta: 'La città', cap: 'Il CAP', codice_fiscale: 'Il codice fiscale'
 };
 
-// Restituisce { valori } con solo i campi presenti nella richiesta (stringhe
-// ripulite, null se vuote), oppure { errore }. Un campo assente non si tocca.
 export function leggiCampiAnagrafici(corpo, campi) {
     const valori = {};
     for (const campo of campi) {
@@ -59,7 +53,6 @@ export async function generateUsername(nome, cognome, pool) {
     const cleanNome = String(nome || '').trim();
     const cleanCognome = String(cognome || '').trim();
 
-    // Nicolò D'Angelo diventa dangelonicolo, non dangelonicol.
     const baseUsernamePart1 = senzaAccenti(cleanCognome).toLowerCase().replace(/[^a-z0-9]/g, '');
     const baseUsernamePart2 = senzaAccenti(cleanNome).toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -73,7 +66,6 @@ export async function generateUsername(nome, cognome, pool) {
     const maxUsernameAttempts = 50;
     let attempts = 0;
 
-    // nome.cognome, poi solo cognome, poi solo nome, poi con un numero.
     const b1 = baseUsernamePart1;
     const b2 = baseUsernamePart2;
 
@@ -142,8 +134,7 @@ export async function generateUsername(nome, cognome, pool) {
 }
 
 
-// Il testo che l'operatore vede nella cella: date, formule, testo formattato,
-// collegamenti (Excel trasforma le email in mailto:).
+// Excel trasforma le email in mailto:.
 function valoreCella(cella) {
     const valore = cella?.value;
     if (valore === null || valore === undefined) return '';
@@ -157,8 +148,6 @@ function valoreCella(cella) {
     return String(valore);
 }
 
-// Le intestazioni che una segreteria scrive davvero: "E-mail", "Cellulare",
-// "Codice fiscale", con o senza accenti e maiuscole.
 const SINONIMI_COLONNE = {
     nome: ['nome', 'name', 'firstname'],
     cognome: ['cognome', 'surname', 'lastname'],
@@ -175,8 +164,8 @@ function campoDaIntestazione(intestazione) {
     return null;
 }
 
-// Un CSV salvato da Excel in italiano usa il punto e virgola, spesso comincia
-// con il BOM e a volte non è in UTF-8 ma in Windows-1252.
+// Un CSV salvato da Excel in italiano usa il punto e virgola, spesso ha il BOM e a volte
+// è in Windows-1252.
 function testoCsv(buffer) {
     let testo;
     try {
@@ -194,8 +183,6 @@ function separatoreCsv(testo) {
     return conteggi[0][1] > 0 ? conteggi[0][0] : ',';
 }
 
-// Il primo foglio di un .xlsx o .csv: per ogni riga il suo numero nel foglio
-// e i campi riconosciuti. Il vecchio .xls non si legge: va salvato come .xlsx o CSV.
 async function leggiRigheFoglio(filePath, nomeOriginale) {
     const estensione = path.extname(nomeOriginale || filePath).toLowerCase();
     if (estensione === '.xls') {
@@ -241,9 +228,7 @@ async function leggiRigheFoglio(filePath, nomeOriginale) {
 
 const normalizzaNome = t => senzaAccenti(String(t || '')).toLowerCase().replace(/\s+/g, ' ').trim();
 
-// Importa i volontari da un foglio. Nascono senza password, ognuno con il suo
-// link di attivazione, come quelli creati uno alla volta. Chi c'è già non si
-// crea di nuovo: ricaricare lo stesso foglio non fa doppioni.
+// Chi c'è già non si crea di nuovo: ricaricare lo stesso foglio non fa doppioni.
 export async function importUsersFromExcel(filePath, nomeOriginale) {
     const { righe, colonne } = await leggiRigheFoglio(filePath, nomeOriginale);
     logger.info(`Importazione utenti: ${righe.length} righe, colonne ${colonne.join(', ')}.`);
@@ -266,7 +251,6 @@ export async function importUsersFromExcel(filePath, nomeOriginale) {
             const { valori, errore } = leggiCampiAnagrafici(dati, ['nome', 'cognome', 'email', 'telefono', 'codice_fiscale']);
             if (errore) { salta(numero, persona, errore); continue; }
 
-            // Doppioni nello stesso foglio.
             const chiavi = [
                 valori.codice_fiscale && `cf:${valori.codice_fiscale}`,
                 valori.email && `email:${valori.email}`,
@@ -275,8 +259,7 @@ export async function importUsersFromExcel(filePath, nomeOriginale) {
             if (chiavi.some(k => visti.has(k))) { salta(numero, persona, 'Ripetuta più in alto nello stesso foglio.'); continue; }
             chiavi.forEach(k => visti.add(k));
 
-            // Chi c'è già. Lo stesso nome con un codice fiscale diverso è
-            // un omonimo, e si importa.
+            // Lo stesso nome con un codice fiscale diverso è un omonimo, e si importa.
             const esistente = await client.query(
                 `SELECT username, codice_fiscale, email, nome, cognome FROM users
                  WHERE eliminato_il IS NULL
@@ -305,7 +288,6 @@ export async function importUsersFromExcel(filePath, nomeOriginale) {
             }
 
             try {
-                // Il link vale 7 giorni, come per chi si crea a mano: si distribuiscono anche stampati.
                 const attivazione = crypto.randomBytes(32).toString('hex');
                 const impronta = await bcrypt.hash(attivazione, 10);
                 const scade = new Date(Date.now() + 7 * 24 * 3600000);

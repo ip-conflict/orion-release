@@ -1,6 +1,5 @@
-// Le Regioni di cui ORION sa leggere il bollettino di allerta. Per
-// aggiungerne una: una voce qui e il suo catalogo delle zone, generato con
-// "node scripts/zone-allerta.mjs <regione>" (docs/manuale-tecnico.md).
+// Per aggiungere una Regione: una voce qui e il catalogo delle zone generato con
+// "node scripts/zone-allerta.mjs <regione>".
 
 import fs from 'fs';
 import path from 'path';
@@ -20,7 +19,6 @@ export const REGIONI = {
 
 const cache = new Map();
 
-/** Il catalogo delle zone d'allerta di una Regione: codice, nome, comuni e confine. */
 export function zoneDi(regione) {
     if (!Object.hasOwn(REGIONI, regione)) return null;
     if (!cache.has(regione)) {
@@ -29,7 +27,6 @@ export function zoneDi(regione) {
     return cache.get(regione);
 }
 
-// Un punto dentro un anello (raggi pari/dispari), coordinate [lon, lat].
 function dentroAnello(lon, lat, anello) {
     let dentro = false;
     for (let i = 0, j = anello.length - 1; i < anello.length; j = i++) {
@@ -44,7 +41,6 @@ function dentroPoligono(lon, lat, anelli) {
     return dentroAnello(lon, lat, anelli[0]) && !anelli.slice(1).some(buco => dentroAnello(lon, lat, buco));
 }
 
-/** La zona che contiene un punto, o null. */
 export function zonaDelPunto(regione, lat, lon) {
     for (const z of zoneDi(regione) || []) {
         const g = z.geometria;
@@ -54,14 +50,12 @@ export function zonaDelPunto(regione, lat, lon) {
     return null;
 }
 
-/** La zona di un comune, o null. */
 export function zonaDelComune(regione, comune) {
     const cercato = String(comune || '').trim().toLowerCase();
     if (!cercato) return null;
     return (zoneDi(regione) || []).find(z => z.comuni.some(c => c.toLowerCase() === cercato)) || null;
 }
 
-/** Tutti i comuni della Regione, in ordine alfabetico. */
 export function comuniDi(regione) {
     return (zoneDi(regione) || []).flatMap(z => z.comuni).sort((a, b) => a.localeCompare(b, 'it'));
 }

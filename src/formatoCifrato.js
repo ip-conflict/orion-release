@@ -1,9 +1,5 @@
-// Il formato dei dati cifrati di ORION, senza database e senza stato: lo usa
-// il server (cifratura.js) e lo usano gli script lanciati a mano o dal backup
-// notturno (scripts/cifra-backup.mjs, scripts/decifra-backup.mjs).
-//
-// AES-256-GCM: "ORIONCF1" (8 byte), IV casuale (12), dati cifrati, tag (16).
-// Il tag garantisce anche che il file non sia stato alterato.
+// AES-256-GCM: "ORIONCF1" (8 byte), IV casuale (12), dati cifrati, tag (16). Lo usano
+// anche gli script del backup notturno.
 
 import crypto from 'crypto';
 import fs from 'fs';
@@ -47,10 +43,7 @@ export function flussoCifratoCon(chiave) {
     });
 }
 
-// Un file come flusso in chiaro: decifrato se è cifrato, così com'è se no.
-// Il tag si legge prima dalla coda: se il file è stato alterato il flusso
-// finisce con un errore (e un ripristino in una sola transazione non applica
-// niente).
+// Il tag si legge prima dalla coda: un file alterato fa finire il flusso con un errore.
 export async function apriFileCon(chiave, percorso) {
     const fd = await fs.promises.open(percorso, 'r');
     try {
@@ -70,8 +63,7 @@ export async function apriFileCon(chiave, percorso) {
     }
 }
 
-// La chiave di recupero: la chiave in base32 senza lettere ambigue (52
-// caratteri), a gruppi di quattro, da stampare e ricopiare a mano.
+// Senza lettere ambigue, da stampare e ricopiare a mano.
 export const ALFABETO_RECUPERO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function scriviChiaveDiRecupero(chiave) {

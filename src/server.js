@@ -1,6 +1,4 @@
-// Il punto d'avvio: configura Express, registra le rotte dei moduli e avvia il
-// server. L'ordine conta: prima le rotte pubbliche, poi il controllo della
-// sessione, poi tutto il resto.
+// L'ordine conta: prima le rotte pubbliche, poi il controllo della sessione, poi il resto.
 
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -45,6 +43,7 @@ import { registraRotteFunzioni } from './funzioni.js';
 import { registraRotteMappaElementi } from './mappaElementi.js';
 import { registraRotteCartografia } from './cartografia.js';
 import { registraRotteMfa } from './mfa.js';
+import { registraRotteConfermeTelefono, registraRotteTelefoni, registraRotteTelefoniPubbliche } from './telefoniChiave.js';
 import { preparaPrimoAccesso, registraRottePrimoAccesso } from './primoAccesso.js';
 import { avviaIntegrita, registraIntegrita } from './integrita.js';
 import { cifraFileInChiaro, preparaCifratura, registraRotteCifratura } from './cifratura.js';
@@ -68,9 +67,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = http.createServer(app);
 
-// Un errore non gestito in una richiesta non deve fermare il server per tutti:
-// lo si annota e si va avanti. Un'eccezione fuori dalle richieste invece lascia
-// il processo in uno stato incerto: si esce e PM2 lo riavvia.
+// Un'eccezione fuori dalle richieste lascia il processo in uno stato incerto: si esce
+// e PM2 lo riavvia.
 process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled Promise Rejection (richiesta non gestita, il server resta attivo):', { error: reason });
 });
@@ -86,8 +84,7 @@ app.set('trust proxy', 1);
 app.use(cors({
     origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-        // Un 403 che dice quale origine: di solito è DOMAIN_NAME diverso dal
-        // nome con cui si raggiunge il sito (il prefisso www.).
+        // Di solito DOMAIN_NAME è diverso dal nome con cui si raggiunge il sito (www.).
         logger.warn(`[CORS] Richiesta rifiutata: origine '${origin}' non ammessa. Origini consentite: ${allowedOrigins.join(', ')}. Verifica DOMAIN_NAME nel file .env.`);
         const corsError = new Error('Origine della richiesta non consentita.');
         corsError.status = 403;
@@ -102,14 +99,9 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            // Le librerie del web sono servite dall'applicazione: nessun CDN.
             "script-src": ["'self'"],
             "style-src": ["'self'", "'unsafe-inline'"],
-            // Le mattonelle della mappa sono l'unica cosa remota: senza rete la
-            // mappa resta vuota, il resto funziona.
             "img-src": ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "*.tile.osm.org", "server.arcgisonline.com"],
-            // Indirizzi (Nominatim, Photon) e percorsi (OSRM): tutti di
-            // OpenStreetMap, chiesti dal browser della sala.
             "connect-src": ["'self'", "nominatim.openstreetmap.org", "photon.komoot.io", "router.project-osrm.org", `wss://${domainName}`]
         }
     },
@@ -117,9 +109,7 @@ app.use(helmet({
 }));
 
 app.use(cookieParser(cookieSecret));
-// Le forme della mappa (un livello del piano importato da QGIS) possono
-// pesare qualche mega; tutto il resto resta al limite di serie. Il limite alto
-// vale solo con un token valido: un anonimo non fa leggere 8 mega al server
+// Il limite alto solo con un token valido: un anonimo non fa leggere 8 mega al server
 // per sentirsi rispondere 401.
 const jsonDiSerie = express.json();
 const jsonMappa = express.json({ limit: '8mb' });
@@ -134,15 +124,12 @@ app.use(async (req, res, next) => {
     jsonMappa(req, res, next);
 });
 app.use(express.urlencoded({ extended: true }));
-// Express 5 lascia req.body indefinito quando la richiesta non ha un corpo:
-// le rotte lo leggono come oggetto, vuoto se non c'è niente.
+// Express 5 lascia req.body indefinito quando la richiesta non ha un corpo.
 app.use((req, res, next) => {
     if (req.body === undefined) req.body = {};
     next();
 });
 
-// Le pagine di lavoro stanno in public/ con quelle pubbliche: senza sessione
-// non si servono.
 const PAGINE_RISERVATE = new Set([
     '/centro-operativo.html', '/profile.html', '/admin-segreteria.html',
     '/magazzino.html', '/magazzino-etichette.html', '/magazzino-verbale.html',
@@ -152,8 +139,7 @@ const PAGINE_RISERVATE = new Set([
 app.use(async (req, res, next) => {
     if (!PAGINE_RISERVATE.has(req.path)) return next();
     if (!manutenzioneInCorso) return authenticateToken(req, res, next);
-    // Durante un ripristino il database può non rispondere: basta un token
-    // valido, e la pagina mostrerà da sé il velo della manutenzione.
+    // Durante un ripristino il database può non rispondere: basta un token valido.
     const token = req.signedCookies['__Secure-token'] || req.headers['authorization']?.split(' ')[1];
     try {
         await verifyJwtToken(token);
@@ -164,9 +150,7 @@ app.use(async (req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Durante un ripristino o un aggiornamento le API rispondono 503, tranne
-// quelle di sistema che dicono a che punto è l'operazione. Anche l'accesso è
-// chiuso: una sessione aperta ora varrebbe per un database che sta cambiando.
+// Anche l'accesso è chiuso: una sessione aperta ora varrebbe per un database che sta cambiando.
 app.use((req, res, next) => {
     if (!manutenzioneInCorso) return next();
     if (!req.path.startsWith('/api/') && req.path !== '/login') return next();
@@ -183,9 +167,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Ogni richiesta riceve una risposta entro un minuto, anche se un gestore
-// async si è perso per strada. I caricamenti sono esclusi: dipendono dalla
-// banda di chi carica.
+// I caricamenti sono esclusi: dipendono dalla banda di chi carica.
 const REQUEST_WATCHDOG_MS = 60000;
 app.use((req, res, next) => {
     if (req.headers['content-type']?.includes('multipart/form-data')) return next();
@@ -203,17 +185,16 @@ app.use((req, res, next) => {
 registraRottePubbliche(app);
 registraRottePrimoAccesso(app);
 registraRotteInformativaPubblica(app);
+registraRotteTelefoniPubbliche(app, { notifiche, cartellaApk: CARTELLA_APK });
 
-// Da qui in poi serve una sessione. Prima un limite per indirizzo contro chi
-// martella il server, poi chi è, poi il limite per persona: una sala operativa
-// dietro lo stesso indirizzo non deve dividersi un limite solo.
+// Il limite per persona viene dopo: una sala dietro lo stesso indirizzo non deve
+// dividersi un limite solo.
 app.use('/api/', limitePerRete);
-// Gli avvisi del telefono si leggono col loro token, non con la sessione.
 registraRotteAvvisiTelefono(app);
 registraRotteFirebaseTelefono(app);
+registraRotteConfermeTelefono(app, { notifiche });
 app.use(authenticateToken);
 app.use('/api/', apiLimiter);
-// Scritture rimandate dopo un buco di rete: la stessa chiave non scrive due volte.
 app.use('/api/', creaIdempotenza({ pool, logger, escluse: ['/magazzino/'] }));
 
 registraRotteAvvisi(app, { notifiche });
@@ -311,7 +292,6 @@ app.get('/centro-operativo.html', authenticateToken, pagina(PUBBLICA, 'centro-op
 app.get('/profile.html', authenticateToken, pagina(PUBBLICA, 'profile.html'));
 app.get('/admin/admin.html', authenticateToken, richiedePermesso('volontari.anagrafica'), pagina(ADMIN, 'admin.html'));
 app.get('/admin/dashboard-admin.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'dashboard-admin.html'));
-// Le squadre le compongono tutti: in sala è un lavoro condiviso.
 app.get('/admin/squadre.html', authenticateToken, pagina(ADMIN, 'squadre.html'));
 app.get('/admin/archive.html', authenticateToken, richiedePermesso('emergenze.archivio'), pagina(ADMIN, 'archive.html'));
 app.get('/admin/sistema.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'sistema.html'));
@@ -321,6 +301,7 @@ app.get('/admin/tesserino.html', authenticateToken, checkAdminRole, pagina(ADMIN
 registraRotteSessioni(app);
 registraRotteInformativa(app);
 registraRotteMfa(app);
+registraRotteTelefoni(app, { notifiche });
 registraRotteImpostazioni(app);
 registraRotteEmergenze(app);
 registraRotteUtenti(app);
@@ -329,8 +310,6 @@ registraRotteSegnalazioni(app);
 registraRotteLetture(app);
 registraRotteSegreteria(app);
 
-// L'ultimo: gli errori che nessuna rotta ha gestito. In produzione il
-// messaggio interno resta nel log, al client va una frase generica.
 app.use((err, req, res, next) => {
     logger.error("ERRORE NON GESTITO:", err);
     if (res.headersSent) return next(err);
@@ -348,13 +327,11 @@ app.use((err, req, res, next) => {
 (async () => {
     try {
         await applicaMigrazioniMancanti();
-        // La chiave dei dati (creata al primo avvio), poi i file rimasti in chiaro.
         await preparaCifratura();
         cifraFileInChiaro().catch(e => logger.error('[Cifratura] Giro dei file non riuscito:', e));
         setInterval(() => cifraFileInChiaro().catch(() => {}), 3600000);
         await loadActiveEmergency();
         await caricaVersioneInformativa();
-        // Senza amministratori: il codice per crearlo dalla pagina di accesso.
         await preparaPrimoAccesso();
         avviaIntegrita();
         runDailyExpiryCheck();
@@ -365,12 +342,8 @@ app.use((err, req, res, next) => {
         setInterval(notifiche.pulisci, 24 * 3600000);
         magazzino.pulisciIdempotenza();
         setInterval(magazzino.pulisciIdempotenza, 24 * 3600000);
-        // Il backup notturno saltato perché il server era spento.
         backupDiRecupero();
         setInterval(backupDiRecupero, 6 * 3600000);
-        // Il controllo giornaliero delle versioni, se acceso: guarda ogni ora
-        // se è passato un giorno dall'ultimo.
-        // Il bollettino di allerta, se la Regione è scelta nelle impostazioni.
         avviaAllerta();
         manutenzione.controlloAutomatico();
         setInterval(manutenzione.controlloAutomatico, 3600000);

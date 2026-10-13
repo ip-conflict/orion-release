@@ -1,9 +1,3 @@
-/* public/css/documenti.css
- *
- * L'archivio dei documenti del gruppo. Si consulta anche dal telefono, in
- * sala o sul campo: righe larghe, il titolo è il collegamento che apre il
- * file, il resto è contorno. I colori vengono da theme.css. */
-
 .sottotitolo {
     margin: 4px 0 0;
     opacity: 0.75;
@@ -111,7 +105,6 @@
     gap: 6px;
 }
 
-/* --- Modali (come quelle del magazzino) --- */
 .modale {
     position: fixed;
     inset: 0;

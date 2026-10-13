@@ -1,10 +1,4 @@
-// Fin dove ciascuno ha letto le segnalazioni dell'emergenza in corso, tenuto
-// sul server: ricaricando la pagina o cambiando postazione le novità non si
-// perdono. Per ogni segnalazione già aperta almeno una volta il centro
-// operativo riceve quante voci di altri sono arrivate dopo, e quante sono
-// "forti" (una nota scritta da una persona, delle foto): quelle che fanno
-// lampeggiare la scheda e saltare il segnaposto. Le modifiche di sistema
-// fatte dai colleghi contano solo nel numero.
+// Le letture stanno sul server: ricaricando o cambiando postazione le novità non si perdono.
 
 import logger from './logger.js';
 import { pool } from './db.js';
@@ -34,7 +28,6 @@ export function registraRotteLetture(app) {
         }
     });
 
-    // Letta fino a quell'ora: non si torna indietro e non si va oltre adesso.
     app.put('/api/letture/:reportId', async (req, res) => {
         const reportId = Number(req.params.reportId);
         const fino = req.body?.letta_il ? new Date(req.body.letta_il) : new Date();

@@ -1,17 +1,10 @@
 #!/bin/bash
 
-# ==============================================================================
-# Script di Aggiornamento per ORION
-# ==============================================================================
+# Aggiornamento di ORION dalla riga di comando (si può anche dalla pagina Sistema).
+#   sudo ./update.sh
 
 set -e
 
-# NOTA: dalla versione 3.23 l'aggiornamento si puo' fare anche dalla pagina
-# "Sistema" dell'applicazione, senza collegarsi al server. Questo script resta
-# per chi preferisce la riga di comando e per le installazioni che non
-# partono piu'.
-
-# Colori per i log a schermo
 print_info() { echo -e "\n\e[34mINFO:\e[0m $1"; }
 print_success() { echo -e "\e[32mSUCCESS:\e[0m $1"; }
 print_warning() { echo -e "\e[33mWARNING:\e[0m $1"; }
@@ -22,7 +15,6 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Questa versione vuole Node.js 22.13 o più recente (engines in package.json).
 if ! node -e "const [a,b]=process.versions.node.split('.').map(Number); process.exit(a>22||(a===22&&b>=13)?0:1)"; then
     print_error "Node.js $(node -v) è troppo vecchio: serve la 22.13 o più recente (consigliata la 24). Vedi \"Aggiornare Node.js\" nel manuale tecnico. Niente è stato toccato."
     exit 1
@@ -43,52 +35,40 @@ if [ ! -f "$APP_DIR/.env" ]; then
     exit 1
 fi
 
-# Carica le variabili d'ambiente dall'installazione live (DB_USER, DB_PASSWORD, DB_DATABASE, ...)
 export $(grep -v '^#' "$APP_DIR/.env" | xargs)
 if [ -z "$DB_USER" ] || [ -z "$DB_DATABASE" ]; then
     print_error "$APP_DIR/.env non contiene DB_USER/DB_DATABASE validi. Aggiornamento interrotto."
     exit 1
 fi
-# Codifica la password come fa src/server.js (encodeURIComponent): se contiene
-# caratteri riservati negli URL (es. @ : / #), costruire la stringa di
-# connessione senza codifica la spezza silenziosamente in modo non ovvio.
+# Chi è collegato rifà l'accesso una volta.
+if [ -z "$COOKIE_SECRET" ]; then
+    printf '\nCOOKIE_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$APP_DIR/.env"
+    print_info "Aggiunta a .env una COOKIE_SECRET propria: chi è collegato dovrà rifare l'accesso."
+fi
+
+# Senza codifica, una password con @ : / # spezza la stringa di connessione in silenzio.
 DB_PASSWORD_ENCODED=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$DB_PASSWORD")
 DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@localhost:5432/${DB_DATABASE}"
 
-# 1. BACKUP DEL DATABASE
 BACKUP_DIR="/var/backups/orion"
 mkdir -p $BACKUP_DIR
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.sql"
 
 print_info "Creazione backup del database in $BACKUP_FILE..."
-# Il dump contiene tutto il database: lo legge solo root.
 ( umask 077; sudo -u postgres pg_dump "$DB_DATABASE" > "$BACKUP_FILE" )
 chmod 600 "$BACKUP_FILE"
 find "$BACKUP_DIR" -maxdepth 1 -name 'db_backup_*.sql' -exec chmod 600 {} + 2>/dev/null || true
 print_success "Backup database completato."
 
-# 2. MIGRAZIONI DEL DATABASE - PRIMA di toccare i file dell'installazione live.
-#
-# Le eseguiamo dalla nuova versione del codice (SOURCE_DIR, non ancora
-# sincronizzata su APP_DIR) puntando comunque al database di produzione.
-# Se falliscono, l'app in $APP_DIR resta ESATTAMENTE come prima: nessun file
-# sincronizzato, nessuna dipendenza toccata, PM2 continua a servire la
-# versione precedente. Questo copre anche il caso di un aggiornamento da una
-# versione molto vecchia, dove il database potrebbe non avere tutte le
-# tabelle/colonne attese dalle migrazioni più recenti: node-pg-migrate
-# applica solo le migrazioni non ancora registrate come eseguite (tabella
-# pgmigrations), quindi recupera automaticamente anche più "salti di
-# versione" in un colpo solo, in ordine.
+# Le migrazioni prima dei file, dalla versione nuova: se falliscono, l'installazione
+# resta esattamente com'era.
 print_info "Installazione dipendenze necessarie per eseguire le migrazioni dalla nuova versione..."
 (cd "$SOURCE_DIR" && npm install) || {
     print_error "Impossibile installare le dipendenze in $SOURCE_DIR. Aggiornamento interrotto PRIMA di toccare $APP_DIR: l'app corrente resta invariata e in esecuzione."
     exit 1
 }
-# npm può in alcuni casi terminare con exit code 0 pur non avendo installato
-# correttamente tutto (es. errori interni tipo "Exit handler never called!"):
-# verifichiamo quindi anche che un binario chiave sia stato effettivamente
-# prodotto, non solo il codice di uscita del comando.
+# npm a volte esce con 0 senza aver installato tutto ("Exit handler never called!").
 if [ ! -x "$SOURCE_DIR/node_modules/.bin/node-pg-migrate" ]; then
     print_error "npm install sembra essere fallito silenziosamente in $SOURCE_DIR: node_modules/.bin/node-pg-migrate non è presente dopo l'installazione. Aggiornamento interrotto PRIMA di toccare $APP_DIR: l'app corrente resta invariata e in esecuzione. Controlla i log di npm (es. $SOURCE_DIR/.npm/_logs/ o ~/.npm/_logs/) e riprova."
     exit 1
@@ -105,7 +85,6 @@ if ! (cd "$SOURCE_DIR" && export DATABASE_URL="$DATABASE_URL" && npm run migrate
 fi
 print_success "Migrazioni applicate con successo."
 
-# 3. SINCRONIZZAZIONE DEI FILE - solo ora che sappiamo che il database è a posto.
 print_info "Sincronizzazione dei nuovi file in $APP_DIR..."
 rsync -av --progress \
     --exclude 'node_modules' \
@@ -123,10 +102,8 @@ rsync -av --progress \
 
 print_success "File sincronizzati."
 
-# 4. PERMESSI
 print_info "Sistemazione dei permessi..."
 chown -R $APP_USER:$APP_USER $APP_DIR
-# Certificati medici, documenti, foto e log: solo il programma li legge.
 for cartella in protected_uploads uploads logs; do
     if [ -d "$APP_DIR/$cartella" ]; then
         find "$APP_DIR/$cartella" -type d -exec chmod 750 {} +
@@ -135,7 +112,6 @@ for cartella in protected_uploads uploads logs; do
 done
 print_success "Permessi ripristinati."
 
-# 5. DIPENDENZE
 print_info "Aggiornamento dipendenze Node.js..."
 sudo -u $APP_USER bash -c "cd $APP_DIR && npm install --omit=dev" || {
     print_error "npm install --omit=dev è fallito in $APP_DIR. I file sono già stati sincronizzati ma l'app NON è ancora stata riavviata (PM2 sta ancora servendo il processo precedente, con il vecchio node_modules). Risolvi il problema con le dipendenze e poi esegui manualmente: sudo -u $APP_USER bash -c \"cd $APP_DIR && npm install --omit=dev\" e infine 'pm2 reload Orion' come utente $APP_USER, oppure rilancia questo script."
@@ -147,15 +123,12 @@ if [ ! -x "$APP_DIR/node_modules/.bin/node-pg-migrate" ]; then
 fi
 print_success "Dipendenze aggiornate."
 
-# 5-bis. BACKUP AUTOMATICO
-# Cartella per i backup che l'applicazione esegue da sola (chiusura emergenza,
-# recupero dopo una notte a server spento), separata da quella del cron.
+# Cartella dei backup dell'applicazione, separata da quella del cron.
 mkdir -p /var/backups/orion/auto /var/backups/orion/db
 chown -R $APP_USER:$APP_USER /var/backups/orion/auto
 chmod 750 /var/backups/orion/auto
 
-# Le installazioni create prima dell'introduzione del backup automatico non hanno
-# il cron: lo aggiungiamo qui, così si allineano con un semplice aggiornamento.
+# Le installazioni nate prima del backup automatico non hanno il cron.
 if [ ! -f /etc/cron.d/orion-backup ]; then
     print_info "Attivazione del backup automatico giornaliero (non era ancora configurato)..."
     apt-get install -y cron >/dev/null 2>&1 || true
@@ -175,15 +148,12 @@ else
     print_success "Backup automatico già configurato."
 fi
 
-# 6. RIAVVIO APPLICAZIONE
 print_info "Riavvio del servizio PM2..."
 if sudo -u $APP_USER bash -c "cd $APP_DIR && pm2 jlist" 2>/dev/null | grep -q '"name":"Orion"'; then
     sudo -u $APP_USER bash -c "cd $APP_DIR && (pm2 reload Orion || pm2 restart Orion)"
 else
-    # Succede dopo un aggiornamento fatto dalla pagina Sistema con una versione
-    # fino alla 3.36: cancellava la cartella .pm2, e il PM2 rimasto in memoria
-    # non risponde piu' ai comandi. Si fermano i processi orfani di questo
-    # utente e si riparte da capo.
+    # Dopo un aggiornamento dalla pagina Sistema fino alla 3.36 (cancellava .pm2) PM2 non
+    # risponde più: si fermano i processi orfani e si riparte.
     print_warning "PM2 non conosce il processo Orion: fermo i processi rimasti dell'utente $APP_USER e riavvio da capo."
     pkill -u $APP_USER -f "src/server.js" 2>/dev/null || true
     pkill -u $APP_USER -f "God Daemon" 2>/dev/null || true

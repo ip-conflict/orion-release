@@ -25,8 +25,7 @@ function populateElement(elementId, value, defaultValue = 'N/D') {
     }
 }
 
-// Etichette italiane: questo foglio è il documento che finisce agli atti e in
-// procura, "InProgress" e "High" non ci devono comparire.
+// Questo foglio finisce agli atti: "InProgress" e "High" non ci devono comparire.
 const ETICHETTA_STATO = { New: 'Nuova', Open: 'Aperta', InProgress: 'In corso', Closed: 'Chiusa', Resolved: 'Risolta' };
 const ETICHETTA_PRIORITA = { High: 'Alta', Medium: 'Media', Low: 'Bassa' };
 
@@ -39,7 +38,6 @@ function formatBadge(elementId, value, type) {
                     : safeValue;
     el.textContent = etichetta;
     
-    // Logica colori
     let bgColor = '#f1f5f9', color = '#64748b', borderColor = '#cbd5e1';
     
     if (type === 'status') {
@@ -99,18 +97,15 @@ async function generatePrintPage() {
         populateElement('print-report-id', displayValue);
         populateElement('print-emergency-name', report.emergency_code, '-');
 
-        // Dati Principali
         populateElement('print-title', report.title);
         formatBadge('print-status', report.status, 'status');
         formatBadge('print-priority', report.priority, 'priority');
 
-        // Localizzazione
         populateElement('print-location', report.location_address);
         populateElement('print-coords', `Lat: ${formatPrintCoord(report.latitude)} / Lon: ${formatPrintCoord(report.longitude)}`);
         populateElement('print-reporter-name', report.reporter_name);
         populateElement('print-reporter-contact', report.reporter_contact);
 
-        // Operativi
         populateElement('print-description', report.description, 'Nessuna descrizione fornita.');
         
         if (report.environmental_hazard) {
@@ -118,9 +113,7 @@ async function generatePrintPage() {
             populateElement('print-environmental-hazard', report.environmental_hazard);
         }
 
-        // Se nessuna squadra è intervenuta, il motivo va scritto: su un documento
-        // che finisce agli atti "Nessuna squadra assegnata" da solo si legge come
-        // una dimenticanza, anche quando era una decisione presa e registrata.
+        // Su un documento agli atti "Nessuna squadra assegnata" da solo si legge come una dimenticanza.
         const MOTIVI_SENZA_SQUADRA = {
             altro_ente: 'Nessuna squadra: gestita da altro ente',
             monitoraggio: 'Nessuna squadra: solo monitoraggio',
@@ -133,7 +126,6 @@ async function generatePrintPage() {
         populateElement('print-creator', `${report.creator_fullname || 'Sconosciuto'} il ${formatPrintDate(report.created_at)}`);
         populateElement('print-updated-at', formatPrintDate(report.updated_at));
 
-        // Immagini
         const imageGallery = document.getElementById('print-image-gallery');
         const imageSection = document.getElementById('print-images-section');
         if (report.image_urls && report.image_urls.length > 0) {
@@ -146,7 +138,6 @@ async function generatePrintPage() {
             imageSection.style.display = 'block';
         }
 
-        // Log (Diario Operativo)
         const logList = document.getElementById('print-log-list');
         logList.innerHTML = '';
         if (updates.length > 0) {
@@ -167,7 +158,7 @@ async function generatePrintPage() {
             logList.innerHTML = '<li><p>Nessun aggiornamento operativo registrato.</p></li>';
         }
 
-        // Ritardo leggermente maggiore (800ms) per permettere il caricamento del logo e delle foto in alta risoluzione
+        // Il tempo di caricare logo e foto in alta risoluzione.
         setTimeout(window.print, 800);
 
     } catch (error) {

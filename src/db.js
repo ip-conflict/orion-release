@@ -2,11 +2,12 @@
 import './config.js';
 import logger from './logger.js';
 import pg from 'pg';
+import { opzioniSslDatabase } from './sslDatabase.js';
 
 const { Pool, types } = pg;
 
-// Date e orari restano testo, come li scrive PostgreSQL: un Date a mezzanotte
-// italiana in JSON diventerebbe il giorno prima alle 22:00 UTC.
+// Date e orari restano testo: un Date a mezzanotte italiana in JSON diventerebbe il giorno
+// prima alle 22:00 UTC.
 types.setTypeParser(types.builtins.TIMESTAMPTZ, (val) => val);
 types.setTypeParser(types.builtins.DATE, (val) => val);
 
@@ -16,16 +17,14 @@ export const dbHost = process.env.DB_HOST;
 export const dbPort = process.env.DB_PORT;
 export const dbDatabase = process.env.DB_DATABASE;
 
-// Con DB_SSL il certificato si verifica solo se DB_SSL_STRICT=true: molte
-// installazioni usano certificati autofirmati.
-const dbSslStrict = process.env.DB_SSL_STRICT === 'true';
-if (process.env.DB_SSL === 'true' && !dbSslStrict) {
-    logger.warn('[SECURITY] DB_SSL è attivo ma la verifica del certificato è disabilitata (rejectUnauthorized: false). Imposta DB_SSL_STRICT=true per abilitare la verifica reale del certificato e prevenire attacchi MITM sulla connessione al database.');
+const sslDatabase = opzioniSslDatabase();
+if (sslDatabase && !sslDatabase.rejectUnauthorized) {
+    logger.warn('[SECURITY] DB_SSL_STRICT=false: la connessione al database è cifrata ma il certificato non si verifica, quindi chi sta in mezzo potrebbe fingersi il database. Indica l\'autorità del certificato in DB_SSL_CA e togli DB_SSL_STRICT.');
 }
 
 export const connessioneDb = {
     connectionString: `postgres://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbDatabase}`,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: dbSslStrict } : false
+    ssl: sslDatabase
 };
 
 export const pool = new Pool({
@@ -36,8 +35,8 @@ export const pool = new Pool({
     connectionTimeoutMillis: 10000
 });
 
-// Una connessione inattiva caduta (riavvio del database, rete) si scarta da
-// sola: fermare il processo butterebbe giù tutte le postazioni.
+// Una connessione inattiva caduta si scarta da sola: fermare il processo butterebbe giù
+// tutte le postazioni.
 pool.on('error', (err) => {
     logger.error('Errore su un client inattivo del pool DB (il pool si riprende da solo)', { error: err });
 });

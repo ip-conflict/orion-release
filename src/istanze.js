@@ -1,5 +1,4 @@
-// Il magazzino è creato in server.js insieme alle sue rotte; qui resta a
-// disposizione di chi lo usa fuori dalle rotte (giro quotidiano, squadre).
+// Per chi usa il magazzino fuori dalle rotte (giro quotidiano, squadre).
 
 export let magazzino = null;
 

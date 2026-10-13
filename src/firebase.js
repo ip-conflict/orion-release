@@ -1,15 +1,5 @@
-// Le notifiche Firebase, facoltative: ogni associazione che le vuole crea
-// un suo progetto Firebase e ne carica qui i due file. Senza configurazione
-// non cambia niente: il telefono resta in ascolto del server come sempre.
-//
-// Con Firebase il server non manda il contenuto delle notifiche a Google:
-// manda solo un segnale vuoto ("ci sono novità") al telefono, che si sveglia
-// e legge la coda dal server dell'associazione col token degli avvisi. A
-// Google arrivano l'identificativo Firebase del telefono e l'ora.
-//
-// I file del progetto: google-services.json (gli identificativi pubblici
-// dell'app, che il telefono riceve dal server) e la chiave dell'account di
-// servizio (segreta, cifrata nel database, serve al server per mandare).
+// Notifiche Firebase, facoltative. A Google va solo un segnale vuoto: il telefono si
+// sveglia e legge la coda dal server dell'associazione.
 
 import crypto from 'crypto';
 import logger from './logger.js';
@@ -20,7 +10,6 @@ import { cifraTesto, decifraTesto } from './cifratura.js';
 import { pool } from './db.js';
 
 export const PACCHETTO_APP = 'it.orion.app';
-// Gli indirizzi di Google; le prove li sostituiscono con un Google finto.
 const URL_TOKEN = process.env.ORION_GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token';
 const URL_FCM = process.env.ORION_FCM_URL || 'https://fcm.googleapis.com';
 const AMBITO = 'https://www.googleapis.com/auth/firebase.messaging';
@@ -31,8 +20,6 @@ export const CHIAVI_FIREBASE = [CHIAVE_APP, CHIAVE_ACCOUNT];
 const ATTESA_RAGGRUPPAMENTO_MS = 300;
 
 class ConfigurazioneNonValida extends Error {}
-
-// --- Lettura dei file del progetto -------------------------------------------
 
 function comeOggetto(valore, nome) {
     if (valore && typeof valore === 'object' && !Array.isArray(valore)) return valore;
@@ -45,7 +32,6 @@ function comeOggetto(valore, nome) {
     throw new ConfigurazioneNonValida(`Il file ${nome} non è un JSON valido.`);
 }
 
-/** Da google-services.json: gli identificativi dell'app ORION nel progetto. */
 export function leggiGoogleServices(valore) {
     const g = comeOggetto(valore, 'google-services.json');
     const progetto = g.project_info?.project_id;
@@ -66,7 +52,6 @@ export function leggiGoogleServices(valore) {
     return { progetto, mittente: String(mittente), appId, apiKey };
 }
 
-/** La chiave dell'account di servizio: solo quello che serve per mandare. */
 export function leggiAccount(valore, progetto) {
     const a = comeOggetto(valore, "della chiave dell'account di servizio");
     if (a.type !== 'service_account' || typeof a.client_email !== 'string' || typeof a.private_key !== 'string') {
@@ -82,8 +67,6 @@ export function leggiAccount(valore, progetto) {
     }
     return { client_email: a.client_email, private_key: a.private_key, project_id: a.project_id };
 }
-
-// --- Configurazione salvata ----------------------------------------------------
 
 let memoria; // undefined: da leggere; null: non configurato
 let accesso = null; // { token, scade, email }
@@ -113,14 +96,11 @@ function dimentica() {
     ultimoErrore = null;
 }
 
-/** Quello che il telefono deve sapere per collegarsi al progetto; null se Firebase è spento. */
 export async function configurazionePubblica() {
     const c = await configurazione();
     if (!c) return null;
     return { progetto: c.app.progetto, app_id: c.app.appId, api_key: c.app.apiKey, mittente: c.app.mittente };
 }
-
-// --- Google ------------------------------------------------------------------
 
 async function tokenDiAccesso(account, { nuovo = false } = {}) {
     if (!nuovo && accesso && accesso.email === account.client_email && accesso.scade > Date.now() + 60_000) return accesso.token;
@@ -142,10 +122,7 @@ async function tokenDiAccesso(account, { nuovo = false } = {}) {
     return accesso.token;
 }
 
-/**
- * Un segnale a un telefono. Restituisce 'ok', 'non_valido' (il telefono non
- * è più registrato: l'identificativo si toglie) o lancia per gli altri errori.
- */
+// 'non_valido': il telefono non è più registrato e l'identificativo si toglie.
 async function manda(conf, fcmToken, dati) {
     for (let tentativo = 0; tentativo < 2; tentativo++) {
         const token = await tokenDiAccesso(conf.account, { nuovo: tentativo > 0 });
@@ -156,8 +133,7 @@ async function manda(conf, fcmToken, dati) {
                 message: {
                     token: fcmToken,
                     data: dati,
-                    // Alta priorità: il telefono si sveglia anche in risparmio
-                    // energetico. Più segnali in attesa diventano uno.
+                    // Alta priorità: il telefono si sveglia anche in risparmio energetico.
                     android: { priority: 'HIGH', ttl: '86400s', collapse_key: 'orion' }
                 }
             }),
@@ -189,14 +165,9 @@ async function mandaATutti(conf, righe, dati) {
     return mandati;
 }
 
-// --- Il segnale delle notifiche ----------------------------------------------
-
 const inAttesa = new Set();
 
-/**
- * Una notifica nuova per la persona: se Firebase è configurato si svegliano
- * i suoi telefoni registrati. Non lancia e non fa aspettare chi notifica.
- */
+// Non lancia e non fa aspettare chi notifica.
 export function svegliaTelefoni(userId) {
     if (!userId || inAttesa.has(userId)) return;
     inAttesa.add(userId);
@@ -216,17 +187,13 @@ export function svegliaTelefoni(userId) {
     }, ATTESA_RAGGRUPPAMENTO_MS).unref?.();
 }
 
-// Prima di spegnere o cambiare progetto: i telefoni registrati rileggono la
-// configurazione e tornano ad ascoltare il server da soli.
+// I telefoni registrati rileggono la configurazione e tornano da soli ad ascoltare il server.
 async function avvisaCambio(conf) {
     if (!conf) return 0;
     const r = await pool.query('SELECT id, fcm_token FROM token_avvisi WHERE fcm_token IS NOT NULL AND fcm_progetto = $1 AND scade_il > NOW()', [conf.app.progetto]);
     return r.rowCount ? mandaATutti(conf, r.rows, { orion: 'configurazione' }) : 0;
 }
 
-// --- Rotte -------------------------------------------------------------------
-
-/** Col token degli avvisi, prima della sessione: la configurazione e la registrazione del telefono. */
 export function registraRotteFirebaseTelefono(app) {
     async function utenteDa(req, res) {
         const utente = await utenteDaTokenAvvisi(tokenAvvisiDa(req.headers.authorization));
@@ -244,7 +211,6 @@ export function registraRotteFirebaseTelefono(app) {
         }
     });
 
-    // Il telefono dice il suo identificativo Firebase (o null: non lo usa più).
     app.put('/api/avvisi/firebase', async (req, res) => {
         const fcm = req.body?.token ?? null;
         const progetto = req.body?.progetto ?? null;
@@ -259,9 +225,7 @@ export function registraRotteFirebaseTelefono(app) {
                 return res.json({ firebase: false });
             }
             const conf = await configurazionePubblica();
-            // Il progetto è cambiato o Firebase è spento: il telefono rilegge la configurazione.
             if (!conf || conf.progetto !== progetto) return res.status(409).json({ message: 'La configurazione di Firebase è cambiata.', firebase: conf });
-            // Lo stesso telefono con l'app reinstallata: un identificativo, una riga.
             await pool.query('UPDATE token_avvisi SET fcm_token = NULL, fcm_progetto = NULL, fcm_il = NULL WHERE fcm_token = $1 AND id <> $2', [fcm, utente.token_id]);
             await pool.query('UPDATE token_avvisi SET fcm_token = $2, fcm_progetto = $3, fcm_il = NOW() WHERE id = $1', [utente.token_id, fcm, progetto]);
             res.json({ firebase: true });
@@ -272,7 +236,6 @@ export function registraRotteFirebaseTelefono(app) {
     });
 }
 
-/** Per l'amministratore: lo stato, la configurazione, lo spegnimento. */
 export function registraRotteFirebase(app, { avvisaTelefoni = () => {} } = {}) {
     async function stato() {
         const conf = await configurazione();
@@ -311,7 +274,6 @@ export function registraRotteFirebase(app, { avvisaTelefoni = () => {} } = {}) {
             throw e;
         }
         try {
-            // Prima di salvare: Google deve accettare la chiave.
             try {
                 await tokenDiAccesso(nuova.account, { nuovo: true });
             } catch (e) {
@@ -328,7 +290,6 @@ export function registraRotteFirebase(app, { avvisaTelefoni = () => {} } = {}) {
                      ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()`, [k, v]);
                 await scrivi(CHIAVE_APP, JSON.stringify(nuova.app));
                 await scrivi(CHIAVE_ACCOUNT, cifraTesto(JSON.stringify(nuova.account)));
-                // I telefoni registrati su un altro progetto si registrano di nuovo.
                 await client.query('UPDATE token_avvisi SET fcm_token = NULL, fcm_progetto = NULL, fcm_il = NULL WHERE fcm_progetto IS DISTINCT FROM $1', [nuova.app.progetto]);
                 await client.query('COMMIT');
             } catch (e) {

@@ -1,5 +1,3 @@
-// tests/scenari.mjs
-//
 // La biblioteca degli scenari (pagina Simulazioni): solo chi organizza le
 // attività li vede e li scrive; il copione di uno scenario si scrive, si
 // corregge, si toglie, si carica dal foglio Excel e si scarica come quello di
@@ -71,7 +69,6 @@ try {
     const mod = await chiama(`/api/scenari/${s.id}`, { method: 'PUT', token: org.token, body: { ...s, obiettivi: 'Tempi di risposta e comunicazioni' } });
     verifica('si corregge', mod.stato === 200 && /comunicazioni/.test(mod.corpo?.obiettivi), mod);
 
-    // Il copione dello scenario.
     verifica('un volontario non legge il copione dello scenario -> 403', (await chiama(`/api/scenari/${s.id}/copione`, { token: vol.token })).stato === 403);
     const ev = (corpo) => chiama(`/api/scenari/${s.id}/copione/eventi`, { method: 'POST', token: org.token, body: corpo });
     const cantina = (await ev({ tipo: 'segnalazione', minuto: 5, titolo: 'Cantina allagata', indirizzo: 'Via Roma 1', lat: 46.14, lng: 12.21 })).corpo;
@@ -87,7 +84,6 @@ try {
     verifica('il copione si legge come quello di un\'attività', copione?.puo_modificare === true && copione?.sala === null && copione?.eventi?.length === 2
         && copione.eventi.every(e => e.stato === 'atteso') && copione?.scenario?.titolo === s.titolo, copione);
 
-    // Excel: si scarica e si ricarica in un altro scenario.
     const xlsx = await chiama(`/api/scenari/${s.id}/copione.xlsx`, { token: org.token });
     verifica('il copione dello scenario si scarica in Excel', xlsx.stato === 200 && /spreadsheetml/.test(xlsx.tipo));
     const libro = new ExcelJS.Workbook();
@@ -102,7 +98,6 @@ try {
     const imp = await chiama(`/api/scenari/${altro.id}/copione/importa`, { method: 'POST', token: org.token, form: fd });
     verifica('il foglio si carica in un altro scenario', imp.stato === 201 && imp.corpo?.caricati === 2, imp);
 
-    // Copiare in uno scenario il copione di un'attività.
     const tipi = (await chiama('/api/attivita/tipi', { token: org.token })).corpo || [];
     const tipo = (n) => tipi.find(t => t.nome === n);
     const vecchia = (await chiama('/api/attivita', { method: 'POST', token: org.token, body: { tipo_id: tipo('Addestramento').id, titolo: `Vecchia ${suffisso}`, inizio: fra(-48), fine: fra(-46), avviso_app: false, simulazione: 'sala' } })).corpo;
@@ -111,12 +106,10 @@ try {
     const daAtt = await chiama(`/api/scenari/${altro.id}/copione/copia`, { method: 'POST', token: org.token, body: { da: vecchia.id } });
     verifica("in uno scenario si copia il copione di un'attività", daAtt.stato === 201 && daAtt.corpo?.copiati === 1, daAtt);
 
-    // Duplicare.
     const dup = await chiama(`/api/scenari/${s.id}/duplica`, { method: 'POST', token: org.token });
     if (dup.corpo?.id) scenari.push(dup.corpo.id);
     verifica('si duplica con il copione', dup.stato === 201 && dup.corpo?.titolo === `Copia di ${s.titolo}` && dup.corpo?.eventi === 2, dup);
 
-    // Pianificare: dal calendario nasce un'attività con la sua copia.
     verifica('uno scenario si pianifica come simulazione -> 400 senza',
         (await chiama('/api/attivita', { method: 'POST', token: org.token, body: { tipo_id: tipo('Esercitazione').id, titolo: 'No', inizio: fra(24), fine: fra(28), avviso_app: false, scenario_id: s.id } })).stato === 400);
     const pian = await chiama('/api/attivita', {
@@ -138,7 +131,6 @@ try {
     verifica('fra le simulazioni in programma con lo scenario', elenco?.programmate?.some(a => a.id === pian.corpo.id && a.scenario_titolo === s.titolo && a.eventi === 2), elenco?.programmate);
     verifica('e fra le svolte quella vecchia', elenco?.svolte?.some(a => a.id === vecchia.id), elenco?.svolte);
 
-    // Al volo dal centro operativo.
     const stato = (await chiama('/api/emergencies/status', { token: admin })).corpo;
     if (stato?.active) {
         console.log("  (salto la parte al volo: c'è un'emergenza in corso)");
@@ -155,7 +147,6 @@ try {
         await chiudiSeAperta();
     }
 
-    // Togliere lo scenario: le attività restano, con il loro copione.
     verifica('si toglie', (await chiama(`/api/scenari/${s.id}`, { method: 'DELETE', token: org.token })).stato === 204);
     scenari.splice(scenari.indexOf(s.id), 1);
     const resta = (await chiama(`/api/attivita/${pian.corpo.id}/copione`, { token: org.token })).corpo;

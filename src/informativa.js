@@ -1,12 +1,4 @@
-// Le condizioni d'uso: chi usa ORION le accetta al primo accesso e ogni volta
-// che cambiano (il controllo sta in authenticateToken). L'amministratore può
-// riscriverle; pubblicandole ne nasce una versione nuova. Ogni accettazione
-// resta nel registro con l'impronta del testo mostrato.
-//
-// Gli indirizzi (/api/informativa, informativa_da_vedere, /informativa.html)
-// sono rimasti quelli di quando c'era anche l'informativa sul trattamento dei
-// dati, tolta per ora: l'app li usa già. I campi "informativa" e "breve" delle
-// risposte restano vuoti per lo stesso motivo.
+// Condizioni d'uso. Gli indirizzi dicono ancora "informativa" perché l'app li usa già.
 
 import crypto from 'crypto';
 import logger from './logger.js';
@@ -25,9 +17,7 @@ async function leggiImpostazioni(esecutore = pool) {
     return Object.fromEntries(r.rows.map(x => [x.setting_key, x.setting_value]));
 }
 
-// Il testo in vigore: quello scritto dall'amministratore o, se non c'è,
-// quello predefinito. L'impronta lega l'accettazione a quello che è stato
-// mostrato davvero.
+// L'impronta lega l'accettazione al testo mostrato davvero.
 export async function testiInVigore(esecutore = pool) {
     const imp = await leggiImpostazioni(esecutore);
     const d = datiOrganizzazione(imp);
@@ -38,7 +28,6 @@ export async function testiInVigore(esecutore = pool) {
 
 const perChiLegge = (t) => ({ condizioni: t.condizioni, informativa: '', breve: '', link_ente: null });
 
-// Senza accesso: le condizioni si leggono anche dalla pagina di accesso.
 export function registraRotteInformativaPubblica(app) {
     app.get('/api/pubblico/informativa', async (req, res) => {
         try {
@@ -70,7 +59,6 @@ export function registraRotteInformativa(app) {
 
     app.post('/api/informativa/presa-visione', async (req, res) => {
         const versione = Number(req.body?.versione);
-        // Se il testo è cambiato mentre la persona leggeva, rilegge quello nuovo.
         if (versione !== versioneInformativa) {
             return res.status(409).json({ message: "Nel frattempo le condizioni d'uso sono state aggiornate: rileggi il testo nuovo.", versione: versioneInformativa });
         }
@@ -92,7 +80,6 @@ export function registraRotteInformativa(app) {
         }
     });
 
-    // Per l'amministratore: il testo e chi l'ha accettato.
     async function statoAmministrazione() {
         const { imp, d } = await testiInVigore();
         const [conteggi, mancano] = await Promise.all([
@@ -124,8 +111,6 @@ export function registraRotteInformativa(app) {
         }
     });
 
-    // Pubblicare: si salva il testo e nasce una versione nuova, che tutti
-    // accettano di nuovo al prossimo accesso. Chi pubblica l'ha già accettata.
     app.put('/api/admin/informativa', checkAdminRole, async (req, res) => {
         const v = req.body?.testi?.condizioni;
         if (v !== undefined && v !== null && (typeof v !== 'string' || v.length > LUNGHEZZA_TESTO)) {
@@ -138,7 +123,6 @@ export function registraRotteInformativa(app) {
             const scrivi = (k, valore) => client.query(
                 `INSERT INTO branding_settings (setting_key, setting_value, updated_at) VALUES ($1, $2, NOW())
                  ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()`, [k, valore]);
-            // Vuoto vuol dire "torna al testo predefinito".
             if (v !== undefined) await scrivi('privacy_testo_condizioni', (v || '').trim());
             await scrivi('privacy_versione', String(nuova));
             await scrivi('privacy_pubblicata_il', new Date().toISOString());

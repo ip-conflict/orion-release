@@ -1,21 +1,4 @@
-// La chiamata dei volontari e la loro disponibilità.
-//
-// La sala (o chi organizza un'attività di allertamento) sceglie chi chiamare:
-// tutti gli interni, i reperibili di oggi, chi ha un corso valido o un elenco.
-// Restano fuori chi è già in squadra, chi sta già arrivando e chi ha detto di
-// essere assente oggi (salvo sceglierlo a mano). L'avviso parte nell'app,
-// per email o in tutti e due i modi; dal telefono si risponde "arrivo",
-// "arrivo fra..." o "non posso". Chi non risponde entro i minuti stabiliti, o
-// non si raggiunge in nessun modo, passa fra quelli da chiamare a voce.
-//
-// La disponibilità è lo stato di ognuno nel contesto: in arrivo, arrivato in
-// sede, non disponibile, congedato. Chi è arrivato conta come presente da
-// quel momento al congedo (o alla chiusura), anche prima di entrare in una
-// squadra: lo legge src/presenze.js.
-//
-// Il contesto è l'emergenza aperta (vera o simulata) oppure un'attività del
-// calendario. Reperibilità e assenze: i turni li decide chi organizza, le
-// assenze le dichiara ognuno per sé.
+// Chiamata dei volontari e disponibilità: vedi "Chiamata, simulazione e copione" nel manuale tecnico.
 
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
@@ -33,7 +16,7 @@ const LIMITE = { messaggio: 500, nota: 300 };
 const RISPOSTE = ['arrivo', 'ritardo', 'no'];
 const STATI = ['in_arrivo', 'arrivato', 'non_disponibile', 'congedato'];
 
-// Gli interni attivi: quelli che si possono chiamare. I temporanei hanno il ruolo esterno.
+// I temporanei hanno il ruolo esterno.
 const SQL_INTERNI = `
     SELECT u.id, u.username, u.nome, u.cognome, NULLIF(TRIM(u.email), '') AS email, u.telefono
       FROM users u
@@ -54,8 +37,6 @@ function giorno(valore) {
 
 const nomeDi = nomeUtente;
 
-// Il contesto di una richiesta: un'attività (?attivita_id o nel corpo) o
-// l'emergenza aperta. null se non c'è nessuno dei due.
 async function contestoDa(req) {
     const grezzo = req.body?.attivita_id ?? req.query?.attivita_id;
     if (grezzo !== undefined && grezzo !== null && grezzo !== '') {
@@ -70,23 +51,18 @@ async function contestoDa(req) {
 
 const colonna = (ctx) => ctx.tipo === 'attivita' ? 'attivita_id' : 'emergency_id';
 
-// Chiamare: in emergenza chi apre le emergenze o organizza le attività; per
-// un'attività chi organizza o il suo responsabile.
 function puoChiamare(req, ctx) {
     if (esterno(req)) return false;
     if (ctx.tipo === 'emergenza') return haPermesso(req, 'emergenze.apertura', 'gruppo.attivita');
     return haPermesso(req, 'gruppo.attivita') || ctx.attivita.responsabile_id === req.user.id;
 }
 
-// Seguire le risposte e segnare arrivi e congedi: in emergenza ogni interno
-// della sala, come per le squadre; per un'attività chi la gestisce.
 function puoSeguire(req, ctx) {
     if (esterno(req)) return false;
     if (ctx.tipo === 'emergenza') return true;
     return puoChiamare(req, ctx);
 }
 
-// Tutti gli interni con quello che serve per scegliere chi chiamare.
 async function candidati(req, ctx) {
     const telefono = await mostraTelefonoCaposquadra(req);
     const r = await pool.query(`
@@ -102,11 +78,9 @@ async function candidati(req, ctx) {
                d.stato
           FROM chi LEFT JOIN disponibilita d ON d.${colonna(ctx)} = $1 AND d.user_id = chi.id
          ORDER BY chi.cognome, chi.nome`, [ctx.id, fusoOrario(), telefono]);
-    // Fuori dall'emergenza le squadre non contano: sono quelle preparate.
     return r.rows.map(p => ctx.tipo === 'emergenza' ? p : { ...p, squadra: null });
 }
 
-// Il testo e il titolo di una chiamata.
 function testiChiamata(ctx, messaggio) {
     const segno = ctx.simulazione ? '[SIMULAZIONE] ' : '';
     const dove = ctx.tipo === 'emergenza'
@@ -119,7 +93,6 @@ function testiChiamata(ctx, messaggio) {
     };
 }
 
-// Gli avvisi di una chiamata, dopo la risposta alla sala.
 async function avvisa(ctx, chiamata, persone) {
     const { titolo, testo: corpo, oggetto } = testiChiamata(ctx, chiamata.messaggio);
     const indirizzo = `https://${domainName}/chiamata.html?id=${chiamata.id}`;
@@ -144,8 +117,6 @@ async function avvisa(ctx, chiamata, persone) {
     }
 }
 
-// Chi è stato chiamato e chi ha una disponibilità nel contesto, con lo stato
-// di ognuno: quello che vede la sala.
 async function quadroDisponibilita(req, ctx) {
     const col = colonna(ctx);
     const telefono = await mostraTelefonoCaposquadra(req);
@@ -196,7 +167,6 @@ async function quadroDisponibilita(req, ctx) {
     };
 }
 
-// Scrive la disponibilità di una persona nel contesto (crea o aggiorna).
 async function scriviDisponibilita(ctx, userId, campi, chi, esecutore = pool) {
     const col = colonna(ctx);
     const r = await esecutore.query(`
@@ -222,8 +192,6 @@ async function scriviDisponibilita(ctx, userId, campi, chi, esecutore = pool) {
     return r.rows[0];
 }
 
-// Gli intervalli in sede dei presenti di un'emergenza, per le presenze: da
-// quando sono arrivati al congedo, o alla fine.
 export async function intervalliInSede(emergencyId, esecutore = pool) {
     const r = await esecutore.query(
         `SELECT u.username, d.arrivato_il, d.congedato_il FROM disponibilita d JOIN users u ON u.id = d.user_id
@@ -235,7 +203,6 @@ export function registraRotteChiamate(app) {
     const soloInterni = (req, res, next) => esterno(req)
         ? res.status(403).json({ message: 'La chiamata è degli interni.' }) : next();
 
-    // Il contesto, o la risposta che dice perché manca.
     async function contesto(req, res) {
         const ctx = await contestoDa(req);
         if (!ctx) {
@@ -245,14 +212,12 @@ export function registraRotteChiamate(app) {
         return ctx;
     }
 
-    // Chi si può chiamare, per comporre la chiamata o segnare chi arriva senza.
     app.get('/api/chiamate/candidati', soloInterni, async (req, res) => {
         try {
             const ctx = await contesto(req, res);
             if (!ctx) return;
             if (!puoSeguire(req, ctx)) return res.status(403).json({ message: "Le risposte le segue chi gestisce l'attività." });
             const persone = await candidati(req, ctx);
-            // I corsi che qualcuno ha validi: le scelte per "chi ha il corso".
             const ids = [...new Set(persone.flatMap(p => p.corsi))];
             const corsi = ids.length
                 ? (await pool.query('SELECT id, name AS nome FROM courses_catalog WHERE id = ANY($1::int[]) ORDER BY name', [ids])).rows : [];
@@ -337,7 +302,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // Richiamare chi non ha ancora risposto a una chiamata.
     app.post('/api/chiamate/:id/richiama', soloInterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Chiamata non valida.' });
@@ -367,7 +331,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // Le chiamate a me ancora aperte, con la mia risposta: per l'app e per il web.
     app.get('/api/chiamate/mie', soloInterni, async (req, res) => {
         try {
             const r = await pool.query(`
@@ -394,7 +357,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // Una chiamata, per chi l'ha ricevuta (la pagina della risposta) o per la sala.
     app.get('/api/chiamate/:id', soloInterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Chiamata non valida.' });
@@ -427,7 +389,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // La risposta di chi è stato chiamato.
     app.post('/api/chiamate/:id/risposta', soloInterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const risposta = req.body?.risposta;
@@ -444,7 +405,6 @@ export function registraRotteChiamate(app) {
                 return res.status(409).json({ message: 'La chiamata è chiusa: l\'emergenza o l\'attività è finita.' });
             }
             const prima = (await pool.query(`SELECT stato FROM disponibilita WHERE ${colonna(ctx)} = $1 AND user_id = $2`, [ctx.id, req.user.id])).rows[0];
-            // Chi è già in sede resta in sede: la risposta si annota e basta.
             const stato = prima?.stato === 'arrivato' ? 'arrivato' : (risposta === 'no' ? 'non_disponibile' : 'in_arrivo');
             const d = await scriviDisponibilita(ctx, req.user.id, {
                 stato, risposta, minuti_ritardo: minuti, risposto_il: new Date(),
@@ -461,7 +421,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // "Sono arrivato in sede", detto da chi è stato chiamato.
     app.post('/api/disponibilita/arrivato', soloInterni, async (req, res) => {
         try {
             const ctx = await contesto(req, res);
@@ -482,7 +441,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // Il quadro delle disponibilità, per la sala.
     app.get('/api/disponibilita', soloInterni, async (req, res) => {
         try {
             const ctx = await contesto(req, res);
@@ -495,8 +453,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // La sala segna lo stato di una persona: arrivata (anche senza chiamata),
-    // congedata, non disponibile o in arrivo.
     app.put('/api/disponibilita/:userId', soloInterni, async (req, res) => {
         const userId = parseInt(req.params.userId, 10);
         const stato = req.body?.stato;
@@ -528,11 +484,8 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // --- Reperibilità ---------------------------------------------------------------
-
     const organizza = (req) => haPermesso(req, 'gruppo.attivita');
 
-    // I turni di un periodo: tutti per chi organizza, i propri per gli altri.
     app.get('/api/reperibilita', soloInterni, async (req, res) => {
         const da = giorno(req.query.da) || oggiLocale(), a = giorno(req.query.a) || da;
         try {
@@ -584,9 +537,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // --- Assenze --------------------------------------------------------------------
-
-    // Le mie assenze da oggi in poi.
     app.get('/api/assenze/mie', soloInterni, async (req, res) => {
         try {
             const r = await pool.query(
@@ -598,7 +548,6 @@ export function registraRotteChiamate(app) {
         }
     });
 
-    // Le assenze di tutti in un periodo, per chi chiama o organizza.
     app.get('/api/assenze', soloInterni, async (req, res) => {
         if (!haPermesso(req, 'gruppo.attivita', 'emergenze.apertura')) return res.status(403).json({ message: 'Ti serve il permesso "Organizzare attività e presenze".' });
         const da = giorno(req.query.da) || oggiLocale(), a = giorno(req.query.a) || da;

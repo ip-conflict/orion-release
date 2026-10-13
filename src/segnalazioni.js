@@ -1,6 +1,3 @@
-// Le segnalazioni, il loro diario, le squadre assegnate, le immagini e la
-// posizione delle squadre.
-
 import fs from 'fs';
 import logger from './logger.js';
 import multer from 'multer';
@@ -20,22 +17,15 @@ import { aggiornaRischi } from './rischiZone.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Dopo quanti minuti di silenzio di chi manda la posizione di una squadra
-// (il caposquadra, o il primo telefono che l'ha mandata) un altro membro
-// subentra. Il centro operativo segna ferma una posizione dopo cinque.
+// Il centro operativo segna ferma una posizione dopo cinque minuti.
 export const MINUTI_SUBENTRO = 3;
 
 export function registraRotteSegnalazioni(app) {
 
-    // Un esterno temporaneo agisce solo sulle segnalazioni della sua squadra,
-    // o su quelle dove una funzione di cui fa parte ha un incarico ancora da
-    // concludere (l'operatore ASL nella funzione sanità), con la funzione e il
-    // modulo accesi. Legge tutta l'emergenza (gli serve il quadro),
-    // ma scrivere note, spostare il punto o caricare foto su un intervento non
-    // suo non gli spetta: la stessa regola delle immagini.
+    // Un esterno legge tutta l'emergenza ma scrive solo sulle segnalazioni della sua
+    // squadra o di una sua funzione con un incarico aperto.
     async function esternoFuoriDallaSuaSquadra(req, reportId) {
         if (!ruoliDi(req.user).includes('esterno')) return false;
-        // Chi è nella squadra COC lavora in sala: segue tutte le segnalazioni.
         const inSala = await pool.query(
             'SELECT 1 FROM squadra_membri sm JOIN squadre s ON s.id = sm.squadra_id WHERE s.coc AND sm.username = $1', [req.user.username]);
         if (inSala.rowCount) return false;
@@ -61,7 +51,6 @@ export function registraRotteSegnalazioni(app) {
         }
         if (!fs.existsSync(safePath)) return res.status(404).json({ message: 'File non trovato' });
         try {
-            // La foto e' di una segnalazione: la vede chi puo' vedere la sua emergenza.
             const r = await pool.query(
                 `SELECT r.emergency_id FROM report_images ri JOIN reports r ON r.id = ri.report_id
              WHERE ri.image_url = $1 LIMIT 1`, [`/uploads/${req.params.filename}`]);
@@ -91,8 +80,7 @@ export function registraRotteSegnalazioni(app) {
             longitude 
         } = req.body;
         const creator_user_id = req.user.id;
-        // Basta il titolo: una chiamata girata dal 112 o di un passante che
-        // riattacca non ha sempre un nome o un numero, e non si inventano.
+        // Una chiamata girata dal 112 non ha sempre un nome o un numero, e non si inventano.
         if (!title || String(title).trim() === '') {
             return res.status(400).json({ message: 'Scrivi almeno cosa succede (il titolo).' });
         }
@@ -137,7 +125,6 @@ export function registraRotteSegnalazioni(app) {
                  }
             });
             res.status(201).json(newReport);
-            // Dentro una zona di pericolo della mappa? Lo dicono i rischi.
             if (coordinatesProvided) aggiornaRischi({ emergencyId: currentEmergencyId, reportIds: [newReportId], userId: creator_user_id });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -189,7 +176,6 @@ export function registraRotteSegnalazioni(app) {
             queryParams.push(assignedTeamIdFilter);
             mainWhereClause += ` AND EXISTS (SELECT 1 FROM report_team_assignments rta_filter WHERE rta_filter.report_id = r.id AND rta_filter.squadra_id = $${queryParams.length})`;
         }
-        // La coda per priorità e poi per attesa; l'archivio delle chiuse in ordine di tempo.
         const clausolaOrdinamento = statusType === 'closed'
             ? 'r.updated_at DESC NULLS LAST, r.created_at DESC'
             : `CASE r.priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END ASC, r.created_at ASC`;
@@ -381,8 +367,8 @@ export function registraRotteSegnalazioni(app) {
                 logger.warn(`Tentativo modifica report ${reportId} fuori emergenza attiva.`);
                 return res.status(403).json({ message: 'Operazione permessa solo per report dell\'emergenza attiva.' });
             }
-            // Cambio di stato rimandato dopo un buco di rete: se nel frattempo
-            // qualcun altro l'ha cambiato, non si scrive sopra alla cieca.
+            // Cambio rimandato dopo un buco di rete: se qualcun altro l'ha cambiato nel frattempo,
+            // non si scrive sopra alla cieca.
             const statoAtteso = receivedUpdates.stato_atteso;
             if (statoAtteso !== undefined && receivedUpdates.status !== undefined
                 && receivedUpdates.status !== oldStatus && statoAtteso !== oldStatus) {
@@ -462,11 +448,9 @@ export function registraRotteSegnalazioni(app) {
                      if (key === 'priority') {
                          const validPriorities = ['Low', 'Medium', 'High'];
                          if (!validPriorities.includes(receivedUpdates[key])) throw erroreRichiesta(`Priorità non valida: ${receivedUpdates[key]}`);
-                         // Diventa ALTA: il centro operativo suona.
                          if (receivedUpdates[key] === 'High' && currentValue !== 'High') priorityRaisedToHigh = true;
                      }
                      if (key === 'no_team_reason') {
-                         // Stringa vuota: torna ad aspettare una squadra (NULL).
                          if (parsedReceivedValue === '' || parsedReceivedValue === undefined) parsedReceivedValue = null;
                          if (parsedReceivedValue !== null && !MOTIVI_SENZA_SQUADRA[parsedReceivedValue]) {
                              throw erroreRichiesta(`Motivo non valido per la squadra non necessaria: ${parsedReceivedValue}`);
@@ -475,12 +459,10 @@ export function registraRotteSegnalazioni(app) {
                      if (key === 'title' && (!parsedReceivedValue || String(parsedReceivedValue).trim() === '')) {
                          throw erroreRichiesta(`Il campo '${fieldNamesMap[key] || key}' non può essere vuoto.`);
                      }
-                     // Nome e recapito di chi ha chiamato si possono lasciare vuoti.
                      if ((key === 'reporter_name' || key === 'reporter_contact') && String(parsedReceivedValue ?? '').trim() === '') parsedReceivedValue = null;
                     reportUpdatesToApply[key] = parsedReceivedValue;
                     hasReportUpdates = true;
                     const fieldName = fieldNamesMap[key] || key;
-                // Nel diario la frase, non il codice.
                 const leggibile = (valore) => {
                     if (!valore) return valore;
                     if (key === 'no_team_reason') return MOTIVI_SENZA_SQUADRA[valore] || valore;
@@ -539,9 +521,7 @@ export function registraRotteSegnalazioni(app) {
             const result = await client.query(sqlUpdateQuery, values);
             if (result.rowCount === 0) throw new Error('Report not found during final update.');
             reportAfterUpdate = result.rows[0];
-            // Alla chiusura le assegnazioni restano (sono la traccia di chi è
-            // intervenuto dove): la squadra è libera perché la segnalazione è chiusa.
-            // Alla riapertura si tolgono, l'intervento ricomincia.
+            // Alla chiusura le assegnazioni restano: sono la traccia di chi è intervenuto dove.
             if (logEntries.length > 0) {
                     const insertLogQuery = `WITH inserted AS (INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *) SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname FROM inserted i JOIN users u ON i.user_id = u.id;`;
                     for (const logText of logEntries) {
@@ -605,7 +585,6 @@ export function registraRotteSegnalazioni(app) {
         }
 
 
-        // Ogni interno sposta il punto; un esterno solo sulle segnalazioni della sua squadra.
         if (await esternoFuoriDallaSuaSquadra(req, reportId)) {
             logger.warn(`[API /api/reports/${reportId}/coordinates] Esterno ${req.user.username} su una segnalazione non della sua squadra.`);
             return res.status(403).json({ message: 'Puoi aggiornare solo le segnalazioni della tua squadra.' });
@@ -658,7 +637,6 @@ export function registraRotteSegnalazioni(app) {
             const updatedReport = updatedReportResult.rows[0];
             logger.debug('[DB Query Log] UPDATE reports completato. Report aggiornato:', updatedReport);
 
-            // Nel diario lo leggono la sala e la squadra: il nome della persona, non il nome utente.
             const logText = `Posizione corretta sulla mappa da ${nomeUtente(req.user)} (${latNum.toFixed(5)}, ${lonNum.toFixed(5)}).`;
             const insertLogQueryString = `
             WITH inserted AS (
@@ -719,8 +697,6 @@ export function registraRotteSegnalazioni(app) {
         if (!update_text || typeof update_text !== 'string' || update_text.trim() === '') return res.status(400).json({ message: 'Testo aggiornamento richiesto.' });
         const trimmedUpdateText = update_text.trim();
         const userId = req.user.id;
-        // Una nota scritta per conto di una funzione che ha un incarico sulla
-        // segnalazione: la scrive un suo membro o un operatore interno.
         const funzioneNota = Number.isInteger(req.body.funzione_id) && req.body.funzione_id > 0 ? req.body.funzione_id : null;
         const client = await pool.connect();
         try {
@@ -808,9 +784,8 @@ export function registraRotteSegnalazioni(app) {
 
                  throw erroreConflitto(`Impossibile assegnare la squadra: la segnalazione e' ${ETICHETTA_STATO[reportStatus] || reportStatus}.`);
             }
-            // FOR UPDATE anche sulla squadra: due operatori che assegnano la stessa
-            // squadra a due segnalazioni diverse si mettono in fila, e il secondo
-            // trova la prima assegnazione. Ordine dei blocchi: reports, poi squadre.
+            // FOR UPDATE anche sulla squadra: due assegnazioni della stessa squadra si mettono in
+            // fila. Ordine dei blocchi: reports, poi squadre.
             const checkTeam = await client.query('SELECT nome, nome_radio, coc FROM squadre WHERE id = $1 FOR UPDATE', [teamId]);
 
             if (checkTeam.rowCount === 0) throw erroreNonTrovato('Squadra non trovata.');
@@ -827,8 +802,6 @@ export function registraRotteSegnalazioni(app) {
             const insertLogQuery = `WITH inserted AS (INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *) SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname FROM inserted i JOIN users u ON i.user_id = u.id;`;
             const logResultAssign = await client.query(insertLogQuery, [reportId, logTextAssign, userId]);
             const newUpdateAssign = logResultAssign.rows[0];
-            // Con una squadra assegnata l'intervento è in corso: una segnalazione
-            // ancora "Nuova" o "Aperta" ci passa da sola, e il diario lo dice.
             let newReportStatus = reportStatus;
             let newUpdateStato = null;
             if (['New', 'Open'].includes(reportStatus)) {
@@ -902,8 +875,6 @@ export function registraRotteSegnalazioni(app) {
             const insertLogQuery = `WITH inserted AS (INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *) SELECT i.*, CONCAT(u.nome, ' ', u.cognome) as updater_fullname FROM inserted i JOIN users u ON i.user_id = u.id;`;
             const logResultRemove = await client.query(insertLogQuery, [reportId, logTextRemove, userId]);
             const newUpdateRemove = logResultRemove.rows[0];
-            // Tolta l'ultima squadra, un intervento "In corso" torna "Aperta":
-            // aspetta di nuovo qualcuno. Se non serve una squadra resta com'è.
             let newUpdateStatoRimozione = null;
             const restano = (await client.query('SELECT 1 FROM report_team_assignments WHERE report_id = $1 LIMIT 1', [reportId])).rowCount > 0;
             if (!restano && currentReport.status === 'InProgress' && !currentReport.no_team_reason) {
@@ -965,8 +936,6 @@ export function registraRotteSegnalazioni(app) {
         async (req, res) => {
           const { id } = req.params;
           const reportId = parseInt(id, 10);
-            // Un esterno carica foto solo sugli interventi della sua squadra
-            // (o di una sua funzione).
             if (req.user.role === 'esterno') {
                 if (await esternoFuoriDallaSuaSquadra(req, parseInt(req.params.id, 10) || 0)) {
                     (req.files || []).forEach(f => fs.unlink(f.path, () => {}));
@@ -1061,7 +1030,6 @@ export function registraRotteSegnalazioni(app) {
             if (isNaN(lat) || isNaN(lon) || isNaN(teamId)) {
                  return res.status(400).json({ error: 'Formato dati invalido nel JSON (ID, Lat, Lon devono essere numerici).' });
             }
-            // La squadra COC sta in sala: la sua posizione non va sulla mappa.
             const squadraCoc = await pool.query('SELECT 1 FROM squadre WHERE id = $1 AND coc', [teamId]);
             if (squadraCoc.rowCount) return res.status(409).json({ error: 'La squadra COC non manda la posizione.', squadra_coc: true });
             const membro = (await pool.query(
@@ -1071,17 +1039,12 @@ export function registraRotteSegnalazioni(app) {
                 return res.status(403).json({ error: 'Non sei autorizzato ad aggiornare la posizione di questa squadra.' });
             }
             const caposquadra = membro?.caposquadra === true;
-            // Da quanto il telefono l'ha rilevata (eta_ms): con la rete che va e
-            // viene una posizione può partire in ritardo, e in sala deve
-            // arrivare vecchia com'è. Un'età e non un'ora: l'orologio del
-            // telefono non conta. Al massimo un'ora indietro.
+            // Un'età e non un'ora: l'orologio del telefono non conta. Con la rete che va e viene
+            // la posizione deve arrivare in sala vecchia com'è.
             const eta = Number(req.body.eta_ms);
             const etaSecondi = Number.isFinite(eta) && eta > 0 ? Math.min(eta, 3600000) / 1000 : 0;
-            // Con più telefoni nella stessa squadra la posizione la manda uno
-            // solo, altrimenti sulla mappa la squadra salta fra un membro e
-            // l'altro. Vince il caposquadra; senza di lui chi la sta già
-            // mandando. Un altro subentra quando quello tace da più di
-            // MINUTI_SUBENTRO minuti, o non è più nella squadra.
+            // La posizione la manda un telefono solo, se no la squadra salta fra un membro e
+            // l'altro: il caposquadra, o chi la sta già mandando finché non tace.
             const upsertQuery = `
             INSERT INTO posizioni_squadre (squadra_id, latitude, longitude, last_update, inviata_da)
             VALUES ($1, $2, $3, NOW() - make_interval(secs => $7::float8), $4)
@@ -1106,14 +1069,11 @@ export function registraRotteSegnalazioni(app) {
         `;
             const upsertResult = await pool.query(upsertQuery, [teamId, lat, lon, req.user.username, caposquadra, MINUTI_SUBENTRO, etaSecondi]);
             if (upsertResult.rowCount === 0) {
-                // La manda un altro: si risponde 200 (non è un errore) e si
-                // dice chi, così l'app lo può mostrare.
                 const chi = (await pool.query(
                     `SELECT u.username, u.nome, u.cognome, COALESCE(m.caposquadra, false) AS caposquadra
                        FROM posizioni_squadre ps JOIN users u ON u.username = ps.inviata_da
                        LEFT JOIN squadra_membri m ON m.squadra_id = ps.squadra_id AND m.username = ps.inviata_da
                       WHERE ps.squadra_id = $1`, [teamId])).rows[0] || null;
-                // La manda proprio lui, ma ce n'è già una più recente: questa era rimasta indietro.
                 if (chi?.username === req.user.username) {
                     return res.status(200).json({ message: 'C\'è già una posizione più recente.', accettata: true, superata: true, caposquadra });
                 }

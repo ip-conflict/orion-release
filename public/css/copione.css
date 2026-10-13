@@ -1,8 +1,3 @@
-/* public/css/copione.css
-   La pagina del copione: come il centro operativo, l'elenco degli eventi a
-   sinistra e la mappa a destra; la valutazione e il debriefing dopo. */
-
-/* La ricerca sulla mappa, uguale a quella del centro operativo. */
 .ricerca-mappa {
     position: relative;
     background: var(--surface-color);
@@ -72,7 +67,6 @@
 .ricerca-dettaglio { grid-column: 2; font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ricerca-nota { font-size: 0.8rem; color: var(--text-muted); padding: 6px 10px; }
 
-/* --- La pagina --- */
 body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-color); color: var(--text-color); }
 .cp-testa { height: 60px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--surface-color); border-bottom: 1px solid var(--border-color); box-shadow: 0 2px 4px var(--shadow-color-light, rgba(0,0,0,.06)); z-index: 1000; }
 .cp-indietro { color: var(--text-color); font-size: 1.1rem; padding: 6px; }
@@ -154,7 +148,6 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
 .cp-finestra { width: 100%; max-width: 620px; }
 .cp-passi { padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
 .cp-passi .nota { display: block; margin-top: 4px; }
-/* I pulsanti dei passi (scarica, carica) della loro misura, con l'icona sulla stessa riga. */
 .cp-passi .button-style { display: inline-flex; align-items: center; gap: 8px; width: auto; flex-direction: row; }
 .cp-passi .button-style i { display: inline; margin: 0; font-size: 1em; }
 .cp-sostituisci { flex-direction: row !important; font-weight: 400 !important; margin-top: 8px; }
@@ -164,7 +157,6 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
 .cp-copia-elenco button { width: 100%; text-align: left; }
 .cp-copia-gruppo { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-top: 6px; }
 
-/* --- La valutazione --- */
 .cp-val { border: 1px solid var(--border-color); border-left: 5px solid var(--colore-tipo); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: .86rem; }
 .cp-val strong { display: block; }
 .cp-val .cp-tempi { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--text-muted); font-size: .8rem; margin-top: 4px; }
@@ -185,7 +177,6 @@ body.pagina-copione { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-ser
     .cp-modulo { position: fixed; inset: 70px 8px 8px 8px; width: auto; }
     .cp-azioni .button-style { padding: 6px 8px; font-size: .8rem; }
 }
-/* Telefono: il titolo sulla sua riga, i comandi sotto. */
 @media (max-width: 600px) {
     .cp-testa { height: auto; flex-wrap: wrap; padding: 8px 12px; gap: 8px 10px; }
     .cp-titolo { flex: 1 1 calc(100% - 140px); }

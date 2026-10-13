@@ -1,5 +1,3 @@
-// tests/permessi.mjs
-//
 // Dai ruoli ai permessi (src/permessi.js). Il catalogo, il ruolo
 // Coordinatore, i permessi in più: concessi valgono subito sulla stessa
 // sessione, revocati si chiudono subito; li dà solo l'amministratore, mai a
@@ -68,7 +66,6 @@ try {
     const esterno = await nuovo('Est', ['esterno']);
     verifica('a un esterno non si danno -> 409', (await concedi(esterno.id, ['emergenze.archivio'])).stato === 409);
 
-    // Il coordinatore.
     await chiama(`/api/users/${v.id}`, { method: 'PUT', token: admin, body: { nome: `Vol${suffisso}`, cognome: 'Permessi', ruoli: ['volontario', 'coordinatore'] } });
     const coord = (await chiama('/api/me/status', { token: v.token })).corpo;
     verifica('diventato coordinatore, ha i permessi delle emergenze', coord?.role === 'coordinatore' && coord.permessi?.length === 5, coord);
@@ -76,7 +73,6 @@ try {
     verifica('ma non la gestione degli account', (await chiama(`/api/users/${esterno.id}`, { method: 'PUT', token: v.token, body: { nome: 'X', cognome: 'Y', ruoli: ['volontario'] } })).stato === 403);
     await chiama(`/api/users/${v.id}`, { method: 'PUT', token: admin, body: { nome: `Vol${suffisso}`, cognome: 'Permessi', ruoli: ['volontario'] } });
 
-    // Anagrafica: iscrive volontari, legge il libretto senza dati sanitari.
     await concedi(v.id, ['volontari.anagrafica']);
     verifica("con l'anagrafica vede l'elenco dei volontari", (await chiama('/api/admin/users', { token: v.token })).stato === 200);
     const iscritto = await chiama('/api/users', { method: 'POST', token: v.token, body: { nome: `Nuovo${suffisso}`, cognome: 'Iscritto', ruoli: ['volontario'] } });
@@ -89,7 +85,6 @@ try {
         && libretto.corpo.medical_records.length === 0, libretto.corpo);
     verifica('il catalogo delle visite resta chiuso', (await chiama('/api/admin/medical-visit-types', { token: v.token })).stato === 403);
 
-    // Dati sanitari: serve la verifica in due passaggi.
     const sanitario = await concedi(v.id, ['volontari.sanitario']);
     verifica('chi riceve i dati sanitari è avvisato della verifica', /verifica in due passaggi/.test(sanitario.corpo?.message || ''), sanitario.corpo);
     const senzaVerifica = await chiama('/api/me/status', { token: v.token });

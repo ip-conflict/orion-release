@@ -1,9 +1,3 @@
-// Il calendario del gruppo (src/attivita.js): il mese con le attività, le
-// emergenze e le scadenze; la scheda di un'attività con la risposta ("Ci
-// sono", "Non posso"); per chi organizza la creazione, le convocazioni, chi
-// ha risposto e chi non si raggiunge, la chiusura con i presenti; le presenze
-// delle emergenze da correggere e il riepilogo dell'anno (src/presenze.js).
-// Sul telefono il mese diventa un elenco di giorni.
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
@@ -22,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let spenti = new Set();
     try { spenti = new Set(JSON.parse(localStorage.getItem(CHIAVE_FILTRI) || '[]')); } catch { /* niente */ }
 
-    // --- Date ---------------------------------------------------------------------
     // I timestamp arrivano da PostgreSQL ("2026-10-12 18:30:00+00").
     const data = (v) => v instanceof Date ? v : new Date(String(v).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));
     const due = (n) => String(n).padStart(2, '0');
@@ -46,14 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return e;
     };
 
-    // --- Modali -----------------------------------------------------------------------
     const chiudi = (m) => { m.hidden = true; };
     document.querySelectorAll('.modale').forEach(m => m.addEventListener('click', (e) => {
         if (e.target === m || e.target.closest('[data-chiudi]')) chiudi(m);
     }));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.modale').forEach(chiudi); });
 
-    // --- Il mese ------------------------------------------------------------------------
     function periodo() {
         const primo = new Date(mese);
         const inizio = new Date(primo);
@@ -105,7 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Le voci di un giorno: attività ed emergenze che lo toccano, scadenze del giorno.
     function vociDel(giorno) {
         const voci = [];
         const inizioG = new Date(`${giorno}T00:00:00`), fineG = new Date(`${giorno}T23:59:59`);
@@ -162,8 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         GIORNI.forEach(g => griglia.appendChild(el('div', 'intestazione-giorno', g)));
         const agenda = $('agenda');
         agenda.replaceChildren();
-        // Sul telefono, nel mese in corso, i giorni già passati stanno chiusi in
-        // cima: l'elenco comincia da oggi, che è quello che si cerca.
+        // Sul telefono, nel mese in corso, i giorni passati stanno chiusi in cima: l'elenco comincia da oggi.
         const passati = el('details', 'giorni-passati');
         const titoloPassati = el('summary', '', '');
         passati.appendChild(titoloPassati);
@@ -174,14 +163,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const fuori = d.getMonth() !== mese.getMonth();
             const cella = el('div', `giorno${fuori ? ' fuori-mese' : ''}${g === oggi ? ' oggi' : ''}${dati?.organizza ? ' cliccabile' : ''}`);
             cella.appendChild(el('span', 'numero-giorno', String(d.getDate())));
-            // Chi organizza tocca il giorno (non una voce) e l'attività nuova è già lì.
             if (dati?.organizza) {
                 const quel = new Date(d);
                 cella.title = `Nuova attività ${quel.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
                 cella.addEventListener('click', (e) => { if (!e.target.closest('button, a')) apriForm(null, quel); });
             }
             const voci = vociDel(g);
-            // Un giorno pieno non allunga tutta la settimana: le prime voci e "+N altre".
             const MASSIMO = 5;
             const visibili = voci.length > MASSIMO ? voci.slice(0, MASSIMO - 1) : voci;
             visibili.forEach(v => cella.appendChild(chip(v)));
@@ -195,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 cella.appendChild(altre);
             }
             griglia.appendChild(cella);
-            // L'elenco per il telefono: solo i giorni del mese con qualcosa.
             if (!fuori && voci.length) {
                 const riga = el('section', `giorno-agenda${g === oggi ? ' oggi' : ''}`);
                 const data = d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -235,7 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('mese-dopo').addEventListener('click', () => { mese.setMonth(mese.getMonth() + 1); carica(); });
     $('mese-oggi').addEventListener('click', () => { mese = new Date(); mese.setDate(1); mese.setHours(12, 0, 0, 0); carica(); });
 
-    // --- La scheda di un'attività --------------------------------------------------------
     function riga(lista, etichetta, valore) {
         if (!valore) return;
         lista.append(el('dt', '', etichetta), el('dd', '', valore));
@@ -273,10 +258,8 @@ document.addEventListener('DOMContentLoaded', () => {
         $('att-allegati-elenco').replaceChildren(...allegati.map(x => rigaAllegato(x.nome_originale, pesoLeggibile(x.dimensione), {
             href: `/api/attivita/${a.id}/allegati/${x.id}`, tipo: x.tipo })));
 
-        // La propria risposta.
         const risposta = $('att-risposta');
         risposta.hidden = !a.puo_rispondere;
-        // Chi la conduce non risponde: lo dice, così nessuno si chiede perché.
         $('att-conduci').hidden = !a.conduco || a.stato !== 'programmata';
         $('att-conduci').textContent = a.simulazione && a.sono_regia ? 'Sei nella regia: la convocazione è per i partecipanti, tu non devi rispondere.'
             : 'La conduci tu: la convocazione è per gli altri, tu non devi rispondere. Alla chiusura sei già fra i presenti.';
@@ -293,7 +276,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         disegnaSimulazione(a);
 
-        // Chi organizza.
         const gestione = $('att-gestione');
         gestione.hidden = !a.gestisce;
         $('form-presenze').hidden = true;
@@ -309,7 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('modale-attivita').hidden = false;
     }
 
-    // I comandi della simulazione: copione, sala, allertamento.
     function disegnaSimulazione(a) {
         const box = $('att-sim-azioni');
         box.replaceChildren();
@@ -325,7 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (a.sala && !a.sala.aperta) link('Valutazione e debriefing', `/copione.html?attivita=${a.id}#valutazione`);
         } else if (a.simulazione === 'sala' && a.sala && !a.sala.aperta) {
-            // Chi ha partecipato: se la regia l'ha pubblicato.
             link('Copione e debriefing', `/copione.html?attivita=${a.id}#valutazione`);
         }
         if (a.simulazione === 'allertamento' && a.regista && a.stato === 'programmata') {
@@ -400,7 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { notifica(e.message, 'errore'); }
     });
 
-    // --- I presenti ---------------------------------------------------------------------------
     async function personeInterne() {
         if (!persone) persone = await fetchApi('/api/attivita-persone');
         return persone;
@@ -412,11 +391,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try { tutti = await personeInterne(); } catch (e) { return notifica(e.message, 'errore'); }
         const gia = new Map((a.presenze || []).map(p => [p.user_id, p]));
         const risposte = new Map((a.persone || []).map(p => [p.id, p.risposta]));
-        // Chi l'ha condotta (chi l'ha proposta, il responsabile, la regia) c'era: già spuntato.
         const conduttori = new Set([a.creato_da, a.responsabile_id, ...(a.regia || []).map(p => p.id)].filter(Boolean));
         const lista = $('elenco-presenti');
         lista.replaceChildren();
-        // Prima chi aveva detto di sì o era già presente, poi gli altri.
         const ordinati = [...tutti].sort((x, y) => {
             const px = gia.has(x.id) || risposte.get(x.id) === 'si' ? 0 : 1;
             const py = gia.has(y.id) || risposte.get(y.id) === 'si' ? 0 : 1;
@@ -476,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { notifica(err.message, 'errore'); }
     });
 
-    // --- Creare e cambiare ---------------------------------------------------------------------
     function convocazioneScelta() { return document.querySelector('input[name="convocazione"]:checked').value; }
     function aggiornaConvocazione() {
         const c = convocazioneScelta();
@@ -507,8 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function contaScelti() { $('conta-scelti').textContent = scelti.size === 1 ? '1 persona scelta' : `${scelti.size} persone scelte`; }
     $('cerca-persone').addEventListener('input', disegnaScelta);
 
-    // L'orario dell'ultima attività creata da questo browser: chi fa sempre le
-    // riunioni alle 21 non deve correggerlo ogni volta. La prima volta, sera.
+    // Chi fa sempre le riunioni alle 21 non deve correggere l'orario ogni volta.
     const CHIAVE_ORARIO = 'orion.attivita.orario';
     function orarioProposto() {
         try {
@@ -549,7 +524,6 @@ document.addEventListener('DOMContentLoaded', () => {
             $('f-inizio').value = perInput(a.inizio);
             $('f-fine').value = perInput(a.fine);
         } else {
-            // Di partenza il giorno toccato (o domani), all'orario dell'ultima volta.
             const { ora, minuti } = orarioProposto();
             const d = giorno ? new Date(giorno) : new Date();
             if (!giorno) d.setDate(d.getDate() + 1);
@@ -584,8 +558,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('f-titolo').focus();
     }
 
-    // Gli allegati: quelli già caricati (in modifica) si tolgono subito, quelli
-    // nuovi partono dopo il salvataggio dell'attività.
     let allegatiNuovi = [];
     let allegatiEsistenti = [];
     const MB_ALLEGATO = 25;
@@ -638,7 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('f-file').value = '';
         disegnaAllegatiForm();
     });
-    // Dopo il salvataggio: uno per volta; quello che non passa si dice e non ferma gli altri.
     async function caricaAllegati(id) {
         const falliti = [];
         for (const f of allegatiNuovi) {
@@ -651,9 +622,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (falliti.length) notifica(`Non allegati:\n${falliti.join('\n')}`, 'errore', 12000);
     }
 
-    // Pianificare uno scenario della biblioteca (/calendario.html?scenario=N,
-    // dalla pagina Simulazioni): tipo, titolo, testi e durata vengono dallo
-    // scenario, la simulazione è in sala; il copione lo copia il server.
     function riempiDaScenario(sc) {
         const tipo = tipi.find(t => t.attivo && t.natura === sc.natura && t.nome.toLowerCase() === sc.natura)
             || tipi.find(t => t.attivo && t.natura === sc.natura);
@@ -669,7 +637,6 @@ document.addEventListener('DOMContentLoaded', () => {
         aggiornaSimulazione();
     }
 
-    // La simulazione si sceglie solo per addestramenti ed esercitazioni.
     let regiaScelta = new Set();
     const naturaScelta = () => tipi.find(t => String(t.id) === $('f-tipo').value)?.natura || 'generica';
     function aggiornaSimulazione() {
@@ -679,12 +646,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!puo) document.querySelector('input[name="simulazione"][value=""]').checked = true;
         const sim = document.querySelector('input[name="simulazione"]:checked')?.value || '';
         $('dettagli-simulazione').hidden = !sim;
-        // Gli enti sono delle esercitazioni vere e proprie.
         $('campo-enti').hidden = natura !== 'esercitazione';
     }
     $('f-tipo').addEventListener('change', aggiornaSimulazione);
     document.querySelectorAll('input[name="simulazione"]').forEach(r => r.addEventListener('change', aggiornaSimulazione));
-    // La regia: si aggiunge una persona alla volta dall'elenco a discesa, si toglie con la x.
     function disegnaRegia() {
         const sel = $('aggiungi-regia');
         const restanti = (persone || []).filter(p => !regiaScelta.has(p.id));
@@ -711,7 +676,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (id) { regiaScelta.add(id); disegnaRegia(); }
     });
 
-    // I tipi di attività e la loro natura.
     const NATURE = { generica: 'Generica', addestramento: 'Addestramento', esercitazione: 'Esercitazione' };
     async function disegnaTipi() {
         try { tipi = await fetchApi('/api/attivita/tipi'); } catch (e) { return notifica(e.message, 'errore'); }
@@ -745,7 +709,6 @@ document.addEventListener('DOMContentLoaded', () => {
             disegnaTipi();
         } catch (err) { notifica(err.message, 'errore'); }
     });
-    // Chiusa la finestra dei tipi, il modulo si aggiorna con i nomi nuovi.
     $('modale-tipi').addEventListener('click', (e) => {
         if (!(e.target === $('modale-tipi') || e.target.closest('[data-chiudi]'))) return;
         const scelto = $('f-tipo').value;
@@ -757,7 +720,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('btn-nuova').addEventListener('click', () => apriForm());
     $('att-modifica').addEventListener('click', () => { chiudi($('modale-attivita')); apriForm(aperta); });
 
-    // Spostando l'inizio, la fine si sposta con lui e la durata resta quella.
     let inizioPrima = null;
     $('f-inizio').addEventListener('focus', () => { inizioPrima = $('f-inizio').value; });
     $('f-inizio').addEventListener('change', () => {
@@ -819,7 +781,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Scadenze ed emergenze ----------------------------------------------------------------
     function apriScadenze(s) {
         const nomi = { mie: 'Le tue scadenze', segreteria: 'Scadenze di visite e corsi', magazzino: 'Scadenze del magazzino' };
         $('info-titolo').textContent = `${nomi[s.categoria]} del ${new Date(`${s.giorno}T12:00:00`).toLocaleDateString('it-IT')}`;
@@ -834,7 +795,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('modale-info').hidden = false;
     }
 
-    // Reperibili o assenti di un giorno; chi organizza toglie i turni, ognuno le sue assenze.
     function apriTurni(t) {
         $('info-titolo').textContent = `${t.categoria === 'reperibili' ? 'Reperibili' : 'Assenti'} il ${new Date(`${t.giorno}T12:00:00`).toLocaleDateString('it-IT')}`;
         const ul = el('ul', 'elenco-semplice');
@@ -862,7 +822,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('modale-info').hidden = false;
     }
 
-    // --- Assenze e turni ------------------------------------------------------------------
     async function disegnaMieAssenze() {
         const ul = $('as-elenco');
         ul.replaceChildren();
@@ -920,7 +879,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('tu-cerca').addEventListener('input', disegnaTurno);
     $('btn-turno').addEventListener('click', async () => {
         try { if (!persone) persone = await fetchApi('/api/attivita-persone'); } catch (err) { return notifica(err.message, 'errore'); }
-        // Di partenza la settimana da lunedì.
         const lun = new Date(); lun.setDate(lun.getDate() - ((lun.getDay() + 6) % 7));
         const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
         $('tu-dal').value = chiaveGiorno(lun); $('tu-al').value = chiaveGiorno(dom); $('tu-nota').value = '';
@@ -965,7 +923,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const tabella = el('div', 'tabella-presenze');
         for (const p of elenco) tabella.appendChild(rigaPresenza(p, () => apriEmergenza(e)));
         corpo.appendChild(tabella);
-        // Aggiungere chi manca.
         let tutti = [];
         try { tutti = await personeInterne(); } catch { /* senza elenco niente aggiunta */ }
         const mancanti = tutti.filter(p => !elenco.some(x => x.user_id === p.id));
@@ -990,7 +947,6 @@ document.addEventListener('DOMContentLoaded', () => {
         corpo.appendChild(form);
     }
 
-    // Una presenza con i suoi orari e le ore, correggibili da chi organizza.
     function rigaPresenza(p, dopo) {
         const r = el('form', 'riga-presenza');
         r.appendChild(el('span', 'nome-persona', `${p.cognome || ''} ${p.nome || ''}`.trim() || p.titolo));
@@ -1016,14 +972,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm('Togliere questa presenza?')) return;
             try { await fetchApi(`/api/presenze/${p.id}`, { method: 'DELETE' }); dopo(); } catch (err) { notifica(err.message, 'errore'); }
         });
-        // Cambiando gli orari le ore seguono.
         const ricalcola = () => { const m = (new Date(fin.value) - new Date(ini.value)) / 3600000; if (m >= 0) h.value = m.toFixed(2).replace(/\.00$/, ''); };
         ini.addEventListener('change', ricalcola);
         fin.addEventListener('change', ricalcola);
         return r;
     }
 
-    // --- Il riepilogo dell'anno ---------------------------------------------------------------------
     async function apriRiepilogo(anno = new Date().getFullYear()) {
         const sel = $('pres-anno');
         if (!sel.options.length) {
@@ -1079,7 +1033,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('btn-presenze').addEventListener('click', () => apriRiepilogo());
     $('pres-anno').addEventListener('change', () => apriRiepilogo(Number($('pres-anno').value)));
 
-    // --- Avvio ------------------------------------------------------------------------------------
     (async () => {
         await carica();
         caricaDaRispondere();

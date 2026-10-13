@@ -1,5 +1,3 @@
-// tests/websocket-app.mjs
-//
 // Il web riceve tutto; l'app (X-Orion-Client: app) solo quello che riguarda
 // chi la usa. Lo stesso volontario si collega due volte, come web e come app,
 // e si guarda chi riceve cosa.
@@ -73,7 +71,6 @@ await api(admin, `/api/reports/${mia}/updates`, { method: 'POST', body: { update
 await api(volontario, '/api/location', { method: 'POST', body: { squadra_id: squadra, latitude: 46.1, longitude: 12.2 } });
 await api(admin, `/api/reports/${mia}/teams/${squadra}`, { method: 'DELETE' });
 await api(admin, `/api/reports/${mia}/updates`, { method: 'POST', body: { update_text: 'dopo la rimozione' } });
-// Una zona del piano messa e tolta: all'app arriva solo il "rileggi".
 const zona = await api(admin, '/api/mappa/elementi', { method: 'POST', body: { piano: true, tipo: 'pericolo_frana', nome: 'Collaudo WebSocket',
     geometria: { type: 'Polygon', coordinates: [[[12.1, 46.1], [12.2, 46.1], [12.2, 46.2], [12.1, 46.1]]] } } });
 if (zona.corpo?.id) await api(admin, `/api/mappa/elementi/${zona.corpo.id}`, { method: 'DELETE' });

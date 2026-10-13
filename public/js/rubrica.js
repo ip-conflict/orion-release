@@ -1,7 +1,5 @@
-// La rubrica d'emergenza. Rubrica.apri() mostra la finestra del centro
-// operativo: si cerca, si chiama (sul telefono il numero è un link), si
-// aggiunge e si corregge. Rubrica.disegnaFoglio(contenitore) la scrive come
-// foglio da stampare, per rubrica.html: quando la rete non c'è, la carta sì.
+// Rubrica.apri() per il centro operativo, Rubrica.disegnaFoglio() per la carta: quando la rete
+// non c'è, la carta sì.
 
 (function () {
     const CATEGORIE = {
@@ -55,7 +53,6 @@
         return e;
     }
 
-    // Il numero come link "tel:": sul telefono chiama, sul PC lo passa al programma delle chiamate.
     const linkTelefono = (n) => el('a', { href: `tel:${n.replace(/[^0-9+]/g, '')}`, testo: n, title: `Chiama ${n}` });
     const descrizione = (c) => [c.ruolo, c.ente].filter(Boolean).join(' · ');
     const corrisponde = (c, cerca) => !cerca || [c.nome, c.ruolo, c.ente, c.telefono, c.telefono_alt, c.email, c.note, CATEGORIE[c.categoria]]
@@ -71,7 +68,6 @@
         const cerca = el('input', { type: 'search', placeholder: 'Cerca nome, ente, numero…', 'aria-label': 'Cerca nella rubrica' });
         const corpo = el('div', { class: 'rb-corpo' });
         const modulo = el('div', { class: 'rb-modulo', hidden: true });
-        // Gli esterni la consultano soltanto.
         const scrive = typeof haRuolo === 'function' && (haRuolo('admin') || !(typeof ruoliUtente === 'function' && ruoliUtente().includes('esterno')));
         const barra = el('div', { class: 'rb-barra' },
             cerca,
@@ -211,7 +207,6 @@
         cerca.focus();
     }
 
-    // Il foglio da stampare: una tabella per gruppo.
     function disegnaFoglio(contatti, contenitore) {
         const gruppi = new Map();
         contatti.forEach(c => {
@@ -223,7 +218,6 @@
             return;
         }
         gruppi.forEach((voci, categoria) => {
-            // Sul telefono il numero si tocca per chiamare; sulla carta è testo.
             const numero = (n, classe) => n ? el('a', { href: `tel:${String(n).replace(/[^\d+]/g, '')}`, class: classe, testo: n }) : null;
             const corpo = el('tbody', {}, voci.map(c => el('tr', {},
                 el('td', {}, el('strong', { testo: c.nome }), descrizione(c) ? el('span', { class: 'st-piccolo', testo: descrizione(c) }) : null),

@@ -1,5 +1,3 @@
-// L'emergenza aperta, tenuta in memoria: la leggono quasi tutte le rotte.
-
 import logger from './logger.js';
 import { pool } from './db.js';
 
@@ -9,7 +7,6 @@ export function impostaEmergenzaAttiva(emergenza) {
     activeEmergency = emergenza;
 }
 
-// All'avvio: l'emergenza rimasta aperta prima del riavvio.
 export async function loadActiveEmergency() {
     logger.debug("Controllo emergenza attiva all'avvio...");
     try {

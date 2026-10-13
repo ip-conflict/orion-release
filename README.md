@@ -171,7 +171,7 @@ normale amministrazione e non vengono registrati.
 ### Ciclo di vita di un account
 
 Gli account nascono **senza password**: alla creazione ORION produce un link
-personale di attivazione, valido 24 ore, con cui il volontario sceglie da sé la
+personale di attivazione, valido 7 giorni, con cui il volontario sceglie da sé la
 propria password. Non esiste nessuna password predefinita condivisa.
 
 - Se la posta è configurata, il link parte per email; **se non lo è, il link
@@ -184,8 +184,15 @@ propria password. Non esiste nessuna password predefinita condivisa.
   l'azzeramento da parte di un amministratore.
 - La risposta a *password dimenticata* è sempre la stessa, che l'account esista
   o no: serve a non rivelare quali username o indirizzi sono registrati.
-- Ogni link di ripristino vale **una volta sola** e scade (24 ore per
+- Ogni link di ripristino vale **una volta sola** e scade (7 giorni per
   l'attivazione, 1 ora per il recupero password).
+- **Si attiva tutto dal telefono**: aperto su Android, il link propone
+  *Continua nell'app*, dove si scelgono password, condizioni d'uso e telefono
+  collegato. Dall'app si iscrive anche una persona, mostrandole un QR.
+- **La verifica in due passaggi è il telefono**: dopo la password il browser
+  mostra un numero, sull'app si tocca lo stesso numero e si conferma con
+  impronta o PIN. Chi non ha l'app usa un'app per i codici a tempo; i codici
+  di riserva valgono sempre.
 - **Sospendere un utente lo mette fuori subito**: non può più accedere e la
   sessione eventualmente già aperta smette di funzionare alla richiesta
   successiva. Lo stesso vale per un account eliminato.
@@ -541,15 +548,14 @@ zero, oppure si aggiornano una volta con `sudo ./update.sh`. Fino alla 3.36,
 inoltre, l'aggiornamento dalla pagina Sistema cancellava la cartella `.pm2`;
 `update.sh` se ne accorge e riavvia ORION da capo.
 
-Il dettaglio delle scelte è in `docs/manutenzione-backup-e-aggiornamenti.md`.
+Il dettaglio delle scelte è nel capitolo 7 di `docs/manuale-tecnico.md`.
 
 ### Documentazione
 
 I manuali d'uso, per chi usa ORION ogni giorno, sono due: `docs/manuale-web.md`
 per il browser e `docs/manuale-app.md` per l'app Android, con le immagini in
 `docs/immagini`. Il manuale tecnico, per chi installa, mantiene e
-sviluppa, è in `docs/manuale-tecnico.md`. La lista delle prove da fare su
-telefoni veri prima di una messa in produzione è in `docs/collaudo.md`.
+sviluppa, è in `docs/manuale-tecnico.md`.
 
 ---
 

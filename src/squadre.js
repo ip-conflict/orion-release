@@ -1,5 +1,3 @@
-// Le squadre e il loro registro durante un'emergenza.
-
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
 import { checkAdminRole, nomeUtente, nonEsterni, ruoliDi } from './autenticazione.js';
@@ -9,7 +7,6 @@ import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { notifiche, wss } from './tempoReale.js';
 
-// Le persone di una squadra, per le notifiche che la riguardano.
 export async function avvisaSquadra(squadraId, dati) {
     try {
         const { rows } = await pool.query(
@@ -22,9 +19,7 @@ export async function avvisaSquadra(squadraId, dati) {
     }
 }
 
-// Chi entra in una squadra durante un'emergenza lo sa dal telefono: è il solo
-// avviso d'emergenza che l'app dà a chi non è già impegnato. Chi esce perde
-// l'avviso. Senza emergenza aperta le squadre si preparano e basta.
+// È il solo avviso d'emergenza che l'app dà a chi non è già impegnato.
 export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza = activeEmergency) {
     if (!emergenza) return;
     try {
@@ -35,7 +30,6 @@ export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza
         }
         const radio = squadra.nome_radio + (squadra.nome ? ` (${squadra.nome})` : '');
         for (const id of await ids(entrati)) {
-            // Cambiando squadra vale solo l'avviso nuovo.
             await notifiche.scadi({ tipo: 'in_squadra', userId: id });
             await notifiche.notifica(id, {
                 tipo: 'in_squadra',
@@ -51,8 +45,8 @@ export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza
     }
 }
 
-// I telefoni del caposquadra e dei membri si mostrano al centro operativo
-// solo con la segreteria accesa (l'anagrafica la tiene lei) e mai agli esterni.
+// I telefoni dei membri si mostrano solo con la segreteria accesa (l'anagrafica è sua)
+// e mai agli esterni.
 async function segreteriaAccesa(esecutore = pool) {
     try {
         const r = await esecutore.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
@@ -68,8 +62,6 @@ export async function mostraTelefonoCaposquadra(req) {
     return !ruoliDi(req.user).includes('esterno') && await segreteriaAccesa();
 }
 
-// Nomina (o toglie, con null) il caposquadra dentro una transazione aperta e
-// lo annota nel registro dell'emergenza. Restituisce chi lo è adesso.
 async function scriviCaposquadra(client, squadra, username, req) {
     const prima = (await client.query(
         'SELECT username, nome, cognome FROM squadra_membri WHERE squadra_id = $1 AND caposquadra', [squadra.id])).rows[0] || null;
@@ -95,8 +87,7 @@ async function eAncoraMembro(client, squadraId, username) {
     return (await client.query('SELECT 1 FROM squadra_membri WHERE squadra_id = $1 AND username = $2', [squadraId, username])).rowCount > 0;
 }
 
-// Il caposquadra richiesto nel corpo: "caposquadra" assente vuol dire
-// lasciare quello di prima (se è ancora nella squadra), null toglierlo.
+// "caposquadra" assente lascia quello di prima (se è ancora nella squadra), null lo toglie.
 function caposquadraRichiesto(corpo, membriRisolti, prima) {
     const usernames = new Set(membriRisolti.map(m => m.username));
     if (!Object.prototype.hasOwnProperty.call(corpo || {}, 'caposquadra')) {
@@ -107,7 +98,6 @@ function caposquadraRichiesto(corpo, membriRisolti, prima) {
     return scelto;
 }
 
-// Gli utenti con lo stato di visita e corso base, per comporre le squadre.
 async function getAvailableUsersQuery(client) {
     const query = `
         SELECT u.id, u.username, u.nome, u.cognome, u.role,
@@ -136,8 +126,7 @@ async function getAvailableUsersQuery(client) {
     return result.rows;
 }
 
-// Durante un'emergenza ogni entrata e uscita da una squadra si annota, per la
-// relazione finale; fuori emergenza no. Un errore qui non ferma l'operazione.
+// Un errore qui non ferma l'operazione.
 export async function annotaRegistroSquadre(client, righe, req = null, emergencyId = null) {
     // All'apertura l'emergenza si passa: lo stato globale cambia solo dopo il COMMIT.
     const idEmergenza = emergencyId ?? activeEmergency?.id ?? null;
@@ -160,7 +149,6 @@ export async function annotaRegistroSquadre(client, righe, req = null, emergency
     }
 }
 
-// Chi è entrato e chi è uscito fra la composizione vecchia e la nuova.
 function differenzaMembri(prima, dopo, datiSquadra, motivo = 'operazione') {
     const chiaviPrima = new Map(prima.map(m => [m.username, m]));
     const chiaviDopo = new Map(dopo.map(m => [m.username, m]));
@@ -174,7 +162,6 @@ function differenzaMembri(prima, dopo, datiSquadra, motivo = 'operazione') {
     return righe;
 }
 
-// I nomi radio di squadre sciolte durante l'emergenza: bloccati fino alla chiusura.
 export async function nomiRadioBloccati(client) {
     if (!activeEmergency) return new Set();
     const { rows } = await client.query(
@@ -185,8 +172,6 @@ export async function nomiRadioBloccati(client) {
     return new Set(rows.map(r => r.nome_radio));
 }
 
-// I membri di una squadra verificati sull'anagrafica: esistono, il nome è
-// quello vero, e nessuno sta già in un'altra squadra (il messaggio dice chi e dove).
 async function risolviMembriSquadra(client, membri, squadraIdCorrente = null) {
     if (!Array.isArray(membri) || membri.length === 0) return [];
     const usernames = [...new Set(
@@ -214,7 +199,6 @@ async function risolviMembriSquadra(client, membri, squadraIdCorrente = null) {
     const trovati = new Map();
     for (const r of rows) {
         if (!trovati.has(r.username)) trovati.set(r.username, r);
-        // Con dati vecchi una persona può risultare in più squadre: conta l'altra.
         else if (r.squadra_attuale && r.squadra_attuale !== squadraIdCorrente) trovati.set(r.username, r);
     }
 
@@ -235,8 +219,7 @@ async function risolviMembriSquadra(client, membri, squadraIdCorrente = null) {
     return [...trovati.values()].map(r => ({ username: r.username, nome: r.nome, cognome: r.cognome }));
 }
 
-// I blocchi operativi della segreteria: senza visita valida o corso base non
-// si entra in squadra. Un requisito vale fino a tutto il giorno di scadenza.
+// Un requisito vale fino a tutto il giorno di scadenza.
 async function validateTeamMembers(client, usernames) {
     if (!usernames || usernames.length === 0) return [];
 
@@ -343,7 +326,6 @@ export function registraRotteSquadre(app) {
     app.get('/api/squadre/disponibili', async (req, res) => {
         logger.debug(`User ${req.user.id} requesting available teams.`);
         try {
-            // "Impegnata" come nell'assegnazione: stessa costante degli stati attivi.
             const query = `
             SELECT s.id, s.nome, s.nome_radio
             FROM squadre s
@@ -394,7 +376,6 @@ export function registraRotteSquadre(app) {
             ORDER BY sm.caposquadra DESC, u.cognome, u.nome;
         `;
             const membriResult = await pool.query(membriQuery, [squadraId]);
-            // L'idoneità medica è un dato sanitario: agli esterni no.
             const esterno = ruoliDi(req.user).includes('esterno');
             const membri = membriResult.rows.map(m => ({ 
                  id: m.id,
@@ -505,7 +486,6 @@ export function registraRotteSquadre(app) {
 
             const esiste = await client.query('SELECT id, nome_radio, nome, coc FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
             if (esiste.rowCount === 0) throw erroreNonTrovato('Squadra non trovata.');
-            // La squadra COC tiene il suo nome: si cambiano solo i membri.
             const coc = esiste.rows[0].coc;
             if (coc) {
                 nome_radio = esiste.rows[0].nome_radio;
@@ -518,7 +498,6 @@ export function registraRotteSquadre(app) {
                 'SELECT username, nome, cognome, caposquadra FROM squadra_membri WHERE squadra_id = $1', [squadraId]
             )).rows;
             const capoPrima = membriPrima.find(m => m.caposquadra)?.username || null;
-            // Cambiare nome radio vale come crearne una nuova: stessi blocchi.
             if (nome_radio !== esiste.rows[0].nome_radio) {
                 const bloccatiPut = await nomiRadioBloccati(client);
                 if (bloccatiPut.has(nome_radio)) {
@@ -541,8 +520,7 @@ export function registraRotteSquadre(app) {
             if (membriRisolti.length > 0) {
                 const insertMembroQuery = `INSERT INTO squadra_membri (squadra_id, username, nome, cognome, caposquadra) VALUES ($1, $2, $3, $4, $5)`;
                 for (const membro of membriRisolti) {
-                    // Il caposquadra di prima resta segnato: scriviCaposquadra sotto
-                    // vede così il cambio vero e lo annota una volta sola.
+                    // Il caposquadra di prima resta segnato: così scriviCaposquadra vede il cambio vero e lo annota una volta sola.
                     await client.query(insertMembroQuery, [squadraId, membro.username, membro.nome, membro.cognome, membro.username === capoPrima]);
                 }
             }
@@ -577,8 +555,6 @@ export function registraRotteSquadre(app) {
         }
     });
 
-    // Il caposquadra con un clic, dal centro operativo: { username } lo
-    // nomina, { username: null } lo toglie. Uno solo per squadra.
     app.put('/api/squadre/:id/caposquadra', nonEsterni, async (req, res) => {
         const squadraId = parseInt(req.params.id, 10);
         if (isNaN(squadraId)) return res.status(400).json({ message: 'ID Squadra non valido' });
@@ -631,7 +607,6 @@ export function registraRotteSquadre(app) {
             }
             const { nome_radio: nomeRadio, nome: nomeSquadra } = datiSquadra.rows[0];
 
-            // Una squadra sul posto non si scioglie.
             const impegni = await client.query(`
             SELECT r.emergency_report_number, r.id
             FROM report_team_assignments rta
@@ -644,8 +619,6 @@ export function registraRotteSquadre(app) {
                 throw erroreRichiesta(`La squadra ${nomeRadio} è impegnata sulla segnalazione ${elenco}. Liberala dall'intervento prima di eliminarla.`);
             }
 
-            // Il registro annota l'uscita dei membri e blocca il nome radio; il
-            // materiale in carico si decide riga per riga (beniInUscita.js).
             const beniSistemati = await sistemaBeniInCarico(client, req, 'squadra', squadraId, req.body?.beni);
 
             const membriUscenti = (await client.query(
@@ -658,8 +631,7 @@ export function registraRotteSquadre(app) {
                 { ...riferimentoSquadra, azione: 'squadra_eliminata', motivo: 'squadra_eliminata' }
             ], req);
 
-            // Le assegnazioni a interventi chiusi restano, con il nome radio di
-            // allora: il database mette squadra_id a NULL.
+            // Le assegnazioni a interventi chiusi restano: il database mette squadra_id a NULL.
             await client.query('DELETE FROM squadra_membri WHERE squadra_id = $1', [squadraId]);
             const deleteResult = await client.query('DELETE FROM squadre WHERE id = $1', [squadraId]);
             if (deleteResult.rowCount === 0) throw new Error('Squadra non trovata');
@@ -676,7 +648,6 @@ export function registraRotteSquadre(app) {
             avvisaEntratiInSquadra([], membriUscenti.map(m => m.username), { id: squadraId, nome_radio: nomeRadio, nome: nomeSquadra });
         } catch (error) {
             await client.query('ROLLBACK');
-            // Con materiale in carico la risposta porta l'elenco da decidere.
             if (error.beniInCarico) {
                 logger.warn(`[Magazzino] Scioglimento della squadra ${squadraId} sospeso: ${error.beniInCarico.length} beni da sistemare.`);
                 return res.status(409).json({ error: error.message, beni_in_carico: error.beniInCarico });
@@ -686,8 +657,6 @@ export function registraRotteSquadre(app) {
             res.status(stato).json({ error: error.message || 'Errore rimozione squadra.' });
         } finally { client.release(); }
     });
-
-    // Per comporre le squadre, e con l'idoneità medica di tutti: non agli esterni.
 
     app.get('/api/users/unassigned', nonEsterni, async (req, res) => {
         const client = await pool.connect();

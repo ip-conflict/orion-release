@@ -32,8 +32,6 @@
             <p class="sottotitolo">DPI, attrezzature e veicoli: dov'è, chi ce l'ha, quando scade, quando torna.</p>
         </header>
 
-        <!-- Le quattro cose che servono davvero, una accanto all'altra.
-             Il resto è amministrazione e sta in fondo. -->
         <nav class="schede-magazzino" role="tablist">
             <button class="scheda attiva" data-scheda="consegna" role="tab">
                 <span>Consegna</span>
@@ -61,17 +59,12 @@
         </nav>
 
         <div id="avviso-magazzino" class="avviso" hidden></div>
-        <!-- Etichetta inquadrata con la fotocamera di un telefono Android: la
-             si può aprire in Orion Mobile, che ha già la consegna sotto mano. -->
         <p id="apri-in-app" class="riquadro-app" hidden>
             <span>Hai Orion Mobile su questo telefono?</span>
             <a id="link-apri-in-app" class="azione-consegna">Apri nell'app</a>
         </p>
-        <!-- Dal QR di un'etichetta, per chi non tiene l'inventario: i libretti del bene. -->
         <ul id="documenti-qr" class="elenco-documenti-bene riquadro-documenti-qr" hidden></ul>
 
-        <!-- Modulo spento: si dice perché e cosa fare, invece di lasciare la
-             pagina vuota o piena di errori. -->
         <section id="modulo-spento" class="modulo-spento" hidden>
             <i class="fas fa-power-off"></i>
             <h2>Il modulo Magazzino è disattivato</h2>
@@ -82,7 +75,6 @@
             <p class="nota">Niente è andato perso: beni, giacenze e registro tornano appena viene riacceso.</p>
         </section>
 
-        <!-- ============ 1. CONSEGNA ============ -->
         <section class="pannello-scheda" id="pannello-consegna">
             <div class="passo">
                 <h2><span class="numero-passo">1</span> A chi va</h2>
@@ -96,8 +88,6 @@
                 <div id="elenco-consegnabili" class="elenco-beni"></div>
             </div>
 
-            <!-- Il passo che chiude resta in fondo allo schermo mentre si
-                 scorre l'elenco: il pulsante è sempre a portata di mano. -->
             <div class="passo passo-fisso" id="passo-conferma-consegna">
                 <h2><span class="numero-passo">3</span> Fatto</h2>
                 <label class="riga-opzione" id="riga-verbale" hidden>
@@ -114,7 +104,6 @@
             </div>
         </section>
 
-        <!-- ============ 2. RIENTRO ============ -->
         <section class="pannello-scheda" id="pannello-rientro" hidden>
             <div class="passo">
                 <h2><span class="numero-passo">1</span> Chi restituisce</h2>
@@ -129,8 +118,6 @@
                 </p>
                 <div id="elenco-rientro" class="elenco-beni"></div>
             </div>
-            <!-- Il passo che chiude resta in fondo allo schermo mentre si
-                 scorre l'elenco: il pulsante è sempre a portata di mano. -->
             <div class="passo passo-fisso" id="passo-conferma-rientro">
                 <h2><span class="numero-passo">3</span> Fatto</h2>
                 <div id="riepilogo-rientro" class="riepilogo">Nessun oggetto scelto.</div>
@@ -144,7 +131,6 @@
             </div>
         </section>
 
-        <!-- ============ 3. CHI HA COSA ============ -->
         <section class="pannello-scheda" id="pannello-chi-ha-cosa" hidden>
             <div class="barra-inventario">
                 <input type="search" id="cerca-detentori" class="campo-grande" placeholder="Cerca persona, squadra o oggetto...">
@@ -155,7 +141,6 @@
             <div id="elenco-detentori" class="elenco-detentori"></div>
         </section>
 
-        <!-- ============ 4. COSA SCADE E COSA MANCA ============ -->
         <section class="pannello-scheda" id="pannello-scadenze" hidden>
             <h2 class="titolo-blocco">Scadenze</h2>
             <div id="elenco-scadenze" class="elenco-avvisi"></div>
@@ -164,7 +149,6 @@
             <div id="elenco-da-recuperare" class="elenco-avvisi"></div>
         </section>
 
-        <!-- ============ 5. INVENTARIO (solo magazziniere) ============ -->
         <section class="pannello-scheda" id="pannello-inventario" hidden>
             <div class="barra-inventario">
                 <input type="search" id="cerca-inventario" class="campo-grande" placeholder="Cerca nell'inventario...">
@@ -174,7 +158,6 @@
                     <option value="attrezzatura">Attrezzature</option>
                     <option value="veicolo">Veicoli</option>
                 </select>
-                <!-- Categoria e, per i DPI a taglie, il singolo modello: "solo le scarpe". -->
                 <select id="filtro-categoria" aria-label="Categoria">
                     <option value="">Tutte le categorie</option>
                 </select>
@@ -185,8 +168,6 @@
                     <span>Nuovo bene</span>
                 </button>
             </div>
-            <!-- I DPI a taglie: un riquadro per modello, con le quantità per
-                 taglia. Le sue taglie non si ripetono nell'elenco sotto. -->
             <div class="testata-modelli">
                 <h2 class="titolo-blocco">DPI a taglie</h2>
                 <div class="gruppo-azioni">
@@ -201,7 +182,6 @@
             <div id="elenco-inventario" class="elenco-beni"></div>
         </section>
 
-        <!-- ============ 6. VERBALI E REGISTRO (solo magazziniere) ============ -->
         <section class="pannello-scheda" id="pannello-registro" hidden>
             <h2 class="titolo-blocco">Verbali di consegna e rientro</h2>
             <p class="nota">
@@ -241,7 +221,6 @@
             <div id="elenco-movimenti" class="elenco-registro"></div>
         </section>
 
-        <!-- ============ 7. IMPOSTAZIONI (solo magazziniere) ============ -->
         <section class="pannello-scheda" id="pannello-impostazioni" hidden>
             <h2 class="titolo-blocco">Impostazioni del magazzino</h2>
             <div class="impostazioni">
@@ -356,7 +335,6 @@
     </main>
 </div>
 
-<!-- DPI a taglie: creazione, modifica e carico -->
 <div id="modale-modello" class="modale" hidden>
     <div class="contenuto-modale">
         <button class="chiudi-modale" id="chiudi-modale-modello" aria-label="Chiudi">&times;</button>
@@ -376,8 +354,6 @@
                         <option value="kit">kit</option>
                     </select>
                 </label>
-                <!-- Alla consegna, per un DPI mai ricevuto si propone la taglia
-                     che la persona ha in un altro DPI dello stesso gruppo. -->
                 <label class="campo-largo">Taglia come
                     <select id="modello-gruppo">
                         <option value="">Nessun gruppo: la taglia non si propone dagli altri DPI</option>
@@ -415,7 +391,6 @@
     </div>
 </div>
 
-<!-- Scheda di un bene -->
 <div id="modale-bene" class="modale" hidden>
     <div class="contenuto-modale">
         <button class="chiudi-modale" id="chiudi-modale-bene" aria-label="Chiudi">&times;</button>
@@ -480,11 +455,9 @@
             </div>
         </form>
 
-        <!-- Tutto quello che si può fare a un bene esistente. -->
         <div id="azioni-bene" hidden>
             <h3>Cosa vuoi farne</h3>
             <div class="pulsanti-movimento">
-                <!-- Dal QR sul ripiano alla consegna: il bene entra già scelto. -->
                 <button type="button" class="azione-consegna" id="btn-consegna-bene" hidden>
                     Consegna questo
                 </button>
@@ -503,7 +476,6 @@
                 <button type="button" class="azione-movimento" data-movimento="rettifica">
                     Correggi la giacenza
                 </button>
-                <!-- Un adesivo rovinato si ristampa da qui, senza cercarlo nel foglio di tutto il magazzino. -->
                 <a class="azione-etichetta" id="link-etichetta-bene" href="/magazzino-etichette.html" target="_blank" rel="noopener">
                     Stampa l'etichetta
                 </a>
@@ -528,8 +500,6 @@
             </form>
         </div>
 
-        <!-- Manutenzioni: storico con i verbali, e la prossima scadenza che si
-             ricalcola da sola dalla periodicità. -->
         <div id="manutenzioni-bene" hidden>
             <h3>Manutenzioni</h3>
             <button type="button" id="btn-nuovo-intervento" class="bottone-contorno">
@@ -576,7 +546,6 @@
             <div id="elenco-interventi" class="elenco-storia"></div>
         </div>
 
-        <!-- I libretti e gli altri documenti dell'archivio del gruppo collegati a questo bene. -->
         <div id="documenti-bene" hidden>
             <h3>Libretti e documenti</h3>
             <ul id="elenco-documenti-bene" class="elenco-documenti-bene"></ul>

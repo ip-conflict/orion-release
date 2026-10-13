@@ -1,15 +1,5 @@
-// Gli avvisi sul telefono anche ad app chiusa, senza servizi esterni (o con
-// Firebase, se l'associazione lo configura: src/firebase.js). Il
-// telefono tiene un collegamento in ascolto con il server dell'associazione
-// e lo apre con il token degli avvisi: uno per telefono, buono solo per
-// ricevere le proprie notifiche. La sessione dell'app dura un giorno e per
-// rinnovarla serve l'impronta; questo token invece dura GIORNI_AVVISI dall'ultimo
-// uso, così gli avvisi arrivano anche a chi non apre l'app da giorni. Non
-// apre nient'altro: niente dati, niente modifiche. I titoli delle notifiche
-// non dicono mai cosa riguardano, come sulla schermata di blocco.
-//
-// Si revoca con l'uscita dall'app, con la chiusura delle sessioni (cambio
-// password) e con la sospensione o l'eliminazione della persona.
+// Il token degli avvisi apre solo la ricezione delle proprie notifiche e dura dall'ultimo
+// uso: arrivano anche a chi non apre l'app da giorni. Vedi il manuale tecnico.
 
 import crypto from 'crypto';
 import logger from './logger.js';
@@ -21,12 +11,10 @@ import { impronta } from './pubbliche.js';
 
 export const GIORNI_AVVISI = 180;
 const MAX_TELEFONI_PER_PERSONA = 3;
-// L'uso si scrive al massimo ogni tanto: il telefono controlla spesso.
 const INTERVALLO_USO = 5 * 60 * 1000;
 const RITARDO_MASSIMO_PROVA = 120;
 
-// "Authorization: Avvisi <token>": un'intestazione sua, così non si confonde
-// con la sessione.
+// Un'intestazione sua, così non si confonde con la sessione.
 export function tokenAvvisiDa(intestazione) {
     if (typeof intestazione !== 'string' || !intestazione.startsWith('Avvisi ')) return null;
     const token = intestazione.slice(7).trim();
@@ -45,7 +33,6 @@ function segnaUso(tokenId, subito = false) {
     ).catch(e => logger.warn(`[Avvisi] Uso del token ${tokenId} non registrato: ${e.message}`));
 }
 
-// La persona del token, se il token vale e la persona è attiva. Null altrimenti.
 export async function utenteDaTokenAvvisi(token) {
     if (!token) return null;
     const r = await pool.query(
@@ -59,8 +46,6 @@ export async function utenteDaTokenAvvisi(token) {
     return riga;
 }
 
-// I telefoni in ascolto adesso, per persona: il centro operativo sa chi
-// riceverà subito un avviso.
 const collegati = new Map();
 
 export function telefonoCollegato(utente) {
@@ -74,8 +59,6 @@ export function telefonoScollegato(utente) {
     segnaUso(utente.token_id, true);
 }
 
-// Per ogni persona con un telefono registrato: se è in ascolto adesso e
-// l'ultima volta che il telefono si è fatto sentire.
 export async function statoTelefoni(userIds = null) {
     const r = await pool.query(
         `SELECT user_id, MAX(COALESCE(usato_il, creato_il)) AS ultimo, COUNT(*)::int AS telefoni,
@@ -84,7 +67,6 @@ export async function statoTelefoni(userIds = null) {
           GROUP BY user_id`, [userIds]);
     const stato = {};
     for (const riga of r.rows) {
-        // firebase: un telefono raggiungibile con le notifiche Firebase anche se non è in ascolto.
         stato[riga.user_id] = { collegato: collegati.has(riga.user_id), firebase: riga.firebase === true, ultimo: riga.ultimo, telefoni: riga.telefoni };
     }
     return stato;
@@ -99,7 +81,6 @@ export async function pulisciTokenAvvisi() {
     if (r.rowCount > 0) logger.info(`[Manutenzione] Rimossi ${r.rowCount} token degli avvisi scaduti.`);
 }
 
-// Prima della sessione: queste rotte si aprono solo col token degli avvisi.
 export function registraRotteAvvisiTelefono(app) {
     app.get('/api/avvisi/notifiche', async (req, res) => {
         const dopo = req.query.dopo === undefined ? null : parseInt(req.query.dopo, 10);
@@ -118,20 +99,18 @@ export function registraRotteAvvisiTelefono(app) {
     });
 }
 
-// Con la sessione: il telefono chiede il suo token, lo restituisce, si prova.
 export function registraRotteAvvisi(app, { notifiche }) {
     app.post('/api/app/avvisi', async (req, res) => {
         const dispositivo = typeof req.body?.dispositivo === 'string' ? req.body.dispositivo.slice(0, 100) : null;
         const precedente = typeof req.body?.precedente === 'string' ? req.body.precedente : null;
         const token = crypto.randomBytes(32).toString('base64url');
         try {
-            // Quello che il telefono aveva prima non serve più.
             if (precedente) await pool.query('DELETE FROM token_avvisi WHERE impronta = $1 AND user_id = $2', [impronta(precedente), req.user.id]);
             await pool.query(
                 `INSERT INTO token_avvisi (user_id, impronta, dispositivo, scade_il)
                  VALUES ($1, $2, $3, NOW() + ($4::int * INTERVAL '1 day'))`,
                 [req.user.id, impronta(token), dispositivo, GIORNI_AVVISI]);
-            // Solo gli ultimi: un telefono che reinstalla l'app non li accumula.
+            // Un telefono che reinstalla l'app non li accumula.
             await pool.query(
                 `DELETE FROM token_avvisi WHERE user_id = $1 AND id NOT IN
                    (SELECT id FROM token_avvisi WHERE user_id = $1 ORDER BY creato_il DESC LIMIT $2)`,
@@ -156,7 +135,6 @@ export function registraRotteAvvisi(app, { notifiche }) {
         }
     });
 
-    // Lo stato visto dal server, per la schermata "Stato degli avvisi".
     app.get('/api/app/avvisi/stato', async (req, res) => {
         try {
             res.json((await statoTelefoni([req.user.id]))[req.user.id] || { collegato: false, firebase: false, ultimo: null, telefoni: 0 });
@@ -166,8 +144,6 @@ export function registraRotteAvvisi(app, { notifiche }) {
         }
     });
 
-    // Una notifica di prova a sé stessi, anche fra un po': il tempo di
-    // chiudere l'app e vedere se arriva lo stesso.
     const proveInCorso = new Set();
     app.post('/api/notifiche/prova', (req, res) => {
         const ritardo = Math.min(RITARDO_MASSIMO_PROVA, Math.max(0, parseInt(req.body?.ritardo ?? 0, 10) || 0));
@@ -185,7 +161,6 @@ export function registraRotteAvvisi(app, { notifiche }) {
         res.status(202).json({ message: ritardo ? `La prova arriva fra ${ritardo} secondi.` : 'Prova mandata.', ritardo });
     });
 
-    // Chi riceve subito gli avvisi: per il centro operativo e la gestione utenti.
     app.get('/api/avvisi/telefoni', nonEsterni, async (req, res) => {
         try {
             res.json({ telefoni: await statoTelefoni() });

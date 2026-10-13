@@ -1,14 +1,7 @@
-/* public/css/stampa.css
- *
- * I fogli da stampare (punto di situazione, rubrica): A4 con margini veri,
- * testo scuro su bianco anche col tema scuro, tabelle che non si spezzano a
- * metà riga. A video il foglio sta al centro, con la barra dei comandi sopra.
- */
-
 @page {
     size: A4;
     margin: 14mm 13mm 16mm;
-    /* Il numero di pagina in fondo (Chrome e Edge dalla 131, Firefox dalla 134). */
+    /* Chrome e Edge dalla 131, Firefox dalla 134. */
     @bottom-right {
         content: "Pagina " counter(page) " di " counter(pages);
         font: 8pt system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -39,7 +32,6 @@ body {
     print-color-adjust: exact;
 }
 
-/* La barra dei comandi, solo a video. */
 .st-comandi {
     position: sticky; top: 0; z-index: 5;
     display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
@@ -68,7 +60,6 @@ body {
     .st-foglio { max-width: none; margin: 0; padding: 0; box-shadow: none; }
 }
 
-/* Intestazione */
 .st-testa { display: flex; align-items: center; gap: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--st-testo); }
 .st-testa img { height: 46px; width: auto; max-width: 70px; object-fit: contain; }
 .st-testa .st-ente { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--st-tenue); margin: 0; }
@@ -77,7 +68,6 @@ body {
 .st-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; font-size: 9pt; color: var(--st-tenue); }
 .st-meta strong { color: var(--st-testo); }
 
-/* Riquadri dei numeri */
 .st-sintesi { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0 4px; }
 .st-numero { border: 1px solid var(--st-linea); border-radius: 6px; padding: 7px 10px; break-inside: avoid; }
 .st-numero .st-valore { font-size: 18pt; font-weight: 700; line-height: 1.1; }
@@ -85,7 +75,6 @@ body {
 .st-numero .st-sotto { font-size: 8.5pt; color: var(--st-tenue); }
 .st-numero.st-allarme .st-valore { color: var(--st-rosso); }
 
-/* Sezioni e tabelle */
 .st-sezione { margin-top: 16px; }
 .st-sezione h2 {
     font-size: 11.5pt; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--st-linea);
@@ -107,7 +96,7 @@ body {
 .st-piccolo { display: block; font-size: 8.5pt; color: var(--st-tenue); }
 .st-pericolo { display: block; font-size: 8.5pt; color: var(--st-rosso); font-weight: 600; }
 
-/* Priorità e stato: colore e parola, perché in bianco e nero resti la parola. */
+/* In bianco e nero resta la parola. */
 .st-bollino { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 8pt; font-weight: 700; border: 1px solid currentColor; white-space: nowrap; }
 .st-alta { color: var(--st-rosso); }
 .st-media { color: var(--st-ambra); }
@@ -125,19 +114,15 @@ body {
 .st-errore { max-width: 600px; margin: 40px auto; padding: 20px; background: #fff; border-radius: 8px; text-align: center; }
 .st-autore { font-size: 8.5pt; color: var(--st-tenue); }
 
-/* La rubrica: le stesse colonne in ogni gruppo. */
 .st-rubrica { table-layout: fixed; }
 .st-rubrica th:nth-child(1) { width: 36%; }
 .st-rubrica th:nth-child(2) { width: 18%; }
 .st-rubrica th:nth-child(3) { width: 24%; }
 .st-rubrica td { overflow-wrap: anywhere; }
 
-/* Una funzione di supporto nel punto di situazione. */
 .st-funzione { font-size: 10.5pt; margin: 10px 0 4px; break-after: avoid; }
 .st-funzione .st-conta { font-weight: 400; font-size: 9pt; color: var(--st-tenue); margin-left: 6px; }
 
-/* La stampa completa: ogni segnalazione per intero. Ogni scheda comincia su
-   una riga nuova e il titolo non resta solo in fondo alla pagina. */
 .st-scheda { margin: 0 0 14px; padding: 10px 0 0; border-top: 1.5px solid var(--st-testo); }
 .st-scheda h3 { font-size: 11.5pt; margin: 0 0 6px; break-after: avoid; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .st-scheda h4 { font-size: 9.5pt; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; color: var(--st-tenue); break-after: avoid; }
@@ -151,9 +136,7 @@ body {
 .st-diario .st-sistema { color: var(--st-tenue); }
 @media (max-width: 700px) { .st-campi { grid-template-columns: 1fr; } }
 
-/* La filigrana: il logo del gruppo, chiaro, al centro di ogni pagina. In
-   stampa un elemento fisso si ripete su tutte le pagine; il contenuto ci sta
-   sopra. */
+/* In stampa un elemento fisso si ripete su tutte le pagine. */
 .st-filigrana {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 115mm; height: 115mm; object-fit: contain;
@@ -161,7 +144,6 @@ body {
 }
 .st-foglio > :not(.st-filigrana):not(.st-simulazione) { position: relative; z-index: 1; }
 
-/* Il quadro della situazione sul foglio: in testa, prima dei numeri. */
 .st-quadro-testo { margin: 4px 0 8px; font-size: 11pt; line-height: 1.45; white-space: pre-line; }
 .st-popolazione { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
 .st-popolazione-voce {
@@ -178,7 +160,6 @@ body {
 .st-quadro-vuoto { border: 1px dashed var(--st-ambra); border-radius: 8px; padding: 8px 12px; color: var(--st-ambra); }
 .st-quadro-vuoto p { margin: 0; }
 
-/* Solo a video: il modulo del quadro e i promemoria. */
 @media print { .st-solo-schermo, .st-modulo { display: none !important; } }
 .st-modulo {
     max-width: 210mm; margin: 16px auto 0; padding: 16px 18px; background: #fff; border-radius: 10px;
@@ -203,7 +184,6 @@ body {
 .st-modulo-azioni .st-primario { background: #2563eb; border-color: #2563eb; color: #fff; }
 @media (max-width: 700px) { .st-modulo { grid-template-columns: 1fr; margin: 0; border-radius: 0; } }
 
-/* Una simulazione si riconosce su ogni pagina: la scritta di traverso e la fascia in alto. */
 .st-simulazione {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg);
     font-size: 110px; font-weight: 800; letter-spacing: .08em; color: rgba(109, 40, 217, .12);
@@ -214,9 +194,6 @@ body {
     color: #fff; background: #6d28d9; -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 
-/* Sul telefono la rubrica non sta su quattro colonne: ogni contatto diventa
-   una scheda, con il nome sopra e le voci sotto ("Telefono: ..."), senza
-   scorrere di lato. Il numero si tocca per chiamare. */
 .st-numero { color: inherit; text-decoration: none; border: 0; background: none; }
 @media screen and (max-width: 700px) {
     .st-rubrica, .st-rubrica tbody, .st-rubrica tr, .st-rubrica td { display: block; width: auto !important; }

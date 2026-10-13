@@ -1,9 +1,3 @@
-/* public/css/simulazioni.css
- *
- * La pagina Simulazioni: gli scenari in schede, le simulazioni in programma e
- * quelle svolte in righe. Modali e campi vengono da calendario.css, i colori
- * da theme.css; il viola è quello della simulazione dappertutto. */
-
 .barra-scenari { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 18px 0 6px; }
 .barra-scenari input[type="search"] {
     flex: 1 1 260px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color);

@@ -1,10 +1,4 @@
-// I pezzi della verifica in due passaggi che servono sia alla pagina d'accesso
-// sia al profilo: il QR da inquadrare con l'app e i codici di riserva da
-// mettere da parte.
-
 window.OrionMfa = (function () {
-    // Il QR con l'indirizzo otpauth:// che le app di autenticazione leggono, e
-    // sotto la chiave da scrivere a mano per chi non può inquadrarlo.
     function disegnaQr(contenitore, uri, segreto) {
         contenitore.replaceChildren();
         const riquadro = document.createElement('div');
@@ -28,7 +22,6 @@ window.OrionMfa = (function () {
             codici.map((c, i) => `${String(i + 1).padStart(2, ' ')}. ${c}`).join('\n') + '\n';
     }
 
-    // L'elenco dei codici con Copia e Scarica.
     function mostraCodici(contenitore, codici) {
         contenitore.replaceChildren();
         const elenco = document.createElement('ol');

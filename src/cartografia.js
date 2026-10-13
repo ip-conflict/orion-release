@@ -1,15 +1,5 @@
-// La cartografia del territorio sul server. Le mappe di OpenStreetMap e il
-// satellite arrivano da internet: se in sala la linea cade ma la rete locale
-// verso il server regge (o il server è in sala), la mappa resta grigia.
-// L'associazione può caricare una volta la cartografia del proprio territorio
-// in un file MBTiles (preparato con QGIS, "Genera tasselli raster XYZ", o
-// scaricato da chi la distribuisce con licenza che lo permette: i server di
-// OpenStreetMap non consentono di scaricarne in blocco), e il server la dà
-// alle mappe come un livello qualsiasi.
-//
-// Il file è un database SQLite: si legge con node:sqlite, in sola lettura.
-// Arriva a pezzi da 32 MB, così passa anche dal limite di nginx e una linea
-// lenta non deve ricominciare da capo un file di un giga.
+// Cartografia del territorio in MBTiles, per quando in sala cade internet ma non la rete
+// verso il server. Arriva a pezzi da 32 MB per stare nel limite di nginx.
 
 import fs from 'fs';
 import path from 'path';
@@ -38,14 +28,10 @@ async function moduloSqlite() {
     return sqlite;
 }
 
-/**
- * Apre un MBTiles e ne legge quello che serve; un errore leggibile se non va.
- * Solo raster: i tasselli vettoriali (pbf) servirebbero un motore di stile.
- */
+// Solo raster: i tasselli vettoriali servirebbero un motore di stile.
 export async function leggiMbtiles(file) {
     const modulo = await moduloSqlite();
     if (!modulo) throw new Error('Questo server non sa leggere i file MBTiles: serve Node.js 22.13 o più recente.');
-    // I primi 16 byte di un database SQLite sono sempre questi.
     const testa = Buffer.alloc(16);
     const fd = fs.openSync(file, 'r');
     try { fs.readSync(fd, testa, 0, 16, 0); } finally { fs.closeSync(fd); }
@@ -133,7 +119,6 @@ export function registraRotteCartografia(app, { logger, registraAudit }) {
     }
     apri();
 
-    // Caricamenti lasciati a metà: via i pezzi.
     setInterval(() => {
         const ora = Date.now();
         for (const [id, c] of caricamenti) {
@@ -167,7 +152,6 @@ export function registraRotteCartografia(app, { logger, registraAudit }) {
         }
     });
 
-    // Un pezzo del file: in ordine, n = 0, 1, 2...
     app.post('/api/mappa/cartografia/pezzi', richiedePermesso('emergenze.piano'), (req, res) => {
         let id = typeof req.query.id === 'string' ? req.query.id : '';
         const n = Number(req.query.n);
@@ -209,7 +193,6 @@ export function registraRotteCartografia(app, { logger, registraAudit }) {
         req.on('error', () => { /* connessione caduta: si rimanda lo stesso pezzo */ });
     });
 
-    // Tutti i pezzi arrivati: si controlla il file e prende il posto del vecchio.
     app.post('/api/mappa/cartografia/fine', richiedePermesso('emergenze.piano'), async (req, res) => {
         const id = req.body?.id;
         const c = caricamenti.get(id);

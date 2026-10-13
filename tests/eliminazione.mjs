@@ -1,5 +1,3 @@
-// tests/eliminazione.mjs
-//
 // Eliminare una persona cancella i suoi dati personali. Chi non compare nello
 // storico sparisce del tutto, con foto e certificati sul disco. Chi ha creato
 // una segnalazione resta solo con nome e cognome, legati a quella
@@ -20,7 +18,6 @@ import { accediConFetch } from './accesso-prova.mjs';
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
-// Un PNG di un punto: va bene come foto e come certificato.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
 let falliti = 0;
@@ -48,7 +45,6 @@ const suffisso = Date.now().toString().slice(-5);
 const segreteriaPrima = (await chiama('/api/branding/settings')).corpo?.segreteria_config;
 await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { segreteria_config: JSON.stringify({ enabled: true }) } });
 
-// Un volontario con password, codice fiscale, telefono, foto e una visita con certificato.
 async function volontario(nome, cf) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Elimina${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
@@ -71,7 +67,6 @@ async function volontario(nome, cf) {
 let emergenzaAperta = null;
 const daTogliere = [];
 try {
-    // 1. Chi non compare nello storico sparisce del tutto.
     const anna = await volontario('Anna', `ANNELM${suffisso}A001`.slice(0, 16).padEnd(16, 'X'));
     daTogliere.push(anna.id);
     verifica('i suoi file sono sul disco', anna.file.length === 2 && anna.file.every(f => f && fs.existsSync(f)), anna.file);
@@ -80,7 +75,6 @@ try {
     verifica('la riga non c\'è più', (await pool.query('SELECT 1 FROM users WHERE id = $1', [anna.id])).rowCount === 0);
     verifica('foto e certificato tolti dal disco', anna.file.every(f => !fs.existsSync(f)), anna.file.filter(f => fs.existsSync(f)));
 
-    // 2. Chi ha creato una segnalazione resta solo con il nome.
     const bruno = await volontario('Bruno', `BRNELM${suffisso}B002`.slice(0, 16).padEnd(16, 'X'));
     daTogliere.push(bruno.id);
     const stato = (await chiama('/api/emergencies/status', { token: admin })).corpo;

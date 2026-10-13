@@ -1,26 +1,12 @@
-// La ricerca sulla mappa e il percorso stradale delle squadre, per il centro
-// operativo.
-//
-// La ricerca mette insieme tre fonti: le coordinate scritte a mano, le
-// segnalazioni e le squadre di questa emergenza, e gli indirizzi. Per gli
-// indirizzi si chiede a Photon (OpenStreetMap, tollera le parole a metà e
-// gli errori di battitura) con la zona della mappa come preferenza, e a
-// Nominatim limitato all'Italia e alla zona visibile: in valle una "Via
-// Roma" generica trovava prima quella di un'altra regione.
-//
-// Il percorso lo calcola OSRM (OpenStreetMap). Se il servizio non risponde
-// si disegna la linea d'aria e lo si dice: la sala vede comunque dove deve
-// andare la squadra.
+// Photon tollera parole a metà ed errori di battitura; Nominatim è limitato all'Italia e alla
+// zona visibile (in valle una "Via Roma" generica trovava prima quella di un'altra regione).
+// Senza OSRM si disegna la linea d'aria e lo si dice.
 
 const PHOTON = 'https://photon.komoot.io/api/';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OSRM = 'https://router.project-osrm.org/route/v1/driving/';
 
-// --------------------------------------------------------------------------
-// Utilità
-// --------------------------------------------------------------------------
-
-/** Distanza in metri fra due punti {lat, lng} (formula dell'emisenoverso). */
+// Formula dell'emisenoverso.
 export function distanzaMetri(a, b) {
     const r = 6371000;
     const rad = (g) => g * Math.PI / 180;
@@ -41,13 +27,8 @@ export function durataLeggibile(secondi) {
     return `${Math.floor(minuti / 60)} h ${String(minuti % 60).padStart(2, '0')}`;
 }
 
-/**
- * "46.1405, 12.2168", "46,1405 12,2168", "46.1405;12.2168": le coordinate
- * come le detta chi chiama. Null se il testo non lo è.
- */
 export function leggiCoordinate(testo) {
     const t = String(testo || '').trim();
-    // Con la virgola decimale le due cifre si separano con spazio o punto e virgola.
     let m = t.match(/^(-?\d{1,2}[.,]\d+)\s*[;\s]\s*(-?\d{1,3}[.,]\d+)$/) || t.match(/^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/);
     if (!m) return null;
     const lat = parseFloat(m[1].replace(',', '.'));
@@ -59,10 +40,6 @@ export function leggiCoordinate(testo) {
 function normalizza(testo) {
     return String(testo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
-
-// --------------------------------------------------------------------------
-// Indirizzi
-// --------------------------------------------------------------------------
 
 function nomePhoton(p) {
     const via = [p.street, p.housenumber].filter(Boolean).join(' ');
@@ -100,7 +77,6 @@ async function daNominatim(testo, limiti, segnale) {
     url.searchParams.set('countrycodes', 'it');
     url.searchParams.set('accept-language', 'it');
     if (limiti) {
-        // La zona visibile, allargata: preferita, non obbligatoria.
         const b = limiti.pad ? limiti.pad(1.5) : limiti;
         url.searchParams.set('viewbox', [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].map(n => n.toFixed(4)).join(','));
     }
@@ -110,10 +86,6 @@ async function daNominatim(testo, limiti, segnale) {
     return dati.map(d => ({ nome: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon), fonte: 'indirizzo' }));
 }
 
-/**
- * Gli indirizzi per [testo], i piu' vicini al centro della mappa per primi.
- * Due servizi in parallelo: se uno non risponde basta l'altro.
- */
 export async function cercaIndirizzi(testo, { centro, limiti, segnale } = {}) {
     const esiti = await Promise.allSettled([daPhoton(testo, centro, segnale), daNominatim(testo, limiti, segnale)]);
     const trovati = [];
@@ -121,7 +93,6 @@ export async function cercaIndirizzi(testo, { centro, limiti, segnale } = {}) {
     if (!trovati.length && esiti.every(e => e.status === 'rejected')) {
         throw new Error('Il servizio degli indirizzi non risponde.');
     }
-    // Lo stesso posto dai due servizi: si tiene il primo.
     const unici = [];
     for (const t of trovati) {
         if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) continue;
@@ -132,18 +103,6 @@ export async function cercaIndirizzi(testo, { centro, limiti, segnale } = {}) {
     return unici.slice(0, 8);
 }
 
-// --------------------------------------------------------------------------
-// Il controllo di ricerca
-// --------------------------------------------------------------------------
-
-/**
- * Il pulsante con la lente: si apre in un campo, cerca mentre si scrive fra
- * segnalazioni e squadre, e con Invio fra gli indirizzi. I risultati stanno
- * sopra al campo (il controllo sta in basso).
- *
- * @param cercaLocale (testo) => [{nome, dettaglio, lat, lng, fonte}]: segnalazioni e squadre.
- * @param suScelta (risultato) => void
- */
 export function creaRicerca(map, { cercaLocale, suScelta, position = 'bottomleft' }) {
     const Controllo = L.Control.extend({
         options: { position },
@@ -235,8 +194,6 @@ export function creaRicerca(map, { cercaLocale, suScelta, position = 'bottomleft
                 e.preventDefault();
                 const testo = campo.value.trim();
                 if (!testo) return;
-                // Invio su una voce scelta con le frecce, su un numero ("#2") o
-                // su delle coordinate: quella, senza chiedere indirizzi.
                 const diretta = scelto > 0 || /^#?\d+$/.test(testo) || risultati[0]?.fonte === 'coordinate';
                 if (diretta && risultati[scelto]) { const v = risultati[scelto]; chiudi(); return suScelta(v); }
                 const giaTrovati = locali(testo);
@@ -258,15 +215,6 @@ export function creaRicerca(map, { cercaLocale, suScelta, position = 'bottomleft
     return new Controllo().addTo(map);
 }
 
-// --------------------------------------------------------------------------
-// Percorso
-// --------------------------------------------------------------------------
-
-/**
- * Il percorso in auto da [da] ad [a] ({lat, lng}). Restituisce i punti, la
- * lunghezza e il tempo; stradale=false se si e' dovuto ripiegare sulla linea
- * d'aria.
- */
 export async function calcolaPercorso(da, a, { segnale } = {}) {
     try {
         const url = `${OSRM}${da.lng.toFixed(6)},${da.lat.toFixed(6)};${a.lng.toFixed(6)},${a.lat.toFixed(6)}?overview=full&geometries=geojson`;

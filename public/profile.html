@@ -48,8 +48,6 @@
                     <h1 style="margin-top: 0; font-size: 2rem;">Il mio profilo</h1>
                 </header>
 
-                <!-- Le consegne da confermare stanno in cima: sono l'unica cosa
-                     della pagina che aspetta una risposta. -->
                 <div id="box-da-confermare" class="box-da-confermare" hidden>
                     <h3>Materiale da confermare</h3>
                     <p>Il magazzino ti ha consegnato questo materiale. Controlla che sia tutto e conferma di averlo ricevuto.</p>
@@ -148,7 +146,6 @@
                         </ul>
                     </div>
 
-                    <!-- Le presenze: attività ed emergenze, con le ore e gli attestati. -->
                     <div class="modern-alert-card" id="card-mie-presenze" style="border-left-color: #f59e0b; margin: 0;" hidden>
                         <div class="alert-card-header">
                             <div class="alert-icon" style="background: rgba(245, 158, 11, 0.12); color: var(--warning-text);"><i class="fas fa-clock"></i></div>
@@ -159,8 +156,6 @@
                         <ul id="my-presenze-list" class="alert-names-list show" style="border: none; background: transparent; max-height: none; margin-top: 15px;"></ul>
                     </div>
 
-                    <!-- I DPI compaiono solo se il modulo Magazzino è acceso:
-                         altrimenti sarebbe un riquadro sempre vuoto. -->
                     <div class="modern-alert-card" id="card-miei-dpi" style="border-left-color: #0ea5e9; margin: 0;" hidden>
                         <div class="alert-card-header">
                             <div class="alert-icon" style="background: rgba(14, 165, 233, 0.1); color: #0ea5e9;"><i class="fas fa-helmet-safety"></i></div>
@@ -208,10 +203,11 @@
                     <div id="change-pwd-feedback" style="margin-top: 15px; font-weight: bold; text-align: center;"></div>
                 </form>
 
-                <!-- La verifica in due passaggi (profilo-mfa.js). -->
                 <div id="mfa-profilo" class="mfa mfa-scheda" hidden>
                     <h2>Verifica in due passaggi</h2>
                     <p id="mfa-stato" class="mfa-spiega"></p>
+                    <ul id="mfa-telefoni" class="mfa-telefoni" hidden></ul>
+                    <p id="mfa-telefoni-nota" class="mfa-spiega" hidden>Un telefono si collega dall'app ORION, in Il mio profilo.</p>
                     <div id="mfa-azioni" class="mfa-azioni"></div>
                     <form id="mfa-password-form" hidden novalidate>
                         <label for="mfa-password">Per continuare, la tua password</label>

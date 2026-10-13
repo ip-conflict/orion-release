@@ -7,7 +7,6 @@ import { pool } from './db.js';
 import { GIORNI_RINNOVO, MAX_RINNOVI_PER_PERSONA, impronta } from './pubbliche.js';
 
 export function registraRotteSessioni(app) {
-    // Uscita: si revoca il token, dal cookie (web) o dall'intestazione (app).
     app.post('/logout', authenticateToken, async (req, res) => {
 
         let token = req.signedCookies['__Secure-token'];
@@ -21,11 +20,8 @@ export function registraRotteSessioni(app) {
         res.status(200).json({ message: 'Logout effettuato.' });
     });
 
-    // Un token di rinnovo per questo telefono: l'app lo chiede subito dopo un
-    // accesso con la password, quando la persona sceglie l'impronta.
     app.post('/api/app/rinnovo', async (req, res) => {
-        // Un accesso temporaneo finisce con l'emergenza: un token che dura
-        // novanta giorni non gli serve.
+        // Un token che dura novanta giorni non serve a chi finisce con l'emergenza.
         if (req.user.temporaneo) {
             return res.status(403).json({ message: 'Un accesso temporaneo non usa l\'impronta: si rientra con il codice.' });
         }
@@ -36,7 +32,7 @@ export function registraRotteSessioni(app) {
                 `INSERT INTO token_rinnovo (user_id, impronta, dispositivo, scade_il, mfa)
              VALUES ($1, $2, $3, NOW() + ($4::int * INTERVAL '1 day'), $5)`,
                 [req.user.id, impronta(rinnovo), dispositivo, GIORNI_RINNOVO, req.user.mfa === true]);
-            // Solo gli ultimi: un telefono che reinstalla l'app non li accumula.
+            // Un telefono che reinstalla l'app non li accumula.
             await pool.query(
                 `DELETE FROM token_rinnovo WHERE user_id = $1 AND id NOT IN
                (SELECT id FROM token_rinnovo WHERE user_id = $1 ORDER BY creato_il DESC LIMIT $2)`,
@@ -49,7 +45,6 @@ export function registraRotteSessioni(app) {
         }
     });
 
-    // La persona toglie l'impronta dal telefono: il token non deve restare buono.
     app.delete('/api/app/rinnovo', async (req, res) => {
         const rinnovo = req.body?.rinnovo;
         if (typeof rinnovo !== 'string') return res.status(400).json({ message: 'Token di rinnovo mancante.' });

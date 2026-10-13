@@ -1,5 +1,3 @@
-// I backup che l'applicazione fa da sola e lo stato di manutenzione.
-
 import './config.js';
 import fs from 'fs';
 import logger from './logger.js';
@@ -10,18 +8,14 @@ import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { cifraturaPronta, flussoCifrato } from './cifratura.js';
 
-// Oltre al backup notturno di cron, l'applicazione ne fa da sé alla chiusura di
-// un'emergenza e quando l'ultimo è troppo vecchio (il server era spento alle
-// 3:30). Li scrive in una cartella sua: quelli di cron, scritti da root, non
-// li può cancellare.
+// Una cartella sua: quelli di cron, scritti da root, non li può cancellare.
 export const CARTELLA_BACKUP_APP = process.env.ORION_BACKUP_DIR || '/var/backups/orion/auto';
 export const CARTELLA_BACKUP_CRON = '/var/backups/orion/db';
 const GIORNI_BACKUP = parseInt(process.env.ORION_BACKUP_RETENTION_DAYS, 10) || 30;
 const ORE_MAX_SENZA_BACKUP = 20;
 export const CARTELLA_BACKUP_FILE = '/var/backups/orion/files';
 
-// Durante un ripristino o un aggiornamento nessuno scrive: server.js chiude le
-// API finché questo è impostato.
+// server.js chiude le API finché questo è impostato.
 export let manutenzioneInCorso = null;
 export function impostaManutenzione(stato) {
     manutenzioneInCorso = stato;
@@ -57,8 +51,7 @@ export async function eseguiBackupDatabase(motivo) {
                 : rifiuta(new Error(`pg_dump terminato con codice ${codice}: ${erroriDump.trim().slice(0, 300)}`)));
         });
 
-        // Cifrato con la chiave dei dati, se c'è: un backup copiato altrove
-        // non si legge. Senza chiave resta in chiaro, come prima.
+        // Senza chiave resta in chiaro.
         const passi = [processoDump.stdout, zlib.createGzip()];
         if (cifraturaPronta()) passi.push(flussoCifrato());
         else logger.warn('[Backup] Chiave dei dati non disponibile: backup in chiaro.');
@@ -67,7 +60,7 @@ export async function eseguiBackupDatabase(motivo) {
             uscitaDump
         ]);
 
-        // Un dump troncato è peggio di nessun dump: meglio accorgersene subito.
+        // Un dump troncato è peggio di nessun dump.
         const info = await fs.promises.stat(percorsoFile);
         if (info.size < 1000) {
             await fs.promises.unlink(percorsoFile).catch(() => {});
@@ -114,7 +107,6 @@ async function rimuoviBackupScaduti() {
     }
 }
 
-// L'ultimo backup, dell'applicazione o di cron.
 async function dataUltimoBackup() {
     let piuRecente = 0;
     for (const cartella of [CARTELLA_BACKUP_APP, CARTELLA_BACKUP_CRON]) {
@@ -128,8 +120,6 @@ async function dataUltimoBackup() {
     }
     return piuRecente;
 }
-
-// Il backup saltato perché la macchina era spenta all'ora di cron.
 
 export async function backupDiRecupero() {
     if (backupDisabilitato) return;

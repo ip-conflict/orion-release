@@ -1,18 +1,5 @@
-// Il bollettino di allerta meteo-idro per la zona del Comune. Si accende
-// scegliendo la Regione nelle impostazioni: prima di allora ORION non chiede
-// niente a nessuno. Da lì, ogni quarto d'ora, guarda se il Dipartimento ha
-// pubblicato un bollettino nuovo (bollettinoDpc.js) e ne tiene i livelli
-// delle zone della Regione.
-//
-// La zona è quella del comune scelto, o quella che contiene il centro della
-// mappa. Con un'emergenza aperta ogni versione del bollettino, compresa
-// quella in vigore all'apertura, entra nei documenti dell'emergenza (il PDF)
-// e nel diario di sala (i livelli della zona): restano nel resoconto e nello
-// storico sigillato. Chi apre le emergenze riceve un avviso quando la zona
-// arriva al livello scelto.
-//
-// Vale come informazione: l'allerta ufficiale è quella che la Regione
-// comunica al Comune per i canali stabiliti dal piano.
+// Bollettino di allerta: vedi il manuale tecnico. Vale come informazione: l'allerta
+// ufficiale è quella che la Regione comunica al Comune.
 
 import crypto from 'crypto';
 import fs from 'fs';
@@ -36,7 +23,6 @@ const CARTELLA_PDF = path.join(__dirname, '..', 'protected_uploads', 'bollettini
 const INDIRIZZO = process.env.ORION_ALLERTA_URL
     || 'https://raw.githubusercontent.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica/master/files/all/latest_all.zip';
 const OGNI = 15 * 60 * 1000;
-// I PDF dei bollettini più recenti; quelli allegati alle emergenze sono copie a parte.
 const PDF_TENUTI = 3;
 const SOGLIE = ['gialla', 'arancione', 'mai'];
 const IMPOSTAZIONI_ALLERTA = ['allerta_regione', 'allerta_comune', 'allerta_avvisa_da'];
@@ -52,7 +38,6 @@ async function impostazioni(chiavi) {
     return Object.fromEntries(rows.map(r => [r.setting_key, r.setting_value]));
 }
 
-/** Regione, zona e da dove viene la zona (comune scelto o centro della mappa); null se spento. */
 export async function riferimento() {
     const s = await impostazioni([...IMPOSTAZIONI_ALLERTA, 'map_center_lat', 'map_center_lon']);
     const regione = Object.hasOwn(REGIONI, s.allerta_regione || '') ? s.allerta_regione : null;
@@ -73,7 +58,6 @@ export async function riferimento() {
     };
 }
 
-/** Le impostazioni dell'allerta che si possono salvare; un messaggio se una non va. */
 export function controllaImpostazioniAllerta(valori, regioneSalvata) {
     if ('allerta_regione' in valori && valori.allerta_regione && !Object.hasOwn(REGIONI, valori.allerta_regione)) {
         return 'Regione del bollettino non prevista.';
@@ -90,8 +74,7 @@ export function controllaImpostazioniAllerta(valori, regioneSalvata) {
     return null;
 }
 
-// I giorni ancora utili di un bollettino per una zona: oggi e domani se è di
-// oggi, solo oggi (il suo "domani") se è di ieri, niente se è più vecchio.
+// Oggi e domani se è di oggi, solo oggi se è di ieri, niente se è più vecchio.
 function giorniValidi(riga, codice, oggi = oggiLocale()) {
     const z = riga?.zone?.[codice];
     if (!z) return [];
@@ -104,7 +87,6 @@ function giorniValidi(riga, codice, oggi = oggiLocale()) {
     return [];
 }
 
-// Tutti e due i giorni del bollettino, con le date sue: per le note e lo storico.
 function giorniDelBollettino(riga, codice) {
     const z = riga?.zone?.[codice];
     if (!z) return [];
@@ -119,7 +101,6 @@ function testoGiorno(g) {
     return `${dataItaliana(g.data)} ${quale}${allerte.length && g.massimo !== 'verde' ? ` (${allerte.join(', ')})` : ''}`;
 }
 
-/** "Zona Vene-E1: 09/10/2026 allerta gialla (idraulico gialla); 10/10/2026 nessuna allerta". */
 function riassunto(riga, zona) {
     const giorni = giorniDelBollettino(riga, zona.codice);
     return `Zona ${zona.codice} (${zona.nome}): ${giorni.map(testoGiorno).join('; ')}.`;
@@ -142,7 +123,6 @@ async function salvaPdf(bollettino, chiave) {
     return path.basename(file);
 }
 
-// Tiene solo i PDF degli ultimi bollettini.
 async function sfoltisciPdf() {
     await pool.query(
         `UPDATE bollettini_allerta SET pdf_file = NULL
@@ -153,11 +133,7 @@ async function sfoltisciPdf() {
     }
 }
 
-/**
- * Allega un bollettino all'emergenza aperta: il PDF fra i documenti e i
- * livelli della zona nel diario di sala. Una volta sola per bollettino; mai
- * a una simulazione, che non ha un cielo vero.
- */
+// Mai a una simulazione, che non ha un cielo vero.
 export async function allegaAllEmergenza(riga, rif = null) {
     const emergenza = activeEmergency;
     if (!emergenza || emergenza.simulazione || !riga) return false;
@@ -197,7 +173,6 @@ export async function allegaAllEmergenza(riga, rif = null) {
     return true;
 }
 
-/** All'apertura di un'emergenza: il bollettino ancora valido, se c'è. */
 export async function allegaBollettinoInVigore() {
     try {
         const rif = await riferimento();
@@ -229,10 +204,7 @@ async function avvisaChiCoordina(riga, rif) {
     }
 }
 
-/**
- * Guarda se c'è un bollettino nuovo e, se sì, lo tiene. forza: anche se il
- * server dice che non è cambiato niente. Non lancia: l'esito finisce in stato.
- */
+// Non lancia: l'esito finisce in stato.
 export function controlla({ forza = false } = {}) {
     if (!inCorso) {
         inCorso = controllaDavvero(forza).finally(() => { inCorso = null; });
@@ -301,9 +273,6 @@ export function avviaAllerta() {
 }
 
 export function registraRotteAllerta(app) {
-    // Quello che serve al centro operativo: la zona, i livelli dei giorni
-    // ancora validi e gli aggiornamenti (dall'apertura dell'emergenza, o degli
-    // ultimi tre giorni).
     app.get('/api/allerta', async (req, res) => {
         try {
             const rif = await riferimento();
@@ -357,7 +326,6 @@ export function registraRotteAllerta(app) {
         }
     });
 
-    // Per le impostazioni: le Regioni, i comuni di una e la zona del centro della mappa.
     app.get('/api/allerta/regioni', checkAdminRole, async (req, res) => {
         const regione = String(req.query.regione || '');
         const elenco = Object.entries(REGIONI).map(([codice, r]) => ({ codice, nome: r.nome }));

@@ -30,22 +30,32 @@
         <p id="login-message"></p>
       </form>
 
-      <!-- La verifica in due passaggi: il codice, dopo la password giusta. -->
       <form id="mfa-form" class="mfa" hidden novalidate>
         <h2>Verifica in due passaggi</h2>
-        <p class="mfa-spiega">Apri l'app di autenticazione sul telefono e scrivi il codice di sei cifre di ORION.
+        <p class="mfa-spiega" id="mfa-spiega">Apri l'app di autenticazione sul telefono e scrivi il codice di sei cifre di ORION.
           Senza telefono, scrivi uno dei codici di riserva.</p>
         <label for="mfa-codice">Codice</label>
         <input type="text" id="mfa-codice" class="mfa-codice" autocomplete="one-time-code"
                autocapitalize="characters" spellcheck="false" maxlength="11" placeholder="123456" required />
         <button class="button-style" type="submit">Verifica</button>
+        <a href="#" class="mfa-indietro" id="mfa-al-telefono" hidden>Conferma sul telefono</a>
         <a href="#" class="mfa-indietro" data-mfa-indietro>Torna all'accesso</a>
         <p id="mfa-messaggio" class="mfa-messaggio" role="alert"></p>
       </form>
 
-      <!-- Un amministratore senza verifica la attiva qui, prima di entrare. -->
+      <div id="mfa-telefono" class="mfa" hidden>
+        <h2>Conferma sul telefono</h2>
+        <p class="mfa-spiega" style="text-align: center;">Apri la notifica di ORION e tocca questo numero.</p>
+        <div id="mfa-telefono-numero" class="mfa-numero" aria-live="polite">··</div>
+        <button class="button-style" type="button" id="mfa-telefono-di-nuovo" hidden>Manda di nuovo</button>
+        <a href="#" class="mfa-indietro" id="mfa-al-codice">Usa un codice</a>
+        <a href="#" class="mfa-indietro" data-mfa-indietro>Torna all'accesso</a>
+        <p id="mfa-telefono-messaggio" class="mfa-messaggio" role="alert"></p>
+      </div>
+
       <form id="mfa-attiva-form" class="mfa" hidden novalidate>
         <h2>Attiva la verifica in due passaggi</h2>
+        <p class="mfa-spiega"><strong>Hai Android?</strong> Accedi dall'app ORION: il telefono diventa la tua verifica.</p>
         <p class="mfa-spiega">Per gli amministratori è obbligatoria: dopo la password, ORION chiederà un codice che
           cambia ogni 30 secondi, generato da un'app sul tuo telefono (Google Authenticator, Microsoft
           Authenticator, FreeOTP, Aegis o un'altra app per i codici a tempo). Installa l'app, aggiungi un account
@@ -59,7 +69,6 @@
         <p id="mfa-attiva-messaggio" class="mfa-messaggio" role="alert"></p>
       </form>
 
-      <!-- I codici di riserva, una volta sola. -->
       <div id="mfa-codici" class="mfa" hidden>
         <h2>Codici di riserva</h2>
         <p class="mfa-spiega">Se perdi il telefono o non l'hai con te, entri con uno di questi codici al posto di
@@ -69,7 +78,6 @@
         <button class="button-style" type="button" id="mfa-codici-continua">Li ho messi da parte, entra</button>
       </div>
 
-      <!-- La configurazione iniziale: compare solo finché non c'è un amministratore. -->
       <form id="primo-accesso-form" class="primo-accesso" hidden novalidate>
         <h2>Configurazione iniziale</h2>
         <p class="pa-spiega">ORION è installato. Crea l'amministratore: è la persona che poi aggiunge tutti gli altri.

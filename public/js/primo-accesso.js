@@ -1,6 +1,3 @@
-// La configurazione iniziale nella pagina di accesso: finché il server non ha
-// un amministratore, al posto dell'accesso compare il modulo per crearlo.
-
 (function () {
     const modulo = document.getElementById('primo-accesso-form');
     const accesso = document.getElementById('login-form');
@@ -23,7 +20,6 @@
         .then(d => { if (d?.necessario) mostra(true); })
         .catch(() => { /* il server risponde all'accesso normale */ });
 
-    // Lo username proposto da nome e cognome, finché non lo si scrive a mano.
     let usernameToccato = false;
     $('pa-username').addEventListener('input', () => { usernameToccato = true; });
     const proponi = () => {

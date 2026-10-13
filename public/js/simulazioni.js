@@ -1,9 +1,3 @@
-// La pagina Simulazioni, per chi organizza le attività: la biblioteca degli
-// scenari (src/scenari.js) e, sotto, le simulazioni in programma e quelle
-// svolte. Uno scenario si crea con i suoi dati e si passa subito al copione
-// (/copione.html?scenario=N); "Pianifica" apre il calendario con il modulo
-// della nuova attività già riempito dallo scenario.
-
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const el = (tag, classe, testo) => {
@@ -39,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return b;
     }
 
-    // --- Gli scenari -----------------------------------------------------------------------
     function usoDi(s) {
         if (s.prossimo_uso) return `In programma il ${giorno(s.prossimo_uso)}${s.usi > 1 ? ` · usato ${s.usi} volte` : ''}`;
         if (s.usi) return `Usato ${s.usi === 1 ? 'una volta' : `${s.usi} volte`}, l'ultima il ${giorno(s.ultimo_uso || s.aggiornato_il)}`;
@@ -64,7 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!scenari.length) { box.appendChild(el('p', 'nota', 'Nessuno scenario corrisponde alla ricerca.')); return; }
         for (const s of scenari) {
             const c = el('article', 'scheda-scenario');
-            // In testa il titolo e, a destra, i comandi di servizio.
             const testa = el('div', 'testa-scenario');
             testa.appendChild(el('h3', '', s.titolo));
             const secondarie = el('div', 'secondarie');
@@ -90,7 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Le simulazioni del calendario ------------------------------------------------------------
     function disegnaSimulazioni(id, righe, vuoto, svolte) {
         const ul = $(id);
         ul.replaceChildren();
@@ -129,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 $('contenuto-simulazioni').hidden = true;
                 return;
             }
-            // Senza il permesso resta solo il motivo: niente pulsanti che poi rispondono di no.
             if (e.status === 403) {
                 $('contenuto-simulazioni').replaceChildren(el('p', 'riquadro-avviso', `${e.message} Se ti serve, chiedilo a un amministratore.`));
                 return;
@@ -142,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
         disegnaSimulazioni('elenco-svolte', elenco.svolte, 'Nessuna simulazione svolta.', true);
     }
 
-    // --- Il modulo dello scenario ------------------------------------------------------------------
     for (const h of [1, 2, 3, 4, 5, 6, 8, 10, 12, 24, 36, 48, 72]) $('s-durata').appendChild(new Option(h === 1 ? '1 ora' : `${h} ore`, h));
     const aggiornaEnti = () => { $('campo-s-enti').hidden = $('s-natura').value !== 'esercitazione'; };
     $('s-natura').addEventListener('change', aggiornaEnti);
@@ -154,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('salva-scenario').textContent = s ? 'Salva' : 'Crea e scrivi il copione';
         $('s-titolo').value = s?.titolo || '';
         $('s-natura').value = s?.natura || 'addestramento';
-        // Una durata scritta a mano (per esempio 7) resta fra le scelte.
         const durata = String(s?.durata_ore || 3);
         if (![...$('s-durata').options].some(o => o.value === durata)) $('s-durata').appendChild(new Option(`${durata} ore`, durata));
         $('s-durata').value = durata;
@@ -190,7 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 notifica('Scenario salvato.', 'successo');
                 await carica();
             } else {
-                // Uno scenario nuovo non ha ancora eventi: si va subito a scriverli.
                 const s = await fetchApi('/api/scenari', { method: 'POST', body: JSON.stringify(corpo) });
                 window.location.href = `/copione.html?scenario=${s.id}`;
             }

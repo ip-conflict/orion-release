@@ -19,22 +19,41 @@ qui non c'è, non è un errore: non è per il tuo ruolo, o il modulo è spento.
 
 Si entra con il nome utente (o l'email) e la password. La prima password la
 sceglie ciascuno dal link di attivazione che riceve quando viene iscritto: vale
-sette giorni e arriva per email oppure su un foglio stampato con un QR. Dopo
-troppi tentativi sbagliati dalla stessa rete l'accesso si blocca per un quarto
-d'ora; gli accessi riusciti non contano, così una sala che entra tutta insieme
-non si blocca.
+sette giorni e arriva per email oppure su un foglio stampato con un QR.
+
+La password deve avere almeno 12 caratteri, con maiuscole, minuscole, un
+numero e un simbolo, e non deve essere una parola comune travestita
+("P@ssw0rd2025!", il nome di una squadra di calcio con l'anno) né contenere
+il proprio nome, cognome o nome utente. Se ORION la rifiuta, il messaggio
+dice perché; la via più semplice è una frase o tre o quattro parole che non
+stanno insieme, con un numero e un simbolo.
+
+Dopo cinque password sbagliate di fila sullo stesso nome utente l'account si
+ferma per un minuto, e la pausa raddoppia a ogni errore successivo fino a un
+quarto d'ora: il messaggio dice quanto aspettare, e la password giusta, dopo
+la pausa, azzera il conto. Dopo troppi tentativi sbagliati dalla stessa rete
+l'accesso si blocca per un quarto d'ora; gli accessi riusciti non contano,
+così una sala che entra tutta insieme non si blocca.
 
 Chi ha dimenticato la password usa "Hai dimenticato la password?" (serve la
 posta configurata) oppure chiede all'amministratore un link nuovo. Il browser
 ricorda il nome dell'ultima persona entrata; su un computer usato da tanti,
 "Non sei tu?" lo cancella.
 
-**Verifica in due passaggi.** Oltre alla password ORION chiede un codice di sei
-cifre preso da un'app per i codici a tempo sul telefono (Google
-Authenticator, Microsoft Authenticator, Aegis, FreeOTP). È obbligatoria per gli
-amministratori e per chi gestisce visite mediche e corsi; per gli altri si
-attiva dal profilo. All'attivazione si ricevono dieci codici di riserva, da
-conservare lontano dal telefono: ognuno vale una volta, al posto del codice.
+**Verifica in due passaggi.** Oltre alla password ORION chiede una conferma
+dal telefono. Con l'app ORION collegata, la pagina mostra un numero e sul
+telefono arriva la richiesta: si tocca lo stesso numero e si conferma con
+impronta o PIN, e la pagina entra da sola. Senza l'app (per esempio con un
+iPhone) si usa un codice di sei cifre preso da un'app per i codici a tempo
+(Google Authenticator, Microsoft Authenticator, Aegis, FreeOTP); "Usa un
+codice" passa dall'una all'altra. È obbligatoria per gli amministratori e per
+chi gestisce visite mediche e corsi; per gli altri si attiva dall'app o dal
+profilo. All'attivazione si ricevono dieci codici di riserva, da conservare
+lontano dal telefono: ognuno vale una volta, al posto della conferma.
+
+Il link d'attivazione aperto su un telefono Android propone **Continua
+nell'app**: password, condizioni d'uso e telefono collegato si fanno lì, senza
+passare dal computer.
 
 ![Le condizioni d'uso](immagini/web/02-condizioni.png)
 
@@ -84,8 +103,9 @@ dell'anno con gli attestati da scaricare e i DPI in dotazione.
 Se il magazzino chiede la conferma dei DPI, in cima compare "Materiale da
 confermare": confermare vale come firma del verbale. La foto si cambia toccando
 "Cambia": si inquadra il viso nell'ovale e si salva. Dalla voce **Sicurezza** del
-menu si cambia la password e si attiva o si gestisce la verifica in due
-passaggi.
+menu si cambia la password e si gestisce la verifica in due passaggi: l'elenco
+dei telefoni collegati (ognuno si scollega con la password), l'app dei codici,
+i codici di riserva. Un telefono nuovo si collega dall'app.
 
 
 ## 4. Il centro operativo
@@ -561,8 +581,22 @@ scritto chi l'ha fatto.
 
 ![Le funzioni di supporto](immagini/web/75-funzioni.png)
 
-Le funzioni del piano comunale, dall'unità di coordinamento alla F9. Si tengono
-accese solo quelle del vostro piano, si rinominano o se ne aggiungono altre.
+Le funzioni del piano comunale, dall'unità di coordinamento alla F9. ORION
+parte con un elenco tipico, ma ogni comune ha il suo piano e le sue funzioni
+possono avere numeri e nomi diversi: si adattano qui. **Modifica** cambia sigla,
+nome e descrizione di una funzione (per esempio la F1 che diventa
+"Volontariato"); le frecce la spostano su o giù nell'elenco; **Nuova funzione**
+ne aggiunge una. Due funzioni non possono avere la stessa sigla. Quelle che il
+piano non prevede si spengono con la casella "Accesa" e spariscono dalla sala;
+si spengono invece di cancellarle, perché gli incarichi del passato le
+nominano ancora.
+
+Il nome nuovo vale subito ovunque: nel pannello Funzioni del centro operativo,
+negli incarichi, nel diario e nelle stampe, anche per le emergenze passate.
+Conviene quindi sistemare le funzioni prima di un'emergenza, non durante. La
+pagina si apre anche a modulo spento, dal collegamento nelle Impostazioni:
+così le funzioni si preparano prima di accenderlo.
+
 Sotto ogni funzione si aggiungono i membri; la stella segna il referente.
 
 
@@ -681,7 +715,10 @@ avanti basta aggiornare di nuovo. Con un'emergenza aperta non si può.
 | Cosa succede | Cosa fare |
 |---|---|
 | La password non va | "Hai dimenticato la password?" o un link nuovo dall'amministratore |
+| "Troppi tentativi sbagliati per questo account" | Aspettare il tempo indicato e riprovare con calma, o chiedere un link nuovo |
+| La password nuova viene rifiutata | Il messaggio dice perché: meglio una frase o più parole che non stanno insieme |
 | Il codice a sei cifre viene rifiutato | L'ora del telefono deve essere automatica; altrimenti un codice di riserva |
+| La richiesta non arriva sul telefono | Aprire l'app ORION: compare da sola; "Manda di nuovo" ne fa partire un'altra |
 | Telefono e codici di riserva persi | L'amministratore azzera la verifica dalla pagina Utenti |
 | Una voce del menu non c'è | Non è del tuo ruolo, o il modulo è spento |
 | Fascia rossa "Il server non risponde" | Non ricaricare: si lavora e la coda parte da sola |

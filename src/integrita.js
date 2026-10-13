@@ -1,12 +1,4 @@
-// Lo storico inalterabile, lato applicazione (il resto è nel database: vedi
-// la migrazione storico-inalterabile).
-//
-// Ogni minuto si sigillano le righe nuove dei registri. Il sigillo, cioè
-// l'ultima impronta della catena, esce dal server: alla chiusura di ogni
-// emergenza (a schermo, per email agli amministratori, nel resoconto), nel
-// punto di situazione e in un file scaricabile dalla pagina Sistema. Con un
-// sigillo conservato si verifica che lo storico precedente non sia stato
-// riscritto, anche da chi ha in mano il database.
+// Storico inalterabile, lato applicazione (il resto è nella migrazione storico-inalterabile).
 
 import { pool } from './db.js';
 import logger from './logger.js';
@@ -24,21 +16,18 @@ export async function sigilla() {
     }
 }
 
-// L'ultimo anello, dopo aver sigillato quello che mancava.
 export async function sigilloAttuale(esecutore = pool) {
     await esecutore.query('SELECT orion_sigilla()');
     const r = await esecutore.query('SELECT id, impronta, quando FROM registro_integrita ORDER BY id DESC LIMIT 1');
     return r.rows[0] ? { id: Number(r.rows[0].id), impronta: r.rows[0].impronta.trim(), quando: r.rows[0].quando } : null;
 }
 
-// Una riga che si legge e si copia: numero dell'anello, data, impronta.
 export function testoSigillo(s) {
     if (!s) return 'ORION - nessun sigillo (registro ancora vuoto)';
     const quando = new Date(s.quando).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
     return `ORION sigillo n. ${s.id} del ${quando}: ${s.impronta}`;
 }
 
-// Un sigillo incollato (anche solo numero e impronta) diventa { id, impronta }.
 export function leggiSigillo(testo) {
     const t = String(testo || '');
     const impronta = /\b([0-9a-f]{64})\b/i.exec(t)?.[1]?.toLowerCase();
@@ -46,16 +35,12 @@ export function leggiSigillo(testo) {
     return impronta && id ? { id: Number(id), impronta } : null;
 }
 
-// All'avvio, dopo le migrazioni: sigillatura continua, e la prima subito
-// (alla prima versione con il registro, sigilla tutto lo storico di prima).
+// La prima subito: alla prima versione con il registro sigilla tutto lo storico di prima.
 export function avviaIntegrita() {
     sigilla();
     setInterval(sigilla, OGNI_MINUTO);
 }
 
-// Alla chiusura di un'emergenza: il sigillo di quel momento resta scritto
-// sull'emergenza (lo riportano resoconto e punto di situazione), torna a chi
-// l'ha chiusa e va per email agli amministratori, se la posta è configurata.
 export async function sigillaChiusura(emergenza) {
     const testo = testoSigillo(await sigilloAttuale());
     await pool.query('UPDATE emergencies SET sigillo_chiusura = $1 WHERE id = $2', [testo, emergenza.id]);
@@ -74,9 +59,8 @@ export function registraIntegrita(app, { soloAdmin, registraAudit, dominio }) {
                         (SELECT sum(jsonb_array_length(v)) FROM jsonb_each(dettagli->'righe') AS e(k, v))::int AS righe
                  FROM registro_integrita WHERE evento = 'cancellazione_emergenza' ORDER BY id DESC LIMIT 20`)).rows;
             const ultimo = verifica.ultimo ? { ...verifica.ultimo, id: Number(verifica.ultimo.id) } : null;
-            // Una verifica che trova lo storico integro non si registra: la voce
-            // verrebbe sigillata alla verifica dopo, e ogni clic aggiungerebbe un
-            // anello e cambierebbe il sigillo. Si registra chi trova un'alterazione.
+            // Una verifica integra non si registra: la voce verrebbe sigillata e ogni clic cambierebbe
+            // il sigillo.
             if (!verifica.integro) registraAudit(req, 'integrita.verificata', { dettagli: { integro: false, anelli: verifica.anelli } });
             res.json({ ...verifica, ultimo, sigillo: ultimo ? testoSigillo({ ...ultimo, impronta: ultimo.impronta.trim() }) : null, cancellazioni });
         } catch (e) {
@@ -85,7 +69,6 @@ export function registraIntegrita(app, { soloAdmin, registraAudit, dominio }) {
         }
     });
 
-    // Il sigillo come file da conservare fuori dal server.
     app.get('/api/sistema/integrita/sigillo', soloAdmin, async (req, res) => {
         try {
             const s = await sigilloAttuale();
@@ -106,8 +89,6 @@ export function registraIntegrita(app, { soloAdmin, registraAudit, dominio }) {
         }
     });
 
-    // Un sigillo conservato: l'anello c'è ancora, con la stessa impronta, e la
-    // catena da lì in poi è intatta?
     app.post('/api/sistema/integrita/confronta', soloAdmin, async (req, res) => {
         const s = leggiSigillo(req.body?.sigillo);
         if (!s) return res.status(400).json({ message: 'Non trovo nel testo il numero dell\'anello e l\'impronta (64 caratteri esadecimali).' });

@@ -14,14 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const noticeDaysInput = document.getElementById('notify-notice-days');
     const customEmailTemplateInput = document.getElementById('custom-user-email-template');
     
-    // Selettori SMTP
     const smtpHostInput = document.getElementById('smtp-host');
     const smtpPortInput = document.getElementById('smtp-port');
     const smtpSecureInput = document.getElementById('smtp-secure');
     const smtpUserInput = document.getElementById('smtp-user');
     const smtpPassInput = document.getElementById('smtp-pass');
 
-    // Selettori Segreteria
     const enableSegBtn = document.getElementById('enable-segreteria');
     const constraintsDiv = document.getElementById('segreteria-constraints');
     const enableMagBtn = document.getElementById('enable-magazzino');
@@ -32,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const badgeAlwaysOnInput = document.getElementById('badge-qr-always-on');
     const badgeQrEnabledInput = document.getElementById('badge-qr-enabled');
-    // "Forza sempre attivo" non vuol dire niente se i QR sono spenti.
     const aggiornaRigaSempreAttivo = () => {
         const riga = document.getElementById('riga-badge-always-on');
         if (riga && badgeQrEnabledInput) riga.style.opacity = badgeQrEnabledInput.checked ? '' : '0.45';
@@ -41,17 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
     badgeQrEnabledInput?.addEventListener('change', aggiornaRigaSempreAttivo);
     const appAndroidInput = document.getElementById('app-android-enabled');
 
-    // Selettori Tesserino di Riconoscimento
     const cardDistrictLabelInput = document.getElementById('card-district-label');
     const cardRegionalEntityNameInput = document.getElementById('card-regional-entity-name');
     const logo2Input = document.getElementById('app-logo2');
 
-    // Selettori Feedback
     const settingsFeedback = document.getElementById('settings-feedback');
     const logoUploadFeedback = document.getElementById('logo-upload-feedback');
     const logo2UploadFeedback = document.getElementById('logo2-upload-feedback');
 
-    // Selettori Mappa Picker
     const mapPickerBtn = document.getElementById('map-picker-btn');
     const mapPickerModal = document.getElementById('mapPickerModal');
     const closeMapPickerModalBtn = document.getElementById('closeMapPickerModal');
@@ -71,8 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 4000);
     }
 
-    // "30, 15, 0" -> [30, 15, 0]. Vuoto o illeggibile, restano i giorni di
-    // sempre: meglio un preavviso di troppo che nessuno.
+    // Vuoto o illeggibile restano i giorni di sempre: meglio un preavviso di troppo che nessuno.
     function leggiGiorniPreavviso() {
         const giorni = String(noticeDaysInput?.value || '').split(/[\s,;]+/)
             .map(n => parseInt(n, 10)).filter(n => Number.isInteger(n) && n >= 0 && n <= 365);
@@ -101,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadAndApplySettings() {
         try {
-            // Endpoint completo (solo admin): serve anche per precompilare le credenziali SMTP.
             const settings = await fetchApi('/api/branding/settings/full');
             
             if (settings) {
@@ -114,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (smtpPortInput) smtpPortInput.value = settings.smtp_port || '';
                 if (smtpSecureInput) smtpSecureInput.value = settings.smtp_secure || 'true';
                 if (smtpUserInput) smtpUserInput.value = settings.smtp_user || '';
-                // La password non torna dal server: se c'è, il campo vuoto la lascia com'è.
+                // La password non torna dal server: il campo vuoto la lascia com'è.
                 if (smtpPassInput) {
                     smtpPassInput.value = '';
                     smtpPassInput.placeholder = settings.smtp_pass_impostata ? 'Salvata: lascia vuoto per non cambiarla' : 'Password o App Password';
@@ -124,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cfSulTesserino = document.getElementById('badge-cf-barcode');
                 if (cfSulTesserino) cfSulTesserino.checked = settings.badge_cf_barcode !== 'false';
                 aggiornaRigaSempreAttivo();
-                // Mai toccata vuol dire disponibile: l'APK arriva con il server.
                 if (appAndroidInput) appAndroidInput.checked = settings.app_android_enabled !== 'false';
                 if (cardDistrictLabelInput) cardDistrictLabelInput.value = settings.card_district_label || '';
                 if (cardRegionalEntityNameInput) cardRegionalEntityNameInput.value = settings.card_regional_entity_name || '';
@@ -164,9 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch(e) { console.error("Errore parse segreteria_config"); }
                 }
 
-                // Interruttore del magazzino. La chiave è una riga a sé e non un
-                // campo dentro magazzino_config: le opzioni di funzionamento le
-                // salva il magazziniere dalla sua pagina, e due form che
+                // Una chiave a sé, non dentro magazzino_config: quella la salva il magazziniere, e due form che
                 // scrivono lo stesso oggetto si cancellano a vicenda.
                 if (enableMagBtn) {
                     enableMagBtn.checked = String(settings.magazzino_enabled) === 'true';
@@ -199,8 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Il bollettino di allerta: la Regione accende tutto, poi il comune (o il
-    // centro della mappa) dice la zona.
     const allertaRegione = document.getElementById('allerta-regione');
     const allertaComune = document.getElementById('allerta-comune');
     const allertaAvvisa = document.getElementById('allerta-avvisa-da');
@@ -258,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bottone.disabled = true;
         allertaEsito.textContent = 'Lettura in corso…';
         try {
-            // Prima si salva la scelta, poi si legge: il bollettino è per la zona salvata.
+            // Prima si salva, poi si legge: il bollettino è per la zona salvata.
             await fetchApi('/api/branding/settings', { method: 'PUT', body: JSON.stringify(valoriAllerta()) });
             const stato = await fetchApi('/api/allerta/controlla', { method: 'POST' });
             const a = await fetchApi('/api/allerta');
@@ -283,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvataggio...';
 
-        // Creazione dell'oggetto sicuro con Optional Chaining (?.)
         const settingsToUpdate = {
             association_name: associationNameInput?.value?.trim() || '',
             map_center_lat: mapCenterLatInput?.value?.trim() || '',
@@ -360,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 5bis. CARICAMENTO LOGO SECONDARIO (Ente sovraordinato, per il tesserino)
     async function handleLogo2Upload() {
         if (!logo2Input.files || logo2Input.files.length === 0) return;
 
@@ -393,8 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }).addTo(pickerMap);
 
         pickerMap.on('click', onPickerMapClick);
-        // Con la ricerca si scrive il nome del comune invece di cercarlo a
-        // occhio sulla carta d'Italia: il punto trovato diventa il centro.
         import('/js/mappa-strumenti.js').then(({ creaRicerca }) => creaRicerca(pickerMap, {
             position: 'topright',
             cercaLocale: () => [],
@@ -411,14 +394,12 @@ document.addEventListener('DOMContentLoaded', () => {
         mapPickerModal.style.display = 'flex';
         initPickerMap();
 
-        // Senza un centro salvato si parte dall'Italia intera e senza puntatore:
-        // il punto lo mette chi configura, con un clic.
         const lat = parseFloat(mapCenterLatInput.value);
         const lon = parseFloat(mapCenterLonInput.value);
         const salvato = Number.isFinite(lat) && Number.isFinite(lon);
         const zoom = parseInt(mapZoomInput.value, 10) || 10;
 
-        // Leaflet ha bisogno di un attimo prima di ridimensionarsi in un modale
+        // Leaflet ha bisogno di un attimo prima di ridimensionarsi in un modale.
         setTimeout(() => {
             pickerMap.invalidateSize();
             if (pickerMarker) { pickerMarker.remove(); pickerMarker = null; }
@@ -482,7 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
         'libretto.corso_eliminato': 'Corso eliminato dal libretto'
     };
 
-    // Le operazioni distruttive vanno riconosciute a colpo d'occhio
     const azioneDistruttiva = (azione) => /eliminat|sospeso|resettata/.test(azione);
 
     function creaCella(testo, stile = '') {
@@ -557,7 +537,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (auditFiltroUtente) auditFiltroUtente.addEventListener('keyup', (e) => { if (e.key === 'Enter') caricaRegistro(false); });
     if (auditAltre) auditAltre.addEventListener('click', () => { auditPagina++; caricaRegistro(true); });
 
-    // L'email di prova: l'esito resta a schermo, chi configura deve poterlo leggere.
     const emailProvaBtn = document.getElementById('email-prova-btn');
     const emailProvaA = document.getElementById('email-prova-a');
     const emailProvaEsito = document.getElementById('email-prova-esito');

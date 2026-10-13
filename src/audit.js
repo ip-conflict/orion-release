@@ -1,6 +1,4 @@
-// Il registro delle operazioni: chi ha modificato o eliminato dati condivisi.
-// Se la scrittura fallisce lo si annota nel log, ma l'operazione dell'utente,
-// già fatta, non fallisce per questo.
+// Se la scrittura fallisce si annota nel log, ma l'operazione già fatta non fallisce.
 
 import logger from './logger.js';
 import { pool } from './db.js';

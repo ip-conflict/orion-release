@@ -1,5 +1,3 @@
-// Sessioni, ruoli e i controlli che le rotte mettono davanti a sé.
-
 import './config.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -10,8 +8,8 @@ import { activeEmergency } from './statoEmergenza.js';
 import { esenteDaPresaVisione, versioneInformativa } from './statoInformativa.js';
 import { ORDINE_RUOLI, haPermesso, mfaRichiesta, permessiDi } from './permessi.js';
 
-// Chi fa la richiesta: il token, poi revoca, account attivo e ruoli letti dal
-// database a ogni richiesta, perché sospensioni e ruoli tolti valgano subito.
+// Revoca, account attivo e ruoli si rileggono a ogni richiesta: sospensioni e ruoli
+// tolti valgono subito.
 export async function authenticateToken(req, res, next) {
     let token = req.signedCookies['__Secure-token'];
     if (!token) {
@@ -22,8 +20,7 @@ export async function authenticateToken(req, res, next) {
     try {
         const user = await verifyJwtToken(token);
 
-        // Revoca e account attivo in una query. Se fallisce si risponde
-        // comunque: Express 4 non lo farebbe da sé.
+        // Se fallisce si risponde comunque: Express 4 non lo farebbe da sé.
         let stato;
         try {
             stato = await pool.query(
@@ -54,8 +51,6 @@ export async function authenticateToken(req, res, next) {
         }
 
         const { revocato, attivo, ruoli, nome, cognome, valide_dal, temporaneo, presa_visione, permessi_in_piu } = stato.rows[0];
-        // L'esterno temporaneo non è sospeso: il suo accesso è finito con
-        // l'emergenza o è stato revocato, e glielo si dice così.
         if (temporaneo === true && attivo === false && req.originalUrl.startsWith('/api/')) {
             res.clearCookie('__Secure-token', { path: '/' });
             return res.status(403).json({
@@ -66,26 +61,22 @@ export async function authenticateToken(req, res, next) {
         if (revocato || tokenSuperato(user, valide_dal)) {
             return res.status(401).json({ message: 'Sessione scaduta. Effettua nuovamente il login.', sessione_terminata: true });
         }
-        // Sospeso, o eliminato mentre era collegato (attivo === null): fuori subito.
         if (attivo === null || attivo === false) {
             logger.warn(`[Auth] Sessione rifiutata per ${user.username}: account ${attivo === null ? 'eliminato' : 'sospeso'}.`);
             res.clearCookie('__Secure-token', { path: '/' });
             res.clearCookie('username', { path: '/' });
             const messaggio = 'Il tuo accesso a ORION non è più attivo. Chiedi alla segreteria.';
-            // sessione_terminata distingue questo 403 da quelli che negano una
-            // sola operazione: il client riporta all'accesso. motivo è un codice,
-            // così il client sa cosa dire.
+            // sessione_terminata distingue questo 403 da quelli che negano una sola operazione:
+            // il client riporta all'accesso.
             if (req.originalUrl.startsWith('/api/')) return res.status(403).json({ message: messaggio, sessione_terminata: true, motivo: 'account_non_attivo' });
             if (req.accepts('html')) return res.redirect('/login.html?error=account_sospeso');
             return res.sendStatus(403);
         }
 
-        // Senza righe in utenti_ruoli vale il ruolo scritto nel token.
         const ruoliEffettivi = (ruoli && ruoli.length > 0) ? ruoli : ruoliDi(user);
         const permessi = permessiDi(ruoliEffettivi, permessi_in_piu);
-        // L'amministratore, e chi vede i dati sanitari, lavora solo con una
-        // sessione nata dalla verifica in due passaggi: anche chi lo è diventato
-        // mentre era collegato, o chi aveva una sessione di prima che fosse obbligatoria.
+        // Anche chi lo è diventato mentre era collegato, o aveva una sessione di prima
+        // che la verifica fosse obbligatoria.
         if (mfaRichiesta(ruoliEffettivi, permessi) && user.mfa !== true) {
             res.clearCookie('__Secure-token', { path: '/' });
             const messaggio = 'Per il tuo ruolo serve la verifica in due passaggi: rifai l\'accesso.';
@@ -95,9 +86,7 @@ export async function authenticateToken(req, res, next) {
         }
         req.user = { ...user, nome, cognome, ruoli: ruoliEffettivi, role: ruoloPrincipale(ruoliEffettivi), temporaneo: temporaneo === true, permessi };
         segnaAccesso(user.id);
-        // Prima di lavorare si accettano le condizioni d'uso in vigore: al
-        // primo accesso e ogni volta che cambiano. Fino ad allora si legge solo
-        // il testo; l'app e il browser riconoscono il 428 e mostrano la pagina.
+        // Il 428 lo riconoscono l'app e il browser, che mostrano le condizioni d'uso.
         if (presa_visione !== versioneInformativa && !esenteDaPresaVisione(req.path)) {
             const messaggio = "Prima di continuare leggi e accetta le condizioni d'uso.";
             if (req.originalUrl.startsWith('/api/')) return res.status(428).json({ message: messaggio, informativa_da_vedere: true, motivo: 'informativa', versione: versioneInformativa });
@@ -113,8 +102,7 @@ export async function authenticateToken(req, res, next) {
         res.clearCookie('username', { path: '/' });
 
         if (req.originalUrl.startsWith('/api/')) {
-            // Token assente: 401. Scaduto o non valido: 403, il caso più
-            // frequente; sessione_terminata dice al client di rifare l'accesso.
+            // Token assente: 401. Scaduto o non valido: 403, e sessione_terminata.
             const status = (err.name === 'MissingTokenError' || err.message.includes('not found')) ? 401 : 403;
             return res.status(status).json({ message: `Autenticazione fallita: ${err.message}`, sessione_terminata: true });
         } else if (req.accepts('html')) {
@@ -130,9 +118,7 @@ export async function authenticateToken(req, res, next) {
     }
 }
 
-// L'ultimo accesso in Gestione utenti: si scrive all'ingresso e, mentre la
-// persona usa ORION (il web resta aperto per ore, l'app rinnova da sé), al
-// massimo una volta ogni INTERVALLO_ACCESSO, senza far aspettare la richiesta.
+// Senza far aspettare la richiesta: il web resta aperto per ore, l'app rinnova da sé.
 const INTERVALLO_ACCESSO = 5 * 60 * 1000;
 const ultimiAccessiScritti = new Map();
 
@@ -144,15 +130,12 @@ export function segnaAccesso(userId, subito = false) {
         .catch(e => logger.warn(`[Auth] Ultimo accesso di ${userId} non registrato: ${e.message}`));
 }
 
-// I ruoli si sommano e stanno in utenti_ruoli. users.role è il più alto
-// dell'ordine (permessi.js), per gli elenchi e l'app: si legge, e lo scrive
-// solo scriviRuoli().
+// users.role è il ruolo più alto (permessi.js), per elenchi e app: lo scrive solo scriviRuoli().
 
 export function ruoloPrincipale(ruoli) {
     return ORDINE_RUOLI.find(r => ruoli.includes(r)) || 'volontario';
 }
 
-// I ruoli di chi fa la richiesta.
 export function ruoliDi(utente) {
     if (!utente) return [];
     if (Array.isArray(utente.ruoli) && utente.ruoli.length > 0) return utente.ruoli;
@@ -161,9 +144,7 @@ export function ruoliDi(utente) {
 
 export const COSTO_BCRYPT = 12;
 
-// Una sessione nuova: il token firmato e il cookie per il browser. jwtid rende
-// unici due accessi nello stesso secondo, che altrimenti si chiuderebbero a vicenda.
-// mfa: la sessione è nata con la verifica in due passaggi (mfa.js).
+// jwtid rende unici due accessi nello stesso secondo, che altrimenti si chiuderebbero a vicenda.
 export function emettiSessione(res, utente, ruoli, { mfa = false } = {}) {
     const ruoliUtente = (ruoli && ruoli.length > 0) ? ruoli : [utente.role];
     const principale = ruoloPrincipale(ruoliUtente);
@@ -183,9 +164,7 @@ export function emettiSessione(res, utente, ruoli, { mfa = false } = {}) {
     return { token, principale, ruoliUtente };
 }
 
-// Chiude tutte le sessioni di una persona e cancella i suoi token di rinnovo
-// (cambio password, revoca). L'ora è quella di questo processo, lo stesso
-// orologio che firma i token, non quella del database.
+// L'ora è quella di questo processo, lo stesso orologio che firma i token, non quella del database.
 export async function chiudiSessioni(userId, esecutore = pool) {
     await esecutore.query('UPDATE users SET sessioni_valide_dal = to_timestamp($2::double precision / 1000) WHERE id = $1',
         [userId, Date.now()]);
@@ -193,8 +172,7 @@ export async function chiudiSessioni(userId, esecutore = pool) {
     await esecutore.query('DELETE FROM token_avvisi WHERE user_id = $1', [userId]);
 }
 
-// Il token è stato emesso prima di una chiusura delle sessioni? Senza ems si
-// usa iat, in secondi: nel dubbio il token cade.
+// Senza ems si usa iat, in secondi: nel dubbio il token cade.
 export function tokenSuperato(utente, valideDal) {
     if (valideDal == null) return false;
     const soglia = Number(valideDal);
@@ -202,22 +180,17 @@ export function tokenSuperato(utente, valideDal) {
     return Number.isInteger(utente?.iat) && utente.iat * 1000 < soglia;
 }
 
-// L'amministratore ha tutti i ruoli.
 export function haRuolo(req, ...richiesti) {
     const ruoli = ruoliDi(req.user);
     if (ruoli.includes('admin')) return true;
     return richiesti.some(r => ruoli.includes(r));
 }
 
-// L'emergenza in corso la vede chiunque abbia una sessione, esterni compresi.
-// Una chiusa è archivio, per chi consulta le emergenze passate; una
-// segnalazione senza emergenza conta come chiusa.
 export function puoVedereEmergenza(req, emergencyId) {
     if (activeEmergency && emergencyId != null && Number(emergencyId) === activeEmergency.id) return true;
     return haPermesso(req, 'emergenze.archivio');
 }
 
-// I permessi dati in più a una persona, per le risposte d'accesso.
 export async function permessiDellaPersona(userId, ruoli, esecutore = pool) {
     const { rows } = await esecutore.query('SELECT permesso FROM utenti_permessi WHERE user_id = $1', [userId]);
     return permessiDi(ruoli, rows.map(r => r.permesso));
@@ -228,9 +201,7 @@ async function leggiRuoli(esecutore, userId) {
     return rows.map(r => r.ruolo);
 }
 
-// Sostituisce i ruoli di una persona e riallinea users.role. Prima cancella,
-// poi inserisce: il vincolo sull'esterno esclusivo lo richiede. I ruoli che
-// restano non si toccano, e conservano la data di assegnazione.
+// Prima cancella, poi inserisce: lo richiede il vincolo sull'esterno esclusivo.
 export async function scriviRuoli(client, userId, ruoli) {
     const puliti = [...new Set((ruoli || []).map(r => String(r).trim()))].filter(r => ORDINE_RUOLI.includes(r));
     if (puliti.length === 0) {
@@ -249,7 +220,6 @@ export async function scriviRuoli(client, userId, ruoli) {
     return { ruoli: puliti, principale };
 }
 
-// I ruoli che si possono assegnare dal pannello utenti.
 const RUOLI_ASSEGNABILI = ORDINE_RUOLI;
 
 export function validaRuoliAssegnabili(ruoli) {
@@ -257,14 +227,13 @@ export function validaRuoliAssegnabili(ruoli) {
     if (sconosciuti.length > 0) {
         return `Ruolo non valido: ${sconosciuti.join(', ')}. Scegli tra ${RUOLI_ASSEGNABILI.join(', ')}.`;
     }
-    // Il messaggio si dà qui: il vincolo del database direbbe "violazione di trigger".
+    // Il vincolo del database direbbe solo "violazione di trigger".
     if (ruoli.includes('esterno') && ruoli.length > 1) {
         return 'Il ruolo esterno non si può combinare con altri ruoli.';
     }
     return null;
 }
 
-// I ruoli da una richiesta: "ruoli" (elenco) o "role" (uno solo).
 export function ruoliDaRichiesta(corpo) {
     if (Array.isArray(corpo.ruoli)) return corpo.ruoli;
     if (typeof corpo.ruoli === 'string' && corpo.ruoli.trim()) return [corpo.ruoli.trim()];
@@ -272,14 +241,12 @@ export function ruoliDaRichiesta(corpo) {
     return [];
 }
 
-// Il nome per esteso, per i registri; lo username se manca.
 export function nomeUtente(utente) {
     if (!utente) return null;
     const intero = `${utente.nome || ''} ${utente.cognome || ''}`.trim();
     return intero || utente.username || null;
 }
 
-// Gli esterni seguono l'emergenza ma non la gestiscono.
 export function nonEsterni(req, res, next) {
     if (!ruoliDi(req.user).includes('esterno')) return next();
     logger.warn(`[Permessi] ${req.user?.username} (esterno) ha tentato ${req.method} ${req.originalUrl}`);
@@ -344,7 +311,6 @@ export function checkOwnershipOrSegreteria(req, res, next) {
     }
 }
 
-// Anagrafica o dati sanitari: per le rotte che servono a entrambi (l'elenco dei volontari).
 export function checkAdminOrSegreteriaRole(req, res, next) {
     if (haPermesso(req, 'volontari.anagrafica', 'volontari.sanitario')) {
         next(); 

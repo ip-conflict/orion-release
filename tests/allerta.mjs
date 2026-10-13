@@ -47,7 +47,6 @@ verifica('un punto fuori dal Veneto non ha zona', zonaDelPunto('veneto', 60.17, 
 verifica('i comuni del Veneto sono 560', comuniDi('veneto').length === 560, comuniDi('veneto').length);
 
 console.log('\nBollettino di allerta: server');
-// Le ore di adesso: a ogni giro i bollettini di prova sono più recenti di quelli dei giri prima.
 const ora = (piuMinuti = 0) => new Date(Date.now() + piuMinuti * 60000).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
 const primaOra = ora(), secondaOra = ora(1);
 const fonte = await servi(PORTA, creaBollettino({ ora: primaOra, livelli: ESEMPIO }));
@@ -103,7 +102,6 @@ try {
     verifica('senza comune la zona viene dal centro della mappa', r.corpo?.riferimento?.modo === 'centro_mappa', r.corpo?.riferimento);
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { allerta_comune: 'Padova' } });
 
-    // Con l'emergenza aperta: dentro il bollettino in vigore e ogni aggiornamento.
     const codice = `ALLERTA-${Date.now().toString().slice(-6)}`;
     r = await chiama('/api/emergencies/open', { method: 'POST', token: admin, body: { external_code: codice, name: 'Prova bollettino' } });
     aperta = r.corpo?.emergency;

@@ -1,5 +1,3 @@
-// tests/accesso-prova.mjs
-//
 // L'accesso dei test, anche con la verifica in due passaggi. Un
 // amministratore la deve avere: la prima volta il test la attiva da sé e
 // tiene il segreto in un file nella cartella temporanea della macchina
@@ -36,7 +34,6 @@ function fileSegreto(base, username) {
 const leggi = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 const scrivi = (file, dati) => fs.writeFileSync(file, JSON.stringify(dati), { mode: 0o600 });
 
-// Un codice nuovo per questa persona, aspettando se l'ultimo è già stato usato.
 export async function codiceNuovo(base, username, segreto) {
     const file = fileSegreto(base, username);
     const ultimo = leggi(file)?.ultimo || 0;
@@ -53,8 +50,6 @@ export function dimenticaSegreto(base, username) {
     fs.rmSync(fileSegreto(base, username), { force: true });
 }
 
-// chiama(percorso, { method, body }) -> { stato, corpo }, con il body da
-// mandare come JSON. Restituisce la risposta finale dell'accesso.
 export async function accediConVerifica(chiama, base, username, password) {
     const r = await chiama('/login', { method: 'POST', body: { username, password } });
     if (r.stato !== 401 || !r.corpo?.mfa) return r;
@@ -69,7 +64,6 @@ export async function accediConVerifica(chiama, base, username, password) {
     throw new Error('Codice rifiutato tre volte.');
 }
 
-// Con fetch, per i test che usano solo il token.
 export async function accediConFetch(base, username, password) {
     const chiama = async (percorso, { method, body }) => {
         const r = await fetch(base + percorso, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -81,8 +75,6 @@ export async function accediConFetch(base, username, password) {
     return r.corpo;
 }
 
-// Come farebbe la persona alla prima entrata: legge l'informativa in vigore e
-// ne prende visione. Senza, ogni richiesta risponde 428.
 export async function prendiVisione(base, token) {
     const intestazioni = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     const dati = await (await fetch(`${base}/api/informativa`, { headers: intestazioni })).json().catch(() => null);

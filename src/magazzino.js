@@ -1,7 +1,5 @@
-// Magazzino: DPI, attrezzature e veicoli, cioè un'anagrafica dei beni e un
-// registro dei movimenti. Giacenze e detentori non si scrivono: si calcolano
-// dal registro nelle viste della migrazione update-19 (movimenti_effetti,
-// beni_situazione).
+// Giacenze e detentori non si scrivono: si calcolano dal registro
+// (viste movimenti_effetti e beni_situazione, migrazione update-19).
 
 import fs from 'fs';
 import { haPermesso, richiedePermesso, sqlHaPermesso } from './permessi.js';
@@ -10,7 +8,6 @@ import crypto from 'crypto';
 import { dataItaliana } from './date.js';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 
-// L'ordine conta: è quello in cui si leggono gli elenchi.
 export const TIPI_BENE = ['dpi', 'attrezzatura', 'veicolo'];
 
 export const TIPI_SCADENZA = [
@@ -41,9 +38,7 @@ export const ETICHETTE_MOVIMENTO = {
     rettifica: 'Rettifica'
 };
 
-// Le unità che si possono frazionare sono le misure: litri, chili, metri.
-// Pezzi, paia, kit, sacchi e rotoli si contano interi. La stessa lista sta
-// in public/js/magazzino.js e nell'app (TipiBene.frazionabile).
+// Stessa lista in public/js/magazzino.js e nell'app (TipiBene.frazionabile).
 const UNITA_FRAZIONABILI = [
     'l', 'lt', 'litro', 'litri', 'ml', 'cl', 'hl',
     'kg', 'chilo', 'chili', 'chilogrammi', 'g', 'gr', 'grammi', 'q', 'quintali', 't', 'tonnellate',
@@ -54,23 +49,17 @@ export function unitaFrazionabile(unita) {
     return UNITA_FRAZIONABILI.includes(String(unita || '').trim().toLowerCase().replace(/\.$/, ''));
 }
 
-// Movimenti che chiunque può registrare: in emergenza non si aspetta il
-// magazziniere per prendere una pala. Ogni movimento porta comunque il nome di
-// chi l'ha fatto.
+// In emergenza non si aspetta il magazziniere per prendere una pala.
 const MOVIMENTI_OPERATIVI = ['consegna', 'rientro', 'trasferimento'];
-// Il materiale si consegna a una persona. Squadre e mezzi restano detentori
-// solo per il materiale che avevano già, che deve poter rientrare.
+// Squadre e mezzi restano detentori solo del materiale che avevano già, per farlo rientrare.
 const CONSEGNA_SOLO_A = 'persona';
-// Movimenti che incidono sull'inventario da rendicontare: quelli no.
 const MOVIMENTI_DI_INVENTARIO = ['carico', 'manutenzione', 'consumo', 'smarrimento', 'dismissione', 'rettifica'];
 
-// Chi puo' avere materiale in carico, e i movimenti con cui il materiale gli
-// esce di mano. Sui beni a quantita' questi movimenti devono dire da chi: e'
-// l'unico modo di sapere quanto resta a ciascuno (vedi update-25).
+// Sui beni a quantità questi movimenti devono dire da chi: è l'unico modo di
+// sapere quanto resta a ciascuno (update-25).
 const DETENTORI = ['persona', 'squadra', 'veicolo'];
 const USCITE_DAL_CAMPO = ['rientro', 'consumo', 'smarrimento', 'dismissione', 'trasferimento'];
 
-// La colonna della vista detenzioni_sfusi per ciascun tipo di detentore.
 const COLONNA_DETENTORE = { persona: 'user_id', squadra: 'squadra_id', veicolo: 'veicolo_id' };
 
 export function registraRotteMagazzino(app, ctx) {
@@ -78,28 +67,19 @@ export function registraRotteMagazzino(app, ctx) {
         pool, logger, haRuolo, ruoliDi, registraAudit,
         erroreRichiesta, erroreNonTrovato, emergenzaAttiva, avvisaClienti,
         caricaDocumento, cartellaDocumenti,
-        // Il foglio firmato di un verbale (foto o PDF) e la cartella dove sta.
         caricaScansione, cartellaVerbali,
-        // Per gli avvisi via email: la posta e l'indirizzo dell'istanza li sa
-        // già server.js, non ha senso configurarli una seconda volta qui.
         inviaEmail, escapeHtml, dominio,
-        // La coda di notifiche per persona (src/appMobile.js): facoltativa,
-        // chi registra le rotte senza passarla non manda notifiche.
+        // Facoltativa: senza, niente notifiche.
         notifica,
-        // Per togliere dalla coda cio' che non serve piu' (il DPI confermato).
         scadiNotifiche
     } = ctx;
 
-    // Permessi
-    // Chi tiene l'inventario: anagrafica, carichi, dismissioni, rettifiche.
     function soloMagazziniere(req, res, next) {
         if (haPermesso(req, 'magazzino.gestione')) return next();
         logger.warn(`[Magazzino] Accesso negato a ${req.user?.username} (ruoli: ${ruoliDi(req.user).join(', ')}) su ${req.originalUrl}`);
         return res.status(403).json({ message: 'Ti serve il permesso "Gestire il magazzino".' });
     }
 
-    // Chi può muovere materiale sul campo: qualunque operatore, non gli
-    // esterni, che vedono solo le proprie segnalazioni.
     function operatoreInterno(req, res, next) {
         if (ruoliDi(req.user).includes('esterno')) {
             return res.status(403).json({ message: 'Gli utenti esterni non possono registrare movimenti di magazzino.' });
@@ -107,9 +87,8 @@ export function registraRotteMagazzino(app, ctx) {
         return next();
     }
 
-    // L'interruttore del modulo (dell'amministratore) sta separato dalle opzioni
-    // (del magazziniere): nello stesso JSON chi salva per ultimo cancellerebbe
-    // le scelte dell'altro.
+    // Interruttore del modulo (amministratore) separato dalle opzioni (magazziniere):
+    // nello stesso JSON chi salva per ultimo cancellerebbe le scelte dell'altro.
     async function moduloAcceso() {
         try {
             const r = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'magazzino_enabled'");
@@ -128,13 +107,10 @@ export function registraRotteMagazzino(app, ctx) {
         });
     }
 
-    // Su tutte le rotte del magazzino, anche quelle aggiunte domani.
     app.use('/api/magazzino', moduloAttivo);
 
-    // Un esterno non vede il magazzino dell'associazione: inventario, movimenti
-    // e "chi ha cosa" portano i nomi e le dotazioni dei volontari. Gli restano
-    // il proprio materiale in carico e i propri verbali, che le rotte stesse
-    // limitano a lui.
+    // Inventario e movimenti portano nomi e dotazioni dei volontari: l'esterno vede
+    // solo il proprio materiale e i propri verbali.
     const PERCORSI_DELL_ESTERNO = [
         /^\/in-carico\/persona\/\d+$/, /^\/verbali\/miei$/, /^\/verbali\/\d+$/,
         /^\/verbali\/\d+\/conferma$/, /^\/verbali\/\d+\/scansione$/
@@ -145,23 +121,16 @@ export function registraRotteMagazzino(app, ctx) {
         return res.status(403).json({ message: 'Il magazzino dell\'associazione non è consultabile con un accesso esterno.' });
     });
 
-    // Le opzioni del magazzino. I mezzi con revisione o assicurazione scadute:
-    // bloccati, segnalati o nessun controllo, a scelta dell'associazione.
     const CONFIG_PREDEFINITA = {
         blocco_mezzi_scaduti: 'segnalazione',
         conferma_dpi: false,
         giorni_avviso_recupero: 7,
-        // Verbali di consegna e di rientro: un di più, spenti di base, e
-        // separati per i DPI (verbale_consegna, verbale_rientro) e per
-        // attrezzature e mezzi (..._attrezzature). Con la conferma dei DPI il
-        // verbale dei DPI c'è comunque; attrezzature e mezzi non lo impongono mai.
         verbale_rientro: false,
         verbale_consegna: false,
         verbale_rientro_attrezzature: false,
         verbale_consegna_attrezzature: false
     };
 
-    // Quali righe di una consegna o di un rientro finiscono nel verbale.
     // richiesto: chi registra ha lasciato spuntato "Preparare il verbale".
     function nelVerbale(config, tipoBene, movimento, richiesto) {
         const dpi = tipoBene === 'dpi';
@@ -216,7 +185,6 @@ export function registraRotteMagazzino(app, ctx) {
         res.json(nuova);
     });
 
-    // Revisione e assicurazione fermano il mezzo; le altre scadenze si segnalano.
     const SCADENZE_CHE_FERMANO = ['revisione', 'assicurazione'];
 
     async function scadenzeSuperate(client, beneId) {
@@ -227,7 +195,6 @@ export function registraRotteMagazzino(app, ctx) {
         return r.rows;
     }
 
-    // Funzioni di servizio
     function nomePersona(riga) {
         if (!riga) return null;
         const intero = `${riga.nome || ''} ${riga.cognome || ''}`.trim();
@@ -239,15 +206,12 @@ export function registraRotteMagazzino(app, ctx) {
     }
 
     function interoPositivo(valore) {
-        // Solo cifre: parseInt('1 OR 1=1') darebbe 1, accettando come id
-        // qualunque cosa cominci con un numero.
+        // Solo cifre: parseInt('1 OR 1=1') darebbe 1.
         if (!/^\d+$/.test(String(valore).trim())) return null;
         const n = parseInt(valore, 10);
         return Number.isInteger(n) && n > 0 ? n : null;
     }
 
-    // Una manutenzione "ogni 240 mesi" è quasi sicuramente un errore di
-    // battitura, e una "ogni 0 mesi" non vuol dire niente.
     function periodicitaValida(valore) {
         const n = parseInt(valore, 10);
         return Number.isInteger(n) && n > 0 && n <= 120 ? n : null;
@@ -258,12 +222,10 @@ export function registraRotteMagazzino(app, ctx) {
         if (!Number.isFinite(n)) return null;
         if (!consentiNegativa && n <= 0) return null;
         if (consentiNegativa && n === 0) return null;
-        // Due decimali: oltre non ha senso su sacchi, litri e pezzi.
         return Math.round(n * 100) / 100;
     }
 
-    // Il destinatario completo: i riferimenti per cercare, e il nome scritto nel
-    // movimento perché il registro resti leggibile quando la squadra non c'è più.
+    // Il nome resta scritto nel movimento: il registro si legge anche quando la squadra non c'è più.
     async function risolviDestinatario(client, destinatario) {
         const tipo = destinatario?.tipo;
         const base = {
@@ -333,7 +295,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     }
 
-    // Il destinatario implicito di ogni tipo di movimento.
     function destinatarioPredefinito(tipo, destinatario) {
         if (destinatario?.tipo) return destinatario;
         switch (tipo) {
@@ -362,7 +323,7 @@ export function registraRotteMagazzino(app, ctx) {
         return r.rows[0];
     }
 
-    // Un detentore ({ tipo, id }), anche una persona sospesa: può ancora rendere quello che ha.
+    // Anche una persona sospesa: può ancora rendere quello che ha.
     async function risolviDetentore(client, da) {
         if (!da) return null;
         const tipo = da.tipo;
@@ -384,7 +345,6 @@ export function registraRotteMagazzino(app, ctx) {
         };
     }
 
-    // Quanto di un bene a quantita' ha in carico un detentore.
     async function saldoDetentore(client, beneId, det) {
         const r = await client.query(
             `SELECT COALESCE(SUM(variazione), 0)::float AS saldo FROM detenzioni_sfusi
@@ -393,7 +353,6 @@ export function registraRotteMagazzino(app, ctx) {
         return r.rows[0].saldo;
     }
 
-    // Chi ha in carico qualcosa di un bene a quantita', e quanto.
     async function detentoriDi(client, beneId) {
         const r = await client.query(
             `SELECT detentore_tipo AS tipo, user_id, squadra_id, veicolo_id AS bene_id,
@@ -404,8 +363,6 @@ export function registraRotteMagazzino(app, ctx) {
         return r.rows;
     }
 
-    // Niente numeri impossibili: un pezzo già fuori non si consegna, e non
-    // escono più sacchi di quanti ce ne sono.
     function verificaFattibilita(bene, tipo, quantita) {
         if (bene.dismesso_il && tipo !== 'rettifica') {
             throw erroreRichiesta(`"${bene.denominazione}" è stato dismesso: non si può più movimentare.`);
@@ -415,7 +372,6 @@ export function registraRotteMagazzino(app, ctx) {
                 throw erroreRichiesta(`"${bene.denominazione}" è un pezzo unico: la quantità può essere solo 1.`);
             }
             const dove = bene.destinatario_tipo || 'magazzino';
-            // Dismissione e smarrimento valgono ovunque sia il bene.
             if ((tipo === 'consegna' || tipo === 'manutenzione') && dove !== 'magazzino') {
                 throw erroreRichiesta(`"${bene.denominazione}" non è in magazzino: risulta presso ${bene.destinatario_nome || 'un altro detentore'}.`);
             }
@@ -430,7 +386,6 @@ export function registraRotteMagazzino(app, ctx) {
             }
             return;
         }
-        // Sfusi
         const inMagazzino = Number(bene.in_magazzino);
         const fuori = Number(bene.fuori);
         if ((tipo === 'consegna' || tipo === 'manutenzione') && quantita > inMagazzino) {
@@ -439,7 +394,6 @@ export function registraRotteMagazzino(app, ctx) {
         if (tipo === 'rientro' && quantita > fuori) {
             throw erroreRichiesta(`Di "${bene.denominazione}" risultano fuori ${fuori} ${bene.unita_misura}: non se ne possono registrare ${quantita}.`);
         }
-        // Sullo sfuso non se ne tolgono più di quanti ne esistono in tutto.
         if ((tipo === 'consumo' || tipo === 'smarrimento' || tipo === 'dismissione') && quantita > inMagazzino + fuori) {
             throw erroreRichiesta(`Di "${bene.denominazione}" ne esistono ${inMagazzino + fuori} ${bene.unita_misura} in tutto: non se ne possono registrare ${quantita}.`);
         }
@@ -471,8 +425,6 @@ export function registraRotteMagazzino(app, ctx) {
             throw erroreRichiesta('Per registrare una rettifica serve una nota: fra un anno deve essere chiaro da dove viene il numero nuovo.');
         }
 
-        // Un mezzo con la revisione scaduta non esce dal cancello. Quanto sia
-        // vincolante lo decide l'associazione dalle impostazioni.
         let avvisoScadenze = null;
         if (tipo === 'consegna' && bene.tipo === 'veicolo') {
             const config = await leggiConfig();
@@ -491,14 +443,11 @@ export function registraRotteMagazzino(app, ctx) {
         const dest = await risolviDestinatario(client, destinatarioPredefinito(tipo, destinatario));
         const emergenza = emergenzaAttiva();
 
-        // Da dove viene: la destinazione del movimento precedente.
         let provenienza = bene.gestione === 'singolo'
             ? (bene.destinatario_tipo || 'esterno')
             : (['consumo', 'smarrimento', 'dismissione'].includes(tipo) && Number(bene.fuori) >= Math.abs(q)
                 ? 'persona' : 'magazzino');
 
-        // E da chi: sugli sfusi lo dice chi scrive ("da"), o si deduce se il
-        // detentore è uno solo; altrimenti resta non attribuito.
         let origine = null;
         if (USCITE_DAL_CAMPO.includes(tipo)) {
             if (bene.gestione === 'singolo') {
@@ -549,8 +498,7 @@ export function registraRotteMagazzino(app, ctx) {
              provenienza, origine?.user_id ?? null, origine?.squadra_id ?? null, origine?.bene_id ?? null]
         );
 
-        // Un bene dismesso esce dagli elenchi, non dalla storia. Sullo sfuso si
-        // dismettono pezzi: il bene esce solo quando non ne resta niente.
+        // Un bene dismesso esce dagli elenchi, non dalla storia.
         if (tipo === 'dismissione') {
             const restano = bene.gestione === 'quantita'
                 ? Number(bene.in_magazzino) + Number(bene.fuori) - Math.abs(q)
@@ -559,8 +507,7 @@ export function registraRotteMagazzino(app, ctx) {
                 await client.query('UPDATE beni SET dismesso_il = NOW() WHERE id = $1', [beneId]);
             }
         }
-        // Al rientro di un veicolo si chiedono i chilometri: è l'unico momento
-        // in cui qualcuno li ha davvero sotto gli occhi.
+        // I chilometri al rientro: è l'unico momento in cui qualcuno li ha sotto gli occhi.
         if (km !== null && km !== undefined && bene.tipo === 'veicolo') {
             const kmNuovi = interoPositivo(km);
             if (kmNuovi) await client.query('UPDATE beni SET km = GREATEST(COALESCE(km, 0), $1) WHERE id = $2', [kmNuovi, beneId]);
@@ -569,7 +516,6 @@ export function registraRotteMagazzino(app, ctx) {
         return { id: inserimento.rows[0].id, quando: inserimento.rows[0].quando, bene, destinatario: dest, avviso: avvisoScadenze };
     }
 
-    // Cataloghi: categorie e ubicazioni
     app.get('/api/magazzino/categorie', async (req, res) => {
         try {
             const tipo = TIPI_BENE.includes(req.query.tipo) ? req.query.tipo : null;
@@ -596,15 +542,13 @@ export function registraRotteMagazzino(app, ctx) {
                 [tipo, String(nome).trim()]);
             res.status(201).json(r.rows[0]);
         } catch (e) {
-            // Stesso messaggio dei cataloghi della segreteria: il vincolo
-            // ignora maiuscole e spazi ai bordi, e chi scrive deve capirlo.
+            // Il vincolo ignora maiuscole e spazi ai bordi: il messaggio deve dirlo.
             if (e.code === '23505') return res.status(409).json({ message: 'Esiste già una categoria con questo nome.' });
             logger.error('Errore POST categoria magazzino:', e);
             res.status(500).json({ message: 'Errore nel creare la categoria.' });
         }
     });
 
-    // Il nome di una categoria si cambia, il tipo no.
     app.put('/api/magazzino/categorie/:id', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -672,8 +616,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Un'ubicazione si corregge o si mette a riposo (attiva = false: non si
-    // propone più per i beni nuovi, ma quelli che ci stanno restano dove sono).
     app.put('/api/magazzino/ubicazioni/:id', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -700,7 +642,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Si elimina solo un'ubicazione vuota; per le altre c'è "non più in uso".
     app.delete('/api/magazzino/ubicazioni/:id', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -719,10 +660,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // DPI a taglie: un modello tiene insieme le sue taglie, e ogni taglia è un
-    // bene a quantità con lo stesso nome, come qualunque altro bene.
-
-    // "L, XL, 44" -> ['L', 'XL', '44'], senza doppioni (maiuscole ignorate)
     function taglieValide(valore) {
         const elenco = Array.isArray(valore) ? valore : String(valore || '').split(',');
         const viste = new Set();
@@ -737,7 +674,6 @@ export function registraRotteMagazzino(app, ctx) {
         return taglie;
     }
 
-    // Il gruppo di taglia: busto, pantaloni, scarpe, oppure nessuno.
     const GRUPPI_TAGLIA = ['busto', 'pantaloni', 'scarpe'];
     function gruppoTaglia(valore) {
         if (valore === null || valore === undefined || valore === '') return null;
@@ -745,7 +681,6 @@ export function registraRotteMagazzino(app, ctx) {
         return valore;
     }
 
-    // { "L": 4, "XL": 5 } -> solo le quantità valide e positive
     function quantitaPerTaglia(valore) {
         const risultato = new Map();
         if (!valore || typeof valore !== 'object') return risultato;
@@ -777,7 +712,6 @@ export function registraRotteMagazzino(app, ctx) {
         return r.rows;
     }
 
-    // La taglia di un modello come bene: la trova, o la crea a giacenza zero.
     async function variante(client, req, modello, taglia) {
         const esistente = await client.query(
             `SELECT id FROM beni WHERE modello_id = $1 AND dismesso_il IS NULL AND LOWER(BTRIM(taglia)) = LOWER($2)
@@ -794,7 +728,6 @@ export function registraRotteMagazzino(app, ctx) {
         let totale = 0;
         for (const [taglia, q] of quantita) {
             if (!modello.taglie.some(t => t.toLowerCase() === taglia.toLowerCase())) {
-                // Una taglia nuova caricata al volo entra nell'elenco del modello.
                 modello.taglie.push(taglia);
                 await client.query('UPDATE modelli_dpi SET taglie = $1 WHERE id = $2', [modello.taglie, modello.id]);
             }
@@ -818,8 +751,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Un DPI nuovo con le sue taglie e, se si vuole, le quantità già in casa:
-    // "Divisa estiva, 4 L e 5 XL" in un colpo solo.
     app.post('/api/magazzino/modelli', soloMagazziniere, async (req, res) => {
         const corpo = req.body || {};
         const client = await pool.connect();
@@ -858,7 +789,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Il nome nuovo passa a tutte le taglie; una taglia si toglie solo se vuota.
     app.put('/api/magazzino/modelli/:id', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -881,7 +811,6 @@ export function registraRotteMagazzino(app, ctx) {
             const nascosto = corpo.nascosto === undefined ? prima.nascosto : !!corpo.nascosto;
             const gruppo = corpo.gruppo_taglia === undefined ? prima.gruppo_taglia : gruppoTaglia(corpo.gruppo_taglia);
 
-            // Le taglie tolte: vuote si dismettono, piene fermano tutto.
             const varianti = await client.query(
                 `SELECT b.id, b.taglia, s.in_magazzino, s.fuori FROM beni b JOIN beni_situazione s ON s.bene_id = b.id
                  WHERE b.modello_id = $1 AND b.dismesso_il IS NULL`, [id]);
@@ -922,8 +851,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Il carico di più taglie insieme: arriva la fornitura, si scrive quante
-    // per taglia e basta.
     app.post('/api/magazzino/modelli/:id/carico', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -953,8 +880,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // I DPI proposti da ORION si nascondono, quelli creati a mano si eliminano
-    // se vuoti; le taglie con movimenti si dismettono.
     app.delete('/api/magazzino/modelli/:id', soloMagazziniere, async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -993,18 +918,8 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Le taglie di una persona, per ogni DPI a taglie: alla consegna ORION
-    // propone quelle, invece del quaderno delle taglie.
-    //
-    // Per un DPI già ricevuto vale la taglia che ha ancora addosso; se ne ha
-    // restituite tutte, l'ultima consegnata. Così chi cambia taglia (una L
-    // diventata stretta, scambiata con una XL) ha la nuova, e chi ha reso una
-    // XL perché grande torna alla L che tiene ancora.
-    //
-    // Per un DPI mai ricevuto, la taglia di un altro DPI dello stesso gruppo
-    // (busto, pantaloni, scarpe), segnata "dedotta": la giacca XL fa proporre
-    // la polo XL, le scarpe 43 gli stivali 43. Solo se quella taglia esiste
-    // per il DPI da consegnare; senza gruppo non si deduce niente.
+    // Per un DPI già ricevuto vale la taglia che ha ancora addosso, se no l'ultima
+    // consegnata; per uno mai ricevuto, quella di un DPI dello stesso gruppo ("dedotta").
     const normaTaglia = (t) => String(t).trim().toUpperCase();
     app.get('/api/magazzino/taglie/persona/:id', operatoreInterno, async (req, res) => {
         const id = interoPositivo(req.params.id);
@@ -1031,7 +946,6 @@ export function registraRotteMagazzino(app, ctx) {
             }));
             const note = new Map(ricevute.rows.map(r => [r.modello_id, r]));
             const gruppoDi = new Map(modelli.rows.map(m => [m.id, m.gruppo_taglia]));
-            // Fra le fonti possibili, prima quella che ha ancora in carico, poi la più recente.
             const fonti = [...ricevute.rows].sort((a, b) => (b.in_carico - a.in_carico) || (b.quando - a.quando));
             for (const m of modelli.rows) {
                 const taglie = m.taglie || [];
@@ -1051,9 +965,7 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Chi può ricevere materiale: solo i nomi, non email e codici fiscali. Le
-    // squadre e i mezzi compaiono solo se hanno ancora materiale in carico,
-    // per poterlo far rientrare: nuove consegne vanno solo alle persone.
+    // Solo i nomi, non email e codici fiscali.
     app.get('/api/magazzino/destinatari', operatoreInterno, async (req, res) => {
         try {
             const [persone, squadre, veicoli] = await Promise.all([
@@ -1096,7 +1008,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Anagrafica dei beni
     app.get('/api/magazzino/beni', async (req, res) => {
         try {
             const tipo = TIPI_BENE.includes(req.query.tipo) ? req.query.tipo : null;
@@ -1131,7 +1042,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Il bene di un'etichetta: ricerca esatta, una cosa sola.
     app.get('/api/magazzino/etichetta/:codice', async (req, res) => {
         const codice = String(req.params.codice || '').trim().toUpperCase();
         if (!codice) return res.status(400).json({ message: 'Codice mancante.' });
@@ -1149,7 +1059,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // La scheda completa: anagrafica, situazione, scadenze e la sua storia.
     app.get('/api/magazzino/beni/:id', async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -1197,7 +1106,6 @@ export function registraRotteMagazzino(app, ctx) {
                  dati.fornitore, dati.note, chiOpera(req)]);
             const beneId = r.rows[0].id;
 
-            // Un bene nuovo è già in casa: il carico iniziale.
             const quantitaIniziale = dati.gestione === 'singolo' ? 1 : Number(dati.quantita_totale);
             if (quantitaIniziale > 0) {
                 await registraMovimento(client, req, {
@@ -1298,7 +1206,6 @@ export function registraRotteMagazzino(app, ctx) {
         };
     }
 
-    // Le scadenze arrivano complete, una per tipo: quelle assenti si tolgono.
     async function salvaScadenze(client, beneId, scadenze) {
         if (!Array.isArray(scadenze)) return;
         const valide = scadenze.filter(s => s && TIPI_SCADENZA.includes(s.tipo) && s.scadenza);
@@ -1320,7 +1227,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     }
 
-    // Manutenzioni: registrarne una sposta la scadenza secondo la periodicità.
     app.get('/api/magazzino/beni/:id/interventi', async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -1371,7 +1277,6 @@ export function registraRotteMagazzino(app, ctx) {
                      req.body.fornitore ? String(req.body.fornitore).trim() : null,
                      chiOpera(req)]);
 
-                // La prossima scadenza dalla periodicità; la prima volta si crea.
                 const periodicita = periodicitaValida(req.body.periodicita_mesi);
                 const esistente = await client.query(
                     'SELECT periodicita_mesi FROM beni_scadenze WHERE bene_id = $1 AND tipo = $2', [id, tipo]);
@@ -1392,8 +1297,6 @@ export function registraRotteMagazzino(app, ctx) {
                              aggiornata_il = NOW()`,
                         [id, tipo, prossima, eseguitoIl, mesi, documento]);
                 } else {
-                    // Senza periodicità la scadenza non si sposta, ma almeno si
-                    // segna quando è stato fatto l'ultimo controllo.
                     await client.query(
                         `UPDATE beni_scadenze SET ultimo_controllo = $3, aggiornata_il = NOW()
                          WHERE bene_id = $1 AND tipo = $2`, [id, tipo, eseguitoIl]);
@@ -1416,7 +1319,6 @@ export function registraRotteMagazzino(app, ctx) {
             }
         });
 
-    // I documenti dei beni, dalla loro cartella.
     app.get('/api/magazzino/documenti/:filename', operatoreInterno, (req, res) => {
         if (!cartellaDocumenti) return res.status(404).json({ message: 'Documento non trovato.' });
         const percorso = path.resolve(cartellaDocumenti, req.params.filename);
@@ -1428,14 +1330,11 @@ export function registraRotteMagazzino(app, ctx) {
         inviaFile(res, percorso);
     });
 
-    // Movimenti
     app.post('/api/magazzino/movimenti', operatoreInterno, async (req, res) => {
         const tipo = req.body?.tipo;
         if (!MOVIMENTI_OPERATIVI.includes(tipo) && !MOVIMENTI_DI_INVENTARIO.includes(tipo)) {
             return res.status(400).json({ message: 'Tipo di movimento non valido.' });
         }
-        // Carichi, dismissioni e rettifiche a chi gestisce il magazzino; consegne,
-        // rientri e trasferimenti a chi ha il permesso delle consegne.
         if (MOVIMENTI_OPERATIVI.includes(tipo) && !haPermesso(req, 'magazzino.consegne')) {
             return res.status(403).json({ message: 'Ti serve il permesso "Consegnare e far rientrare materiale".' });
         }
@@ -1479,16 +1378,12 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Richieste idempotenti: l'app rimanda le consegne con una chiave, e la
-    // stessa chiave non registra due volte.
+    // L'app rimanda le consegne con una chiave: la stessa chiave non registra due volte.
     const FORMATO_CHIAVE = /^[A-Za-z0-9_-]{8,100}$/;
     const GIORNI_TENUTA_CHIAVI = 7;
 
-    /**
-     * La chiave si segna nella transazione, prima di tutto: due invii insieme
-     * si mettono in fila e il secondo riceve la risposta del primo.
-     * null senza chiave, { chiave } se nuova, { ripetuta: { stato, corpo } } se già servita.
-     */
+    // La chiave si segna nella transazione, prima di tutto: due invii insieme si
+    // mettono in fila e il secondo riceve la risposta del primo.
     async function prenotaIdempotenza(client, req, rotta) {
         const chiave = req.get('Idempotency-Key');
         if (chiave === undefined) return null;
@@ -1532,8 +1427,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     }
 
-    // Consegna di più oggetti in un colpo solo: è così che succede davvero,
-    // un volontario riceve elmetto, giacca e scarponi insieme.
     app.post('/api/magazzino/consegna', richiedePermesso('magazzino.consegne'), async (req, res) => {
         const righe = Array.isArray(req.body?.righe) ? req.body.righe : [];
         if (righe.length === 0) return res.status(400).json({ message: 'Indica almeno un oggetto da consegnare.' });
@@ -1547,16 +1440,12 @@ export function registraRotteMagazzino(app, ctx) {
             await client.query('BEGIN');
             const prenotazione = await prenotaIdempotenza(client, req, 'consegna');
             if (prenotazione?.ripetuta) {
-                // Gia' servita: la stessa risposta, senza rifare niente.
                 await client.query('ROLLBACK');
                 res.set('Idempotent-Replayed', 'true');
                 return res.status(prenotazione.ripetuta.stato || 201).json(prenotazione.ripetuta.corpo);
             }
             const dest = await risolviDestinatario(client, req.body.destinatario);
 
-            // Il verbale solo a una persona. I DPI ci vanno sempre con la
-            // conferma dei DPI, altrimenti se il magazzino lo prevede e chi
-            // consegna lo chiede; attrezzature e mezzi solo se previsto e chiesto.
             const config = await leggiConfig();
             const idBeni = righe.map(r => interoPositivo(r?.bene_id)).filter(Boolean);
             const tipoDi = new Map((await client.query('SELECT id, tipo FROM beni WHERE id = ANY($1::int[])', [idBeni]))
@@ -1565,7 +1454,6 @@ export function registraRotteMagazzino(app, ctx) {
             const inVerbale = (beneId) => dest.destinatario_tipo === 'persona'
                 && nelVerbale(config, tipoDi.get(beneId), 'consegna', richiesto);
             const conVerbale = idBeni.some(inVerbale);
-            // La conferma dal telefono solo se nel verbale ci sono dei DPI.
             const daConfermare = conVerbale && !!config.conferma_dpi && idBeni.some(id => tipoDi.get(id) === 'dpi');
             let verbaleId = null;
             if (conVerbale) {
@@ -1596,7 +1484,7 @@ export function registraRotteMagazzino(app, ctx) {
             await chiudiIdempotenza(client, req, prenotazione, 201, risposta);
             await client.query('COMMIT');
             if (typeof avvisaClienti === 'function') avvisaClienti('reload_magazzino');
-            // Con la conferma dei DPI, chi riceve lo sa dal telefono. Dopo il COMMIT.
+            // Si avvisa dopo il COMMIT.
             const quantiNelVerbale = fatti.filter(f => inVerbale(f.bene_id)).length;
             if (verbaleId && dest.destinatario_user_id && typeof notifica === 'function' && daConfermare) {
                 await notifica(dest.destinatario_user_id, {
@@ -1619,8 +1507,7 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Rientro. Sugli sfusi, se torna meno di quanto è uscito, chi registra dice
-    // cosa ne è del resto (in carico, usato sul posto, perso): senza, si rifiuta.
+    // Sugli sfusi, se torna meno di quanto è uscito, va detto cosa ne è del resto.
     const DESTINI_RESTO = ['in_carico', 'consumo', 'perso'];
     app.post('/api/magazzino/rientro', richiedePermesso('magazzino.consegne'), async (req, res) => {
         const righe = Array.isArray(req.body?.righe) ? req.body.righe : [];
@@ -1632,9 +1519,7 @@ export function registraRotteMagazzino(app, ctx) {
 
             const da = await risolviDetentore(client, req.body?.da);
 
-            // Il verbale di rientro solo da una persona e solo se acceso per
-            // quel genere di materiale (DPI, oppure attrezzature e mezzi):
-            // spento, la richiesta lo ignora senza fallire.
+            // Spento, la richiesta del verbale si ignora senza fallire.
             const config = await leggiConfig();
             const idBeni = righe.map(r => interoPositivo(r?.bene_id)).filter(Boolean);
             const tipoDi = new Map((await client.query('SELECT id, tipo FROM beni WHERE id = ANY($1::int[])', [idBeni]))
@@ -1653,15 +1538,14 @@ export function registraRotteMagazzino(app, ctx) {
             }
 
             const fatti = [];
-            // Quello che resta a chi restituisce: nel verbale va scritto, se
-            // no il foglio firmato direbbe solo metà della storia.
+            // Quello che resta a chi restituisce va nel verbale, se no il foglio firmato
+            // direbbe solo metà della storia.
             const restanoInCarico = [];
             for (const riga of righe) {
                 const beneId = interoPositivo(riga?.bene_id);
                 if (!beneId) throw erroreRichiesta('Una delle righe non indica quale bene rientra.');
                 const bene = await leggiSituazione(client, beneId);
 
-                // Quanto ne ha chi lo rende: uno, o il saldo di quel detentore.
                 let origine = da;
                 let uscito;
                 if (bene.gestione === 'singolo') {
@@ -1674,13 +1558,10 @@ export function registraRotteMagazzino(app, ctx) {
                         throw erroreRichiesta(`"${bene.denominazione}" lo hanno in carico più detentori: indica da chi rientra.`);
                     }
                     origine = detentori[0] || null;
-                    // Nessun detentore noto: materiale uscito prima che si
-                    // tenesse il conto per detentore. Vale il totale fuori.
+                    // Materiale uscito prima del conto per detentore: vale il totale fuori.
                     uscito = origine ? origine.saldo : Number(bene.fuori);
                 }
                 const daChi = origine ? { tipo: origine.tipo, id: origine.user_id ?? origine.squadra_id ?? origine.bene_id } : null;
-                // Zero è una risposta valida: non torna niente, e si dice
-                // cosa ne è del resto.
                 const letta = Number(riga.quantita);
                 const rientrata = riga.quantita === undefined || riga.quantita === null || riga.quantita === ''
                     ? uscito
@@ -1700,7 +1581,6 @@ export function registraRotteMagazzino(app, ctx) {
                     fatti.push({ movimento_id: esito.id, bene_id: beneId, tipo: 'rientro', quantita: rientrata });
                 }
 
-                // Quello che non torna: lo dice chi registra, riga per riga.
                 const mancante = Math.round((uscito - rientrata) * 100) / 100;
                 if (mancante > 0 && bene.gestione === 'quantita') {
                     const resto = riga.resto;
@@ -1714,7 +1594,6 @@ export function registraRotteMagazzino(app, ctx) {
                             throw erroreRichiesta(`Di "${bene.denominazione}" non si sa chi abbia i restanti ${quanto}: ` +
                                 'non possono restare in carico a nessuno. Indica se sono stati usati o sono persi.');
                         }
-                        // Nessun movimento: restano dove sono, e chi ha cosa lo mostra.
                         if (inVerbale(beneId)) restanoInCarico.push(`${bene.denominazione}${bene.taglia ? ` (taglia ${bene.taglia})` : ''}: ${quanto}`);
                     } else {
                         const tipo = resto === 'consumo' ? 'consumo' : 'smarrimento';
@@ -1737,7 +1616,6 @@ export function registraRotteMagazzino(app, ctx) {
                 await client.query('UPDATE verbali_consegna SET note = $2 WHERE id = $1',
                     [verbaleId, [r.rows[0].note, riga].filter(Boolean).join('\n')]);
             }
-            // Un verbale senza righe (tutto a zero) non ha niente da far firmare.
             if (verbaleId && collegati === 0) {
                 await client.query('DELETE FROM verbali_consegna WHERE id = $1', [verbaleId]);
                 verbaleId = null;
@@ -1777,10 +1655,8 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Le viste operative: chi ha cosa, cosa scade, cosa manca
     app.get('/api/magazzino/chi-ha-cosa', async (req, res) => {
         try {
-            // Singoli: la destinazione dell'ultimo movimento. Sfusi: il saldo per detentore.
             const singoli = await pool.query(
                 `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.matricola, b.gestione,
                         b.categoria_id, b.modello_id, b.taglia,
@@ -1792,8 +1668,7 @@ export function registraRotteMagazzino(app, ctx) {
                    AND s.destinatario_tipo IS NOT NULL
                    AND s.destinatario_tipo NOT IN ('magazzino', 'dismesso', 'consumato', 'perso')`);
 
-            // Sugli sfusi, per detentore: arrivi meno uscite (update-25).
-            // Il nome e' quello scritto nell'ultima consegna a quel detentore.
+            // Sugli sfusi: arrivi meno uscite (update-25).
             const sfusi = await pool.query(
                 `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.matricola, b.gestione,
                         b.categoria_id, b.modello_id, b.taglia,
@@ -1824,8 +1699,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Quello che scade nei prossimi N giorni e tutto quello già scaduto. La
-    // usano la pagina e l'email: una query sola, una risposta sola.
     async function scadenzeEntro(giorni) {
         const r = await pool.query(
             `SELECT s.id, s.bene_id, s.tipo, s.scadenza, s.ultimo_controllo,
@@ -1847,8 +1720,8 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Quello che è uscito e non è tornato. Non i DPI in dotazione, che restano
-    // al volontario per anni, tranne quelli di chi non è più iscritto.
+    // Non i DPI in dotazione, che restano al volontario per anni, tranne quelli
+    // di chi non è più iscritto.
     async function daRecuperare(giorni) {
         const r = await pool.query(
             `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.matricola, b.gestione,
@@ -1884,8 +1757,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Gli avvisi email delle scadenze: ognuno decide per sé se e ogni quanto.
-    // Senza una riga in tabella, niente email.
     const AVVISI_PREDEFINITI = {
         attivo: false,
         frequenza: 'settimanale',
@@ -1918,7 +1789,6 @@ export function registraRotteMagazzino(app, ctx) {
             return res.status(400).json({ message: 'Il preavviso non può superare i 365 giorni.' });
         }
         try {
-            // Senza indirizzo lo si dice subito.
             const utente = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
             if (corpo.attivo && !utente.rows[0]?.email) {
                 return res.status(400).json({
@@ -1943,7 +1813,7 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Invio di prova: non tocca la data dell'ultimo invio, e parte anche senza scadenze.
+    // Non tocca la data dell'ultimo invio.
     app.post('/api/magazzino/avvisi/prova', soloMagazziniere, async (req, res) => {
         try {
             const utente = await pool.query('SELECT nome, cognome, email FROM users WHERE id = $1', [req.user.id]);
@@ -1970,7 +1840,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Compone e manda l'email a una persona; non lancia, restituisce l'esito.
     async function inviaAvvisoA(destinatario, opzioni = {}) {
         const config = await leggiConfig();
         const scadenze = await scadenzeEntro(destinatario.giorni_preavviso);
@@ -2083,8 +1952,8 @@ export function registraRotteMagazzino(app, ctx) {
         return righe.join('\n');
     }
 
-    // Dal giro quotidiano (scadenze.js). Il periodo si misura dall'ultimo invio
-    // riuscito di ciascuno: un giorno di fermo o un invio fallito si recuperano.
+    // Il periodo si misura dall'ultimo invio riuscito: un giorno di fermo o un
+    // invio fallito si recuperano.
     async function inviaAvvisiScadenze() {
         if (!(await moduloAcceso())) return { destinatari: 0, inviati: 0 };
 
@@ -2128,14 +1997,12 @@ export function registraRotteMagazzino(app, ctx) {
         return { destinatari: destinatari.rowCount, inviati, falliti };
     }
 
-    // Quello che una persona, una squadra o un mezzo ha in carico adesso.
     app.get('/api/magazzino/in-carico/:tipo/:id', async (req, res) => {
         const tipo = req.params.tipo;
         const id = interoPositivo(req.params.id);
         if (!['persona', 'squadra', 'veicolo'].includes(tipo) || !id) {
             return res.status(400).json({ message: 'Detentore non valido.' });
         }
-        // Il proprio lo vede chiunque; quello degli altri ogni operatore interno.
         const proprio = tipo === 'persona' && id === req.user.id;
         if (!proprio && ruoliDi(req.user).includes('esterno')) {
             return res.status(403).json({ message: 'Puoi vedere solo il materiale che hai in carico tu.' });
@@ -2148,9 +2015,7 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Verbali di consegna
-
-    // I propri verbali, solo i propri. Prima di /verbali/:id, che prenderebbe "miei" per un id.
+    // Prima di /verbali/:id, che prenderebbe "miei" per un id.
     const STATI_VERBALE = ['da_confermare', 'da_firmare', 'confermato', 'firmato_cartaceo'];
     app.get('/api/magazzino/verbali/miei', async (req, res) => {
         const stato = req.query.stato === undefined ? null : String(req.query.stato);
@@ -2188,8 +2053,6 @@ export function registraRotteMagazzino(app, ctx) {
         try {
             const v = await pool.query('SELECT * FROM verbali_consegna WHERE id = $1', [id]);
             if (v.rowCount === 0) return res.status(404).json({ message: 'Verbale non trovato.' });
-            // Il proprio verbale lo legge il volontario; quelli altrui solo
-            // chi tiene il magazzino.
             if (v.rows[0].user_id !== req.user.id && !haPermesso(req, 'magazzino.gestione', 'magazzino.consegne')) {
                 return res.status(403).json({ message: 'Non sei autorizzato a leggere questo verbale.' });
             }
@@ -2204,9 +2067,7 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // L'impronta di una conferma: il verbale, chi, quando e gli oggetti, in
-    // un testo fisso. Chi rifà il calcolo sugli stessi dati trova la stessa
-    // impronta; cambiando un oggetto, una quantità o l'ora, cambia.
+    // Testo fisso: chi rifà il calcolo sugli stessi dati trova la stessa impronta.
     function improntaConferma({ id, user_id: utente, confermato_da: chi, confermato_il: quando }, righe) {
         const testo = JSON.stringify({
             verbale: Number(id), utente: Number(utente), chi, quando: new Date(quando).toISOString(),
@@ -2215,9 +2076,6 @@ export function registraRotteMagazzino(app, ctx) {
         return crypto.createHash('sha256').update(testo).digest('hex');
     }
 
-    // La conferma dal telefono o dal profilo, se l'associazione l'ha accesa.
-    // Compila il verbale: nome di chi conferma, data e ora, da dove, e
-    // l'impronta di quello che ha confermato, che va anche nel registro.
     app.post('/api/magazzino/verbali/:id/conferma', async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -2258,15 +2116,13 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Il nome del file resta sul server: fuori si vede solo l'indirizzo da cui
-    // lo si legge, con i permessi del verbale.
+    // Il nome del file non esce dal server.
     function conScansione(v) {
         const { scansione_file: file, ...resto } = v;
         return { ...resto, scansione_url: file ? `/api/magazzino/verbali/${v.id}/scansione` : null };
     }
 
-    // I primi byte dicono cos'è davvero un file, il tipo dichiarato dal
-    // browser no.
+    // Il tipo lo dicono i primi byte, non il browser.
     function contenutoAmmesso(percorso) {
         const testa = Buffer.alloc(12);
         const fd = fs.openSync(percorso, 'r');
@@ -2278,8 +2134,6 @@ export function registraRotteMagazzino(app, ctx) {
         return jpeg || png || webp || pdf;
     }
 
-    // Il foglio firmato, fotografato o scansionato, diventa il verbale. Una
-    // seconda foto sostituisce la prima.
     app.post('/api/magazzino/verbali/:id/scansione', richiedePermesso('magazzino.gestione', 'magazzino.consegne'), (req, res, next) => {
         if (!caricaScansione) return res.status(501).json({ message: 'Caricamento dei verbali non disponibile.' });
         caricaScansione.single('scansione')(req, res, (err) => {
@@ -2302,7 +2156,6 @@ export function registraRotteMagazzino(app, ctx) {
         try {
             const prima = await pool.query('SELECT scansione_file, stato FROM verbali_consegna WHERE id = $1', [id]);
             if (prima.rowCount === 0) { scarta(); return res.status(404).json({ message: 'Verbale non trovato.' }); }
-            // La conferma dall'app resta: il foglio si aggiunge, non la cancella.
             const r = await pool.query(
                 `UPDATE verbali_consegna
                  SET scansione_file = $2, scansione_caricata_il = NOW(), scansione_caricata_da = $3,
@@ -2312,7 +2165,6 @@ export function registraRotteMagazzino(app, ctx) {
                 [id, req.file.filename, chiOpera(req)]);
             const vecchio = prima.rows[0].scansione_file;
             if (vecchio && cartellaVerbali) fs.unlink(path.join(cartellaVerbali, path.basename(vecchio)), () => {});
-            // Firmato su carta: la richiesta di conferma dal telefono non serve piu'.
             if (typeof scadiNotifiche === 'function') scadiNotifiche({ tipo: 'dpi_da_confermare', riferimento: { tipo: 'verbale', id } });
             registraAudit(req, 'magazzino.verbale.firmato', {
                 tipo: 'verbale', id, dettagli: { sostituito: !!vecchio, formato: req.file.mimetype }
@@ -2331,8 +2183,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Il foglio firmato si legge con gli stessi permessi del verbale: chi
-    // l'ha firmato e chi tiene il magazzino.
     app.get('/api/magazzino/verbali/:id/scansione', async (req, res) => {
         const id = interoPositivo(req.params.id);
         if (!id) return res.status(400).json({ message: 'ID non valido.' });
@@ -2368,8 +2218,6 @@ export function registraRotteMagazzino(app, ctx) {
         }
     });
 
-    // Per chi registra movimenti fuori da queste rotte (beniInUscita.js) e per
-    // il riepilogo nell'app dei magazzinieri (null a modulo spento).
     async function riepilogoNotifica() {
         if (!(await moduloAcceso())) return null;
         const config = await leggiConfig();
@@ -2380,8 +2228,6 @@ export function registraRotteMagazzino(app, ctx) {
 
     return { registraMovimento, inviaAvvisiScadenze, leggiConfig, pulisciIdempotenza, riepilogoNotifica };
 }
-
-// Il materiale che un detentore ha adesso (serve anche a beniInUscita.js).
 
 export async function beniInCarico(esecutore, tipo, id) {
     const colonna = tipo === 'persona' ? 'destinatario_user_id'
@@ -2395,8 +2241,6 @@ export async function beniInCarico(esecutore, tipo, id) {
          WHERE b.gestione = 'singolo' AND b.dismesso_il IS NULL
            AND s.destinatario_tipo = $1 AND s.${colonna} = $2`, [tipo, id]);
 
-    // Gli sfusi per detentore: quello che gli e' arrivato meno quello che gli
-    // e' uscito (vedi update-25).
     const colonnaDetenzione = tipo === 'persona' ? 'user_id' : tipo === 'squadra' ? 'squadra_id' : 'veicolo_id';
     const sfusi = await esecutore.query(
         `SELECT b.id AS bene_id, b.denominazione, b.tipo AS tipo_bene, b.gestione, b.matricola, b.taglia,

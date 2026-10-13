@@ -1,10 +1,4 @@
-// Il ritaglio della foto profilo prima del caricamento: la cornice ha le
-// proporzioni della foto del tesserino (5 x 6), con un ovale che suggerisce
-// dove mettere il viso. Si trascina per spostare, si ingrandisce con la
-// rotella o il cursore, si gira di 90 gradi. Ne esce un JPEG di 500 x 600:
-// leggero, e uguale per tutti i tesserini.
-//
-// window.ritagliaFoto(file) -> Promise<Blob|null> (null: annullato)
+// window.ritagliaFoto(file) -> Promise<Blob|null> (null: annullato). Ne esce un JPEG 500 x 600.
 
 (function () {
     const USCITA_L = 500, USCITA_A = 600;   // la foto che si carica
@@ -78,7 +72,6 @@
             const cursore = velo.querySelector('input[type=range]');
             const CW = canvas.width, CH = canvas.height;
 
-            // Stato: rotazione (0..3 quarti), zoom sopra il minimo che copre la cornice, spostamento del centro.
             let giri = 0, zoom = 1, dx = 0, dy = 0;
             const lati = () => giri % 2 ? [immagine.height, immagine.width] : [immagine.width, immagine.height];
             const scalaBase = () => { const [l, a] = lati(); return Math.max(CW / l, CH / a); };
@@ -103,7 +96,7 @@
             const ridisegna = () => { limita(); disegna(ctx, CW, CH); };
             ridisegna();
 
-            // Trascinare: in coordinate del canvas (è disegnato al doppio).
+            // Il canvas è disegnato al doppio.
             let presa = null;
             const cornice = velo.querySelector('.rf-cornice');
             cornice.addEventListener('pointerdown', (e) => { presa = { x: e.clientX, y: e.clientY, dx, dy }; cornice.setPointerCapture(e.pointerId); });

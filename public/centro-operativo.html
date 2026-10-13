@@ -42,7 +42,6 @@
         </div>
 
         <div style="position: relative; display: flex; align-items: center; gap: 10px;">
-            <!-- Il punto di situazione da stampare e la rubrica: a portata di mano, non nel menu. -->
             <button type="button" id="situazione-btn" class="button-style button-secondary" style="display: none" title="Il punto di situazione da stampare o salvare in PDF"><i class="fas fa-clipboard-list"></i><span class="etichetta-testata"> Situazione</span></button>
             <button type="button" id="regia-btn" class="button-style" hidden title="La regia della simulazione: orologio, eventi del copione, osservazioni"><i class="fas fa-clapperboard"></i><span class="etichetta-testata"> Regia</span></button>
             <button type="button" id="chiamata-btn" class="button-style button-secondary" hidden title="La chiamata dei volontari"><i class="fas fa-phone-volume"></i><span class="etichetta-testata"> Volontari</span><span class="ch-badge" hidden></span></button>
@@ -63,10 +62,8 @@
                     <a href="/magazzino.html" id="magazzino-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a>
                     
                     <a href="/calendario.html" id="calendario-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-calendar-days" style="width: 20px;"></i> Calendario</a>
-                    <!-- L'archivio del gruppo (piano, procedure, libretti): a tutti, agli esterni quello per l'emergenza. -->
                     <a href="/documenti.html" id="documenti-gruppo-btn" style="display: block; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-book" style="width: 20px;"></i> Documenti del gruppo</a>
                     <a href="/admin/squadre.html" id="manage-teams-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a>
-                    <!-- Chi arriva al COC da fuori (Croce Rossa, 118...): un nome e un QR. Solo a emergenza aperta. -->
                     <a href="#" id="esterni-temporanei-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-id-badge" style="width: 20px;"></i> Accesso esterno</a>
                     <a href="/profile.html" id="profile-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-user-circle" style="width: 20px;"></i> Il mio profilo</a>
                     
@@ -97,7 +94,6 @@
                 <button id="toggle-closed-reports-btn" class="button-style button-secondary" style="width: 100%">
                     Mostra chiuse
                 </button>
-                <!-- Il riepilogo: quante sono in ogni situazione; un clic filtra l'elenco. -->
                 <div id="riepilogo-segnalazioni" class="riepilogo-segnalazioni" role="group" aria-label="Filtra le segnalazioni" hidden></div>
             </div>
 
@@ -126,8 +122,6 @@
                 </div>
             </div>
 
-            <!-- Colonna eventi: la memoria condivisa del turno. Richiudibile,
-                 perché su schermi piccoli la mappa viene prima. -->
             <aside id="pannello-eventi" class="chiuso">
                 <button type="button" id="toggle-eventi-btn" aria-label="Mostra o nascondi gli eventi">
                     <span class="etichetta-eventi">Eventi</span>
@@ -404,9 +398,6 @@
                 </div>
             </div>
 
-            <!-- Non tutte le segnalazioni aspettano una squadra: una frana di
-                 competenza dei Vigili del Fuoco o un livello da tenere d'occhio
-                 non devono comparire in ritardo per tutta l'emergenza. -->
             <div id="squadra-non-richiesta-box" style="margin-top: 20px; padding: 15px; background: var(--secondary-bg-color); border: 1px solid var(--border-color); border-radius: 8px;">
                 <label for="no-team-reason-select" style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: var(--text-color);">Questa segnalazione richiede una squadra?
                 </label>
@@ -448,7 +439,6 @@
 
     <input type="file" id="report-image-upload-input" multiple accept="image/*" style="display: none;">
 
-    <!-- Gli avvisi a comparsa, in alto sopra la mappa: le novità e le conferme (notifica). -->
     <div id="contenitore-avvisi" data-avvisi aria-live="polite"></div>
     <script src="/leaflet/leaflet.js"></script>
     <script src="/vendor/geoman/leaflet-geoman.min.js"></script>

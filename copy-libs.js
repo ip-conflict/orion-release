@@ -1,16 +1,5 @@
-// Copia in public/ le librerie front-end installate con npm.
-// Viene eseguito automaticamente dopo ogni "npm install" (script postinstall),
-// quindi setup.sh e update.sh le rigenerano da soli senza passaggi manuali.
-//
-// Perché: tutte queste librerie erano caricate da CDN esterni (unpkg, jsdelivr,
-// cdnjs). In una sala operativa di protezione civile la connessione a Internet
-// può mancare o essere degradata proprio durante l'emergenza, e in quel caso le
-// pagine non si limitavano a perdere qualche icona: senza Leaflet il codice
-// andava in errore e il Centro Operativo diventava inutilizzabile.
-// Servendole dal server l'applicazione funziona anche su rete locale isolata.
-// (Restano necessariamente online solo le mattonelle della mappa e la ricerca
-// indirizzi: senza rete la mappa resta vuota, ma l'applicazione continua a
-// funzionare.)
+// Le librerie del web si servono dal server, non da un CDN: in sala internet può mancare
+// proprio durante l'emergenza. Gira dopo ogni npm install (postinstall).
 
 import fs from 'fs';
 import path from 'path';
@@ -23,7 +12,6 @@ const moduli = path.join(__dirname, 'node_modules');
 const pubblico = path.join(__dirname, 'public');
 const vendor = path.join(pubblico, 'vendor');
 
-// Singoli file: [origine, destinazione]
 const file = [
     ['dompurify/dist/purify.es.mjs', 'js/lib/purify.es.js'],
 
@@ -38,7 +26,6 @@ const file = [
 
     ['qrcodejs/qrcode.min.js', 'vendor/qrcode/qrcode.min.js'],
 
-    // Disegno sulla mappa (strade chiuse, zone) e lettura dei KML del piano.
     ['@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.min.js', 'vendor/geoman/leaflet-geoman.min.js'],
     ['@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css', 'vendor/geoman/leaflet-geoman.css'],
     ['@tmcw/togeojson/dist/togeojson.umd.js', 'vendor/togeojson/togeojson.umd.js'],
@@ -46,7 +33,7 @@ const file = [
     ['@fortawesome/fontawesome-free/css/all.min.css', 'vendor/fontawesome/css/all.min.css']
 ];
 
-// Intere cartelle (i CSS delle icone puntano a ../webfonts/)
+// I CSS delle icone puntano a ../webfonts/.
 const cartelle = [
     ['@fortawesome/fontawesome-free/webfonts', 'vendor/fontawesome/webfonts']
 ];

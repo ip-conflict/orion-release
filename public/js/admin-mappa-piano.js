@@ -1,7 +1,4 @@
-// Impostazioni › Livelli del piano sulla mappa: importare da QGIS le zone di
-// pericolosità e le aree d'emergenza (GeoJSON o KML in WGS84), e vedere o
-// togliere quelle già caricate. Il file si legge qui nel browser; al server
-// arrivano solo le forme, con il tipo scelto e il nome.
+// Il file si legge nel browser: al server arrivano solo le forme.
 
 (function () {
     const TIPI = {
@@ -27,7 +24,6 @@
         $('piano-errore').hidden = !testo;
     }
 
-    // Da QGIS arriva una FeatureCollection; si accettano anche Feature e geometrie sciolte.
     function featuresDa(geo) {
         if (!geo) return [];
         if (geo.type === 'FeatureCollection') return geo.features || [];
@@ -36,7 +32,7 @@
         return [];
     }
 
-    // Il primo numero che si incontra: se è più grande di 180 non sono gradi.
+    // Se è più grande di 180 non sono gradi.
     function primaCoordinata(g) {
         let c = g?.coordinates;
         while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
@@ -61,7 +57,6 @@
                     throw new Error(`Il file è nel sistema di riferimento ${crs}: in QGIS esportalo scegliendo EPSG:4326 - WGS 84.`);
                 }
             }
-            // Le geometrie multiple di un KML (GeometryCollection) si aprono in pezzi.
             forme = featuresDa(geo).flatMap(f => f.geometry?.type === 'GeometryCollection'
                 ? f.geometry.geometries.map(g => ({ ...f, geometry: g })) : [f]).filter(f => f.geometry);
             if (!forme.length) throw new Error('Nel file non ho trovato forme.');
@@ -116,8 +111,6 @@
         }
     });
 
-    // Quello che c'è già, per tipo e per file: un file aggiornato si reimporta
-    // dopo aver tolto quello vecchio.
     async function elenco() {
         const box = $('piano-elenco');
         try {
@@ -162,9 +155,7 @@
     elenco();
 })();
 
-// La cartografia del territorio (cartografia.js sul server): un file MBTiles
-// che arriva a pezzi da 16 MB. Un pezzo che non passa si rimanda, tre volte,
-// prima di arrendersi: con la linea lenta non si ricomincia da capo.
+// Un pezzo che non passa si rimanda tre volte: con la linea lenta non si ricomincia da capo.
 (function () {
     const $ = (id) => document.getElementById(id);
     if (!$('carto-file')) return;

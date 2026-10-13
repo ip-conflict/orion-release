@@ -1,5 +1,3 @@
-// tests/cartografia.mjs
-//
 // La cartografia del territorio sul server: un MBTiles costruito qui (tre
 // tasselli PNG) arriva a pezzi, un pezzo rimandato non si somma due volte,
 // un pezzo fuori ordine è rifiutato; i tasselli si leggono con la riga
@@ -54,7 +52,6 @@ async function carica(buffer, nome, taglio = Math.ceil(buffer.length / 2)) {
     return json('/api/mappa/cartografia/fine', { method: 'POST', body: { id, byte: buffer.length, nome } });
 }
 
-// Un PNG da 1x1 (rosso) e uno da 1x1 (blu): basta che siano diversi.
 const PNG_ROSSO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
 const PNG_BLU = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const cartella = fs.mkdtempSync(path.join(os.tmpdir(), 'orion-carto-'));
@@ -81,10 +78,8 @@ if (prima?.presente) {
 verifica('senza cartografia: presente = false', prima?.presente === false, prima);
 
 try {
-    // z=10, x=550, riga TMS 700 -> riga XYZ 1023-700 = 323.
     const file = mbtiles('t.mbtiles', 'png', [[10, 550, 700, PNG_ROSSO], [11, 1100, 1400, PNG_BLU], [12, 2200, 2800, PNG_ROSSO]]);
 
-    // I pezzi: fuori ordine, ripetuto, poi la fine.
     const p0 = await pezzo(file.subarray(0, 4096), 0);
     verifica('primo pezzo accettato', p0.stato === 200 && p0.corpo?.id && p0.corpo.byte === 4096, p0);
     const salto = await pezzo(file.subarray(8192), 2, p0.corpo.id);
@@ -111,7 +106,6 @@ try {
     const anonimo = await fetch(`${BASE}/api/mappa/cartografia/10/550/323`);
     verifica('senza accesso: 401', anonimo.status === 401, anonimo.status);
 
-    // Il limite di richieste (1500 ogni 15 minuti) non conta i tasselli.
     let troppi = 0;
     for (let giro = 0; giro < 32; giro++) {
         const esiti = await Promise.all(Array.from({ length: 50 }, () => fetch(`${BASE}/api/mappa/cartografia/10/550/323`, { headers: auth }).then(r => { r.body?.cancel(); return r.status; })));
@@ -121,7 +115,6 @@ try {
     const dopo = await json('/api/mappa/cartografia');
     verifica('e le altre richieste passano ancora', dopo.stato === 200, dopo.stato);
 
-    // File sbagliati: il vecchio resta.
     const testo = await carica(Buffer.from('non sono un database '.repeat(50)), 'finto.mbtiles');
     verifica('non è un MBTiles: 400 con il motivo', testo.stato === 400 && /SQLite|MBTiles/.test(testo.corpo?.message), testo);
     const vettoriale = await carica(mbtiles('v.mbtiles', 'pbf', [[10, 1, 1, Buffer.from([0x1f, 0x8b, 0, 0])]]), 'v.mbtiles');

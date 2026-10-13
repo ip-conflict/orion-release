@@ -1,8 +1,3 @@
-// Il punto di situazione su un foglio A4: /situazione.html per l'emergenza in
-// corso, /situazione.html?emergenza=ID per una chiusa (il resoconto, dall'archivio).
-// Con &completo=1 segue ogni segnalazione per intero: dati, diario e foto, per
-// stampare tutta l'emergenza in una volta.
-
 (function () {
     const foglio = document.getElementById('st-foglio');
     const nota = document.getElementById('st-nota');
@@ -18,7 +13,6 @@
     const dataLunga = (v) => new Date(v).toLocaleString('it-IT', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const ora = (v) => new Date(v).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
-    // "2 h 15 min", "3 g 4 h": quanto è passato, per chi legge il foglio.
     function durata(da, a = Date.now()) {
         const minuti = Math.max(0, Math.round((new Date(a) - new Date(da)) / 60000));
         if (minuti < 60) return `${minuti} min`;
@@ -27,7 +21,6 @@
         return `${Math.floor(ore / 24)} g ${ore % 24} h`;
     }
 
-    // Le ore accanto alle date di oggi, la data intera per i giorni prima.
     function quando(v) {
         if (!v) return '—';
         const d = new Date(v);
@@ -39,7 +32,6 @@
         return `<span class="st-bollino ${classe}">${e(testo)}</span>`;
     }
 
-    // Il caposquadra per primo, segnato.
     const persone = (membri) => [...(membri || [])].sort((a, b) => (b.caposquadra === true) - (a.caposquadra === true))
         .map(m => { const n = [m.cognome, m.nome].filter(Boolean).join(' '); return n && m.caposquadra ? `${n} (caposquadra)` : n; })
         .filter(Boolean).join(', ');
@@ -49,8 +41,6 @@
             <div class="st-etichetta">${e(etichetta)}</div>${sotto ? `<div class="st-sotto">${e(sotto)}</div>` : ''}</div>`;
     }
 
-    // Le note automatiche dette in italiano piano: chi legge il foglio fuori
-    // dalla sala non deve decifrare "Campo 'Stato' modificato da ...".
     function notaLeggibile(testo) {
         const t = String(testo || '').trim();
         let m = t.match(/^Campo '([^']+)' modificato da .+? a '([^']+)'(?: \(([^)]+)\))?\.?$/);
@@ -115,8 +105,6 @@
             </tr>`).join('')}</tbody></table>`;
     }
 
-    // Le funzioni di supporto: per ognuna il referente e i suoi incarichi,
-    // prima quelli ancora da fare. È il foglio del giro di tavolo.
     const STATO_INCARICO = { aperto: 'Aperto', in_corso: 'In corso', concluso: 'Concluso' };
     function sezioneFunzioni(funzioni) {
         if (!Array.isArray(funzioni)) return '';
@@ -138,7 +126,6 @@
         return `<section class="st-sezione"><h2>Funzioni di supporto</h2>${corpo}</section>`;
     }
 
-    // Strade chiuse e zone dell'emergenza: prima quelle in vigore.
     const TIPO_MAPPA = {
         strada_chiusa: 'Strada chiusa', zona_interdetta: 'Zona interdetta', pericolo_alluvione: 'Pericolo alluvione',
         pericolo_frana: 'Pericolo frana', pericolo_generico: 'Zona di pericolo', area_attesa: 'Area di attesa', area_accoglienza: 'Area di accoglienza',
@@ -146,7 +133,6 @@
     };
     function sezioneMappa(elementi, chiusa) {
         if (!Array.isArray(elementi)) return '';
-        // La viabilità interessa sempre a chi legge: anche "nessuna" è un'informazione.
         if (!elementi.length) {
             return chiusa ? '' : '<section class="st-sezione"><h2>Strade chiuse e zone</h2><p class="st-vuoto">Nessuna strada chiusa e nessuna zona segnalata.</p></section>';
         }
@@ -164,7 +150,6 @@
             </tr>`).join('')}</tbody></table></section>`;
     }
 
-    // Una segnalazione per intero, come la stampa della singola scheda.
     function scheda(r) {
         const coordinate = r.latitude != null && r.longitude != null ? `${Number(r.latitude).toFixed(5)}, ${Number(r.longitude).toFixed(5)}` : null;
         const campo = (etichetta, valore) => valore ? `<div><dt>${e(etichetta)}</dt><dd>${e(valore)}</dd></div>` : '';
@@ -199,8 +184,6 @@
             <ul class="st-diario">${voci.map(v => `<li><time>${e(quando(v.creata_il))}</time>${e(v.testo)}${v.autore_nome ? ` <span class="st-autore">— ${e(v.autore_nome)}</span>` : ''}</li>`).join('')}</ul>`;
     }
 
-    // Il quadro della situazione in testa al foglio: solo quello che è stato
-    // scritto, con quando e da chi, perché chi legge sappia quanto è fresco.
     const VOCI_POPOLAZIONE = [['evacuati', 'Evacuati'], ['assistiti', 'Assistiti'], ['isolati', 'Isolati'],
         ['feriti', 'Feriti'], ['dispersi', 'Dispersi'], ['deceduti', 'Deceduti']];
     function sezioneQuadro(q, chiusa) {
@@ -222,7 +205,6 @@
         </section>`;
     }
 
-    // "oggi alle 14:00" o "8 ott alle 08:00" dal campo data e ora.
     function prossimoAggiornamento(v) {
         if (!v) return '';
         const d = new Date(v);
@@ -253,7 +235,6 @@
             numero(durata(emergenza.start_time), 'In corso da')
         ];
 
-        // Il logo del gruppo in filigrana, al centro di ogni pagina stampata.
         foglio.innerHTML = `
             ${logo ? `<img class="st-filigrana" src="${e(logo)}" alt="" aria-hidden="true">` : ''}
             ${sim ? `<div class="st-simulazione" aria-hidden="true">SIMULAZIONE</div><p class="st-fascia-simulazione">SIMULAZIONE · scenario simulato in sala, non un'emergenza reale</p>` : ''}
@@ -305,13 +286,11 @@
             document.getElementById('st-stampa').hidden = false;
             document.getElementById('st-quadro-apri').hidden = dati.chiusa;
         } catch (err) {
-            // Senza dati non c'è niente da stampare: resta solo "Aggiorna".
             document.getElementById('st-stampa').hidden = true;
             foglio.innerHTML = `<div class="st-errore"><p><strong>Il punto di situazione non si è potuto preparare.</strong></p><p>${e(err.message)}</p></div>`;
         }
     }
 
-    // --- Il modulo del quadro -----------------------------------------------
     let ultimiDati = null;
     const modulo = document.getElementById('st-quadro');
     const campo = (k) => document.getElementById(`q-${k}`);

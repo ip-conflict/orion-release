@@ -1,6 +1,3 @@
-// Il giro quotidiano: avvisi di scadenza, report mensile, riepiloghi per
-// segreteria e magazzino, pulizia dei token revocati.
-
 import logger from './logger.js';
 import { dataItaliana, oggiLocale } from './date.js';
 import { pool } from './db.js';
@@ -10,11 +7,9 @@ import { notifiche } from './tempoReale.js';
 import { pulisciTokenAvvisi } from './avvisi.js';
 import { sqlHaPermesso } from './permessi.js';
 
-// I riepiloghi nell'app di chi fa la segreteria e di chi tiene il magazzino
-// (gli amministratori li ricevono entrambi). Uno solo valido alla volta, e
-// solo se i numeri sono cambiati: un avviso identico ogni mattina non si legge.
+// Uno solo valido alla volta, e solo se i numeri sono cambiati: un avviso identico ogni
+// mattina non si legge.
 async function accodaRiepiloghi(segreteriaAttiva) {
-    // Chi ha il permesso, dal ruolo o in più (permessi.js).
     async function aChi(permesso) {
         const chi = sqlHaPermesso(permesso, 1);
         const { rows } = await pool.query(
@@ -27,7 +22,6 @@ async function accodaRiepiloghi(segreteriaAttiva) {
                 `SELECT 1 FROM notifiche WHERE user_id = $1 AND tipo = $2 AND testo = $3
                    AND (scade_il IS NULL OR scade_il > NOW())`, [id, tipo, testo]);
             if (uguale.rowCount) continue;
-            // Via il vecchio: la chiave del giorno torna libera.
             await pool.query('DELETE FROM notifiche WHERE user_id = $1 AND tipo = $2', [id, tipo]);
             await notifiche.notifica(id, { tipo, titolo, testo, riferimento, chiave: `${tipo}:${oggiLocale()}`, oreValidita: 24 * 7 });
         }
@@ -78,9 +72,7 @@ async function accodaRiepiloghi(segreteriaAttiva) {
     }
 }
 
-// Gira all'avvio e ogni ora, e lavora una volta al giorno. soloReport: solo il
-// riepilogo alla segreteria, subito (il pulsante delle impostazioni), senza
-// rimandare ai volontari gli avvisi di oggi. Restituisce com'è andato il riepilogo.
+// Gira all'avvio e ogni ora, e lavora una volta al giorno.
 export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport = false } = {}) {
     const esitoReport = { destinatari: 0, inviati: 0, falliti: 0, elencati: 0, segreteria_attiva: false, errore: null };
     let client;
@@ -100,7 +92,6 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
         const configGrezza = confRes.rowCount > 0 ? confRes.rows[0].setting_value : null;
         const config = !configGrezza ? null
             : (typeof configGrezza === 'string' ? JSON.parse(configGrezza) : configGrezza);
-        // Gli avvisi del magazzino partono anche con la segreteria spenta.
         const segreteriaAttiva = !!config?.enabled;
         esitoReport.segreteria_attiva = segreteriaAttiva;
 
@@ -108,8 +99,7 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
 
         if (segreteriaAttiva) {
 
-            // Avvisi ai volontari: le soglie (di norma 30, 15 e 0 giorni) superate
-            // dall'ultima esecuzione, così un giorno di fermo si recupera.
+            // Le soglie superate dall'ultima esecuzione: un giorno di fermo si recupera.
             const giorniPreavviso = Array.isArray(config.notice_days) && config.notice_days.length
                 ? [...new Set(config.notice_days.map(n => parseInt(n, 10)).filter(n => Number.isInteger(n) && n >= 0 && n <= 365))]
                 : [30, 15, 0];
@@ -117,7 +107,6 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
             let giorniDaUltimaEsecuzione = 1;
             if (ultimaEsecuzione) {
                 const trascorsi = Math.round((today - new Date(ultimaEsecuzione)) / 86400000);
-                // Dopo un mese di fermo si riparte, senza arretrati.
                 if (Number.isFinite(trascorsi)) giorniDaUltimaEsecuzione = Math.min(30, Math.max(1, trascorsi));
             }
 
@@ -158,12 +147,9 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
                 const templateString = config.custom_user_email_template || defaultTemplate;
 
                 for (const item of userExpiring) {
-                    // Anche nell'app, anche a chi non ha email. Il titolo non
-                    // dice cosa scade (finisce sulla schermata di blocco); la
-                    // chiave con la soglia evita i doppioni nello stesso giorno.
+                    // Il titolo non dice cosa scade: finisce sulla schermata di blocco.
                     const soglia = Math.min(...giorniPreavviso.filter(g => g >= item.days_left));
                     const scadenzaIso = item.expiry_date;
-                    // Sostituisce quello della soglia precedente; dopo un mese sparisce.
                     const radice = `scadenza:${item.genere}:${item.voce_id}:${scadenzaIso}:`;
                     const nuova = await notifiche.notifica(item.user_id, {
                         tipo: 'scadenza',
@@ -205,7 +191,6 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
                         }
                     }
                 }
-                // Nel log quante sono partite davvero.
                 if (avvisiInviati || avvisiFalliti) {
                     const riepilogo = `Avvisi di scadenza ai volontari: ${avvisiInviati} inviati, ${avvisiFalliti} non inviati.`;
                     if (avvisiFalliti > 0) logger.error(`${riepilogo} Primo errore: ${primoErrore}`);
@@ -213,7 +198,6 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
                 }
             }
 
-            // Report mensile alla segreteria: tre mesi indietro e tre avanti.
             if ((isFirstOfMonth || forceAdminReport) && (config.notify_admin || config.custom_emails)) {
                 let adminEmails = [];
                 if (config.notify_admin) {
@@ -317,8 +301,7 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
             }
         }
 
-        // Gli avvisi del magazzino, a chi li ha chiesti. Un errore qui non
-        // impedisce di segnare il giro di oggi come fatto.
+        // Un errore qui non impedisce di segnare il giro di oggi come fatto.
         try {
             if (!soloReport) await magazzino.inviaAvvisiScadenze();
             if (!soloReport) await accodaRiepiloghi(segreteriaAttiva);
@@ -340,9 +323,6 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
     }
 }
 
-
-// I token revocati scaduti non servono più nell'elenco (un token dura un
-// giorno), e nemmeno i token di rinnovo scaduti.
 
 export async function cleanupRevokedTokens() {
     try {

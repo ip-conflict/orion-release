@@ -1,23 +1,5 @@
-// Foglio di etichette QR da stampare su carta adesiva.
-//
-// Una riga dell'inventario = un'etichetta. Per i DPI questo vuol dire già una
-// etichetta per taglia, perché un elmetto taglia M e uno taglia L sono due
-// righe diverse: è la stessa distinzione che serve quando si consegna.
-//
-// Il QR porta l'indirizzo della scheda del bene, non un numero: inquadrandolo
-// con la fotocamera del telefono si apre ORION alla pagina giusta, senza
-// bisogno di nessuna applicazione; l'app Android legge lo stesso indirizzo e
-// apre la scheda del bene.
-//
-// Cosa si stampa: quello che si stava guardando nell'inventario (tipo e
-// ricerca), un bene solo (?ids=, dalla sua scheda) o le taglie di un DPI
-// (?modello=). Come: in formato libero da ritagliare, o sulle fustelle dei
-// fogli adesivi A4 più comuni, con copie, posizioni già usate da saltare e una
-// correzione per le stampanti che spostano tutto di un paio di millimetri.
+// Il QR porta l'indirizzo della scheda del bene: basta la fotocamera del telefono.
 
-// Le misure dei fogli adesivi A4 più diffusi (in millimetri): margine in alto
-// e a sinistra fino alla prima fustella, e lo spazio fra una fustella e
-// l'altra. Sono gli stessi numeri stampati sulla confezione.
 const FORMATI = {
     libero: { nome: 'Libero, da ritagliare' },
     'a4-3x8': { nome: 'A4 · 24 da 70 × 37 mm (3 × 8)', colonne: 3, righe: 8, w: 70, h: 37, alto: 0.5, sinistra: 0, spazioX: 0, spazioY: 0 },
@@ -29,8 +11,7 @@ const FORMATI = {
 
 const PREFERENZE = 'orion-etichette';
 
-// Un indirizzo che fuori dalla sede non porta da nessuna parte: stampato nel
-// QR, l'adesivo funziona solo sul computer da cui si è stampato.
+// Stampato nel QR, un indirizzo locale funziona solo sul computer da cui si è stampato.
 function indirizzoLocale(host) {
     return host === 'localhost' || host === '[::1]' || host.endsWith('.local') ||
         /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
@@ -46,8 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const escluse = new Set();
     const immaginiQr = new Map();
 
-    // Le scelte sul formato valgono anche la prossima volta: chi ha i fogli
-    // da 70 × 37 li ha sempre quelli, e la correzione è della sua stampante.
     function leggiPreferenze() {
         try { return JSON.parse(localStorage.getItem(PREFERENZE)) || {}; } catch { return {}; }
     }
@@ -82,19 +61,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function indirizzoScheda(bene) {
-        // Con il codice e non con l'id: se domani il magazzino viene
-        // ricostruito da un salvataggio, gli id possono cambiare, il codice
-        // stampato sull'adesivo no.
+        // Il codice e non l'id: ricostruendo il magazzino da un salvataggio gli id cambiano, il codice
+        // stampato no.
         return `${window.location.origin}/magazzino.html?e=${encodeURIComponent(bene.codice_etichetta || '')}`;
     }
 
-    // Un'immagine per bene, riusata per tutte le copie e a ogni ridisegno.
     function immagineQr(bene) {
         if (immaginiQr.has(bene.id)) return immaginiQr.get(bene.id);
         const appoggio = document.createElement('div');
-        // La correzione d'errore alta serve davvero: questi adesivi finiscono
-        // su una motosega, e un angolo sporco di resina non deve rendere
-        // illeggibile il codice.
+        // Correzione alta: l'adesivo finisce su una motosega, e un angolo sporco non deve renderlo illeggibile.
         new QRCode(appoggio, {
             text: indirizzoScheda(bene),
             width: 256, height: 256,
@@ -140,7 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const codice = document.createElement('div');
         codice.className = 'codice';
         codice.textContent = bene.codice_etichetta;
-        // Nelle etichette piccole il dettaglio sparisce: la taglia no, sta col nome.
         if (bene.taglia) nome.dataset.taglia = bene.taglia;
         testo.append(nome, dettaglio, codice);
 
@@ -181,8 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Ogni bene tante volte quante le copie, uno di seguito all'altro:
-        // le copie dello stesso oggetto stanno vicine sul foglio.
         const coda = [];
         stampabili.forEach(b => {
             const volte = escluse.has(b.id) ? 1 : copie;
@@ -197,9 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Sulle fustelle una tolta non occupa posto: la pagina a schermo è
-        // quella che uscirà dalla stampante. Le tolte si vedono sotto, per
-        // poterle rimettere.
         const perPagina = formato.colonne * formato.righe;
         $('salta').max = perPagina - 1;
         const salta = Math.min(perPagina - 1, Math.max(0, parseInt($('salta').value, 10) || 0));
@@ -253,8 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('conteggio').textContent = `${daStampare} etichett${daStampare === 1 ? 'a' : 'e'} su ${pagine} fogl${pagine === 1 ? 'io' : 'i'}`;
     }
 
-    // Le taglie di un DPI nell'ordine del modello (S, M, L…), non in quello
-    // in cui sono state caricate la prima volta.
     function ordinaTaglie(elenco, modelli) {
         const ordine = new Map(modelli.map(m => [m.id, m.taglie.map(t => t.toLowerCase())]));
         const posto = (b) => {
@@ -280,8 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     (async () => {
         try {
-            // Gli stessi filtri dell'inventario, passati nell'indirizzo: si
-            // stampa quello che si stava guardando, non tutto il magazzino.
             const soloQuesti = (parametri.get('ids') || '')
                 .split(',').map(n => parseInt(n, 10)).filter(Boolean);
             const modello = parseInt(parametri.get('modello'), 10) || null;

@@ -1,12 +1,3 @@
-/* ==========================================================================
-   ORION - Pagina Sistema
-   ==========================================================================
-   Backup, ripristino e aggiornamenti. È la pagina che si apre nel momento
-   peggiore - dati persi, qualcosa da rimettere a posto - quindi conta che si
-   legga in fretta: pochi riquadri, un'azione principale per riquadro, e i
-   pericoli scritti prima del pulsante che li causa, non dopo.
-   ========================================================================== */
-
 .pannello {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
@@ -28,9 +19,6 @@
     color: var(--text-muted);
 }
 
-/* L'avvertenza non è un errore: è una cosa da sapere. Un riquadro rosso qui
-   griderebbe insieme a tutto il resto, e a quel punto non griderebbe più
-   niente. */
 .pannello .avvertenza {
     border-left: 3px solid #f59e0b;
     padding-left: 12px;
@@ -41,7 +29,6 @@
     margin-top: 20px;
 }
 
-/* --- Stato ------------------------------------------------------------- */
 .griglia-stato {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -74,7 +61,6 @@
 .voce-stato .valore.allarme { color: var(--danger-text); }
 .voce-stato .valore.attenzione { color: var(--warning-text); }
 
-/* --- Passi di un'operazione -------------------------------------------- */
 .passi {
     list-style: none;
     margin: 16px 0 0 0;
@@ -113,7 +99,6 @@
 .esito.fatto   { color: var(--success-text); }
 .esito.errore  { color: var(--danger-text); }
 
-/* --- Riquadro del ripristino ------------------------------------------- */
 .riquadro-pericolo {
     background: rgba(220, 38, 38, 0.06);
     border: 1px solid rgba(220, 38, 38, 0.25);
@@ -190,9 +175,7 @@
 
 .attesa { color: var(--text-muted); }
 
-/* Il file da caricare passa da un input nascosto: quello di serie non si può
-   vestire come gli altri pulsanti, e due pulsanti diversi affiancati sembrano
-   due cose diverse. */
+/* L'input di serie non si può vestire come gli altri pulsanti. */
 .carica-archivio { display: inline-flex; cursor: pointer; }
 .carica-archivio .button-style { cursor: pointer; }
 
@@ -200,10 +183,6 @@
     .pannello { padding: 20px 16px; }
 }
 
-/* --- Versione e aggiornamenti ------------------------------------------ */
-/* L'origine degli aggiornamenti la si tocca una volta sola, quindi sta
-   chiusa: chi apre questa pagina di solito vuole solo sapere se c'è una
-   versione nuova. */
 #origine-avanzata {
     margin-top: 18px;
     border: 1px solid var(--border-color);
@@ -260,9 +239,6 @@
     line-height: 1.5;
 }
 
-/* Le note di versione arrivano da chi pubblica l'aggiornamento: vanno
-   mostrate come sono state scritte, a capo compresi, e senza farle uscire
-   dal riquadro. */
 .note-versione {
     margin-top: 20px;
     border-top: 1px solid var(--border-color);
@@ -290,8 +266,6 @@
     padding: 12px 14px;
 }
 
-/* Le finestre di conferma (ripristino, aggiornamento): sopra la pagina, al
-   centro dello schermo, con la X in alto a destra. */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -346,7 +320,6 @@
     font-size: 0.92rem;
 }
 
-/* --- Integrità dello storico ------------------------------------------- */
 .pannello .sottotitolo-pannello { margin: 26px 0 0; font-size: 1.02rem; }
 .sigillo-attuale { margin: 12px 0 0; }
 .sigillo-attuale code {
@@ -370,7 +343,6 @@
 .integrita-cancellazioni h3 { font-size: 1.02rem; margin: 0 0 6px; }
 .integrita-cancellazioni ul { margin: 6px 0 0; padding-left: 18px; color: var(--text-muted); line-height: 1.6; }
 
-/* --- Cifratura --------------------------------------------------------- */
 .riquadro-recupero { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--border-color); }
 .riquadro-recupero input[type=password] {
     width: 100%; max-width: 360px; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
@@ -380,7 +352,6 @@
 #esito-recupero.ko { color: var(--danger-text); font-weight: 600; }
 #esito-recupero.ok { color: var(--success-text); font-weight: 600; }
 
-/* Notifiche Firebase: la guida chiusa, i due file uno accanto all'altro. */
 .guida-pannello {
     margin-top: 16px; border: 1px solid var(--border-color); border-radius: 8px;
     padding: 10px 14px; background: var(--bg-color); font-size: 0.9rem; line-height: 1.55;
@@ -394,7 +365,6 @@
 #esito-firebase.ok { color: var(--success-text, #15803d); font-weight: 600; }
 #esito-firebase.ko { color: var(--danger-text); font-weight: 600; }
 
-/* Versioni precedenti: una riga per versione, il pulsante a destra. */
 #versioni-precedenti { margin-top: 18px; }
 .elenco-versioni { list-style: none; margin: 10px 0 0; padding: 0; }
 .elenco-versioni li {

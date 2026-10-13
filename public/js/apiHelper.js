@@ -20,7 +20,7 @@ async function fetchApi(url, options = {}) {
             headers['Content-Type'] = 'application/json';
         }
     } else {
-        // Lascia che il browser imposti Content-Type per FormData
+        // Il Content-Type di FormData lo imposta il browser.
         delete headers['Content-Type'];
     }
 
@@ -46,31 +46,27 @@ async function fetchApi(url, options = {}) {
                 errorMsg = errorData?.message || errorData?.error || errorMsg;
                 errorDetail = errorData?.detail;
             } catch (jsonError) {
-                // Se non è JSON, usa lo statusText se disponibile
                 console.warn(`API Helper: Impossibile parsare risposta errore come JSON per ${url}. Status: ${response.status}`);
-                // statusText è in inglese ("Bad Gateway"): si dice in italiano cosa succede.
+                // statusText è in inglese ("Bad Gateway").
                 errorMsg = response.status === 429 ? 'Troppe richieste in poco tempo: aspetta qualche minuto e riprova.'
                     : response.status >= 500 ? `Il server non ha risposto come doveva (errore ${response.status}): riprova fra poco.`
                     : `Richiesta non riuscita (errore ${response.status}).`;
-                // Non tentare response.text() qui, il body è già stato consumato
+                // Il corpo è già stato consumato.
             }
 
             console.error(`API Helper Error ${response.status}: ${errorMsg}${errorDetail ? ' - ' + errorDetail : ''} per ${url}`);
             const errorToThrow = new Error(errorMsg);
             errorToThrow.status = response.status;
-            // Il corpo resta sull'errore: i contrassegni (modulo_spento...) servono a chi chiama.
+            // I contrassegni (modulo_spento...) servono a chi chiama.
             if (typeof errorData !== 'undefined') errorToThrow.body = errorData;
             if (errorDetail) errorToThrow.detail = errorDetail;
 
-            // Le condizioni d'uso nuove o mai accettate: si va a leggerle e poi si torna
-            // qui. Una pagina aperta da ore se ne accorge alla prima chiamata.
+            // Una pagina aperta da ore se ne accorge alla prima chiamata.
             if (response.status === 428 && errorData?.informativa_da_vedere && !location.pathname.startsWith('/informativa.html')) {
                 errorToThrow.informativa = true;
                 location.href = '/informativa.html?redirect=' + encodeURIComponent(location.pathname + location.search);
             }
 
-            // In manutenzione la pagina resta dov'è e lo dice, invece di
-            // rimandare a un accesso che in quel momento non funziona.
             if (response.status === 503 && errorData?.manutenzione) {
                 errorToThrow.manutenzione = true;
                 window.__orionManutenzione = true;
@@ -84,19 +80,16 @@ async function fetchApi(url, options = {}) {
             return null;
         }
 
-        // Prova a parsare come JSON, altrimenti testo
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
             return response.json();
         } else {
-            // Leggi come testo solo se non è JSON
             return response.text();
         }
 
     } catch (networkError) {
         console.error(`API Helper: Errore durante chiamata a ${url}:`, networkError);
-        // Senza rete il browser dice "Failed to fetch": chi chiama mostra il
-        // messaggio così com'è, quindi lo si dice in italiano.
+        // Chi chiama mostra il messaggio così com'è: "Failed to fetch" va detto in italiano.
         if (networkError instanceof TypeError && !networkError.status) {
             const senzaRete = new Error('Il server non si raggiunge: controlla la connessione e riprova.');
             senzaRete.rete = true;
@@ -107,16 +100,9 @@ async function fetchApi(url, options = {}) {
     }
 }
 
-/**
- * Ottiene l'ID dell'utente loggato da localStorage.
- * @returns {number|null} L'ID utente come numero o null se non trovato/non valido.
- */
-// Il velo della manutenzione: copre la pagina, dice cosa sta succedendo e
-// riprova da solo. Non cancella niente di quello che c'è sotto, così quando il
-// server torna basta ricaricare.
+// Non cancella niente di quello che c'è sotto: quando il server torna basta ricaricare.
 function mostraSchermataManutenzione(messaggio) {
-    // Una chiamata partita prima che la pagina fosse pronta non deve
-    // trasformarsi in un secondo errore sopra il primo.
+    // Una chiamata partita prima che la pagina fosse pronta non diventa un secondo errore.
     if (!document.body || document.getElementById('orion-manutenzione')) return;
 
     const velo = document.createElement('div');
@@ -145,8 +131,6 @@ function mostraSchermataManutenzione(messaggio) {
     velo.appendChild(riquadro);
     document.body.appendChild(velo);
 
-    // Riprova ogni cinque secondi: quando il server risponde di nuovo, la
-    // pagina si ricarica da sola e chi guarda non deve fare niente.
     const riprova = setInterval(async () => {
         try {
             const risposta = await fetch('/api/branding/settings', { credentials: 'same-origin' });
@@ -171,10 +155,6 @@ function getCurrentUserId() {
     return null;
 }
 
-/**
- * Carica lo stato di lettura (timestamp) da localStorage nella mappa in memoria all'avvio.
- * Assicura che la mappa globale 'window.reportLastViewedLogTimestamp' sia inizializzata.
- */
 function loadReadStatusFromStorage() {
     const userId = getCurrentUserId();
     console.log(`[ReadStatus] Caricamento stato lettura per User ID: ${userId}`);
@@ -206,7 +186,6 @@ function loadReadStatusFromStorage() {
                         const reportId = parseInt(reportIdStr, 10);
                         const timestampValue = storedTimestamps[reportIdStr];
 
-                        // Aggiungi alla mappa solo se ID è un numero e timestamp è una stringa valida
                         if (!isNaN(reportId) && typeof timestampValue === 'string' && timestampValue) {
                             window.reportLastViewedLogTimestamp.set(reportId, timestampValue);
                         } else {
@@ -226,16 +205,10 @@ function loadReadStatusFromStorage() {
     }
 }
 
-/**
- * Salva l'ultimo timestamp visto per un report nella mappa in memoria E in localStorage.
- * @param {number} reportId - L'ID del report.
- * @param {string} timestampString - Il timestamp ISO da salvare.
- */
 function saveReadStatusToStorage(reportId, timestampString) {
     const userId = getCurrentUserId();
     console.log(`[ReadStatus] Tentativo salvataggio per User ID: ${userId}, Report ID: ${reportId}, Timestamp: ${timestampString}`);
 
-    // Controlli di sicurezza iniziali
     if (!userId) {
         console.warn('[ReadStatus] Salvataggio fallito: User ID mancante.');
         return;
@@ -258,7 +231,6 @@ function saveReadStatusToStorage(reportId, timestampString) {
         console.log(`[ReadStatus] Timestamp aggiornato in memoria Map per report ${reportId}. Dimensione Map: ${window.reportLastViewedLogTimestamp.size}`);
     } catch (mapError) {
         console.error(`[ReadStatus] ERRORE CRITICO durante aggiornamento Map per report ${reportId}:`, mapError);
-        // Se la mappa fallisce, probabilmente non ha senso continuare con localStorage
         return;
     }
 
@@ -266,7 +238,6 @@ function saveReadStatusToStorage(reportId, timestampString) {
     let storedTimestamps = {};
 
     try {
-        // Leggi dati esistenti da localStorage
         const storedTimestampsJson = localStorage.getItem(storageKey);
         if (storedTimestampsJson) {
             try {
@@ -278,7 +249,6 @@ function saveReadStatusToStorage(reportId, timestampString) {
                 }
             } catch (parseError) {
                 console.error("[ReadStatus] Errore parsing JSON esistente prima del salvataggio, verrà sovrascritto:", parseError);
-                // Continua con oggetto vuoto se il parsing fallisce
             }
         }
 
@@ -292,7 +262,6 @@ function saveReadStatusToStorage(reportId, timestampString) {
     }
 }
 
-// I ruoli di chi usa il programma, salvati all'accesso.
 function ruoliUtente() {
     try {
         const salvati = JSON.parse(localStorage.getItem('userRuoli') || '[]');
@@ -302,15 +271,14 @@ function ruoliUtente() {
     return singolo ? [singolo] : [];
 }
 
-// L'amministratore può tutto: è la stessa regola che applica il server.
+// La stessa regola del server.
 function haRuolo(...richiesti) {
     const miei = ruoliUtente();
     if (miei.includes('admin')) return true;
     return richiesti.some(r => miei.includes(r));
 }
 
-// I permessi di chi usa il programma (src/permessi.js): dei ruoli e in più.
-// Arrivano con l'accesso e con /api/me/status; decide comunque il server.
+// Decide comunque il server.
 function permessiUtente() {
     try {
         const salvati = JSON.parse(localStorage.getItem('userPermessi') || '[]');
@@ -320,14 +288,12 @@ function permessiUtente() {
     }
 }
 
-// Basta uno dei permessi indicati. L'amministratore li ha tutti.
 function haPermesso(...codici) {
     if (haRuolo('admin')) return true;
     const miei = permessiUtente();
     return codici.some(c => miei.includes(c));
 }
 
-// Ruoli e permessi dalla risposta dell'accesso o di /api/me/status.
 function salvaRuoliEPermessi(dati) {
     try {
         if (dati?.role) localStorage.setItem('userRole', dati.role);
@@ -336,8 +302,6 @@ function salvaRuoliEPermessi(dati) {
     } catch (e) { /* senza memoria si rilegge a ogni pagina */ }
 }
 
-// I DPI in carico a una persona: la stessa vista sul profilo e nel fascicolo
-// della segreteria. Conta la scadenza: un elmetto scaduto non protegge.
 function disegnaDpiInDotazione(elenco, dpi) {
     if (!elenco) return;
     elenco.innerHTML = '';
@@ -359,7 +323,7 @@ function disegnaDpiInDotazione(elenco, dpi) {
             ? `Scade il <strong>${scadenza.toLocaleDateString('it-IT')}</strong>`
             : 'Senza scadenza';
 
-        // Toni scuri abbastanza da reggere il testo bianco (contrasto 4,5).
+        // Contrasto 4,5 con il testo bianco.
         const colore = scaduto ? '#c62828' : (inScadenza ? '#9a5b00' : '#047857');
         const parola = scaduto ? 'SCADUTO' : (inScadenza ? 'IN SCADENZA' : 'IN DOTAZIONE');
         const icona = scaduto ? 'triangle-exclamation' : (inScadenza ? 'clock' : 'shield-halved');
@@ -369,9 +333,7 @@ function disegnaDpiInDotazione(elenco, dpi) {
         if (d.matricola) dettagli.push(d.matricola);
 
         const li = document.createElement('li');
-        // flex-wrap: in una colonna stretta la pastiglia dello stato scende
-        // sotto invece di schiacciare il nome dell'oggetto, che è la cosa che
-        // si legge. Stesso criterio delle righe del magazzino.
+        // In una colonna stretta la pastiglia scende sotto invece di schiacciare il nome.
         li.style.cssText = 'display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light-color); padding: 10px 0; gap: 8px;';
         li.innerHTML = `
             <div style="min-width: 0; flex: 1 1 170px;">
@@ -396,11 +358,6 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
-// Avvisi che non fermano il lavoro: compaiono in basso e se ne vanno da soli
-// (gli errori restano un po' di più, e un clic li chiude). Le finestre di
-// conferma restano solo per le azioni che non si possono annullare. Una
-// pagina con una sua colonna di avvisi (data-avvisi, come il centro
-// operativo, in alto sopra la mappa) li riceve lì, insieme ai suoi.
 function notifica(testo, tipo = 'info', durata) {
     if (!testo) return;
     if (!document.getElementById('stile-avvisi-orion')) {

@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-// scripts/cifra-backup.mjs
-//
-// Cifra al suo posto un dump del database con la chiave dei dati di ORION.
-// Lo chiama backup.sh (il backup notturno, come root) dopo aver verificato
-// il dump. Senza chiave non fa niente e lo dice: il backup resta in chiaro.
-//
+// Cifra al suo posto un dump con la chiave dei dati; lo chiama backup.sh. Senza chiave
+// il backup resta in chiaro.
 //   node scripts/cifra-backup.mjs <file> [file della chiave]
 
 import fs from 'fs';

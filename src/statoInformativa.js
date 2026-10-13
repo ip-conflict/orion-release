@@ -1,6 +1,3 @@
-// La versione in vigore delle condizioni d'uso, tenuta in memoria: il controllo
-// d'accesso la confronta a ogni richiesta con quella accettata dall'utente.
-
 import logger from './logger.js';
 import { pool } from './db.js';
 
@@ -19,8 +16,6 @@ export async function caricaVersioneInformativa() {
     }
 }
 
-// Le richieste che si fanno anche prima di accettare: leggere il testo,
-// accettarlo, uscire. La pagina del testo è pubblica.
 export function esenteDaPresaVisione(percorso) {
     return percorso === '/api/informativa' || percorso === '/api/informativa/presa-visione'
         || percorso === '/logout' || percorso === '/informativa.html';

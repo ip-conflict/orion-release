@@ -1,19 +1,5 @@
-// Le funzioni di supporto del COC (metodo Augustus). Si accendono dalle
-// impostazioni (funzioni_enabled); spente, le rotte rispondono 404 e le
-// pagine non mostrano niente.
-//
-// Un incarico affida a una funzione un compito su una segnalazione: si
-// assegna con la motivazione, si prende in carico, si conclude con l'esito.
-// Concluderlo non chiude la segnalazione, e chiudere la segnalazione non
-// conclude gli incarichi. Ogni passaggio finisce nel diario della
-// segnalazione, con l'etichetta della funzione.
-//
-// Chi fa cosa:
-//   assegnare e annullare      gli operatori interni (come per le squadre);
-//   prendere in carico e       i membri della funzione, anche esterni o
-//   concludere                 temporanei, e gli operatori interni;
-//   membri fissi               chi organizza le funzioni (permessi.js);
-//   membri temporanei          a emergenza aperta, ogni operatore interno.
+// Funzioni di supporto del COC (metodo Augustus): vedi il manuale tecnico. Concludere
+// un incarico non chiude la segnalazione, e viceversa.
 
 import { haPermesso, richiedePermesso } from './permessi.js';
 
@@ -29,7 +15,6 @@ export function registraRotteFunzioni(app, ctx) {
         return String(r.rows[0]?.setting_value) === 'true';
     }
 
-    // Davanti a tutte le rotte del modulo: spento, non esiste.
     async function soloSeAcceso(req, res, next) {
         try {
             if (await moduloAcceso()) return next();
@@ -64,22 +49,18 @@ export function registraRotteFunzioni(app, ctx) {
         return mappa;
     }
 
-    // L'incarico con quello che serve a chi lo guarda: funzione e segnalazione.
     const SELECT_INCARICO = `
         SELECT i.*, f.sigla, f.nome AS funzione_nome,
                r.emergency_report_number AS numero, r.title AS report_titolo, r.location_address,
                r.status AS report_stato, r.priority AS report_priorita, r.latitude, r.longitude, r.emergency_id
         FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id JOIN reports r ON r.id = i.report_id`;
 
-    // Con blocca, dentro una transazione: la riga resta ferma finché non si
-    // chiude, così due "Concludi" nello stesso istante non passano entrambi.
+    // Due "Concludi" nello stesso istante non passano entrambi.
     async function leggiIncarico(id, esecutore = pool, { blocca = false } = {}) {
         const { rows } = await esecutore.query(`${SELECT_INCARICO} WHERE i.id = $1${blocca ? ' FOR UPDATE OF i' : ''}`, [id]);
         return rows[0] || null;
     }
 
-    // Una riga nel diario della segnalazione, con l'etichetta della funzione,
-    // e l'avviso alle postazioni aperte.
     async function annota(client, req, reportId, funzioneId, testoNota) {
         const { rows } = await client.query(
             `WITH nuova AS (
@@ -100,17 +81,11 @@ export function registraRotteFunzioni(app, ctx) {
         avvisaClienti('reload_reports', { updatedReportId: reportId, daUtente });
     }
 
-    // L'incarico si tocca solo dentro l'emergenza in corso.
     function nellEmergenzaAttiva(incarico) {
         const attiva = emergenzaAttiva();
         return !!attiva && incarico.emergency_id === attiva.id;
     }
 
-    // ------------------------------------------------------------------
-    // Funzioni e membri
-
-    // L'elenco per chi lavora: le funzioni accese, i membri (non agli
-    // esterni, che vedono solo le proprie) e quanti incarichi aperti hanno.
     app.get('/api/funzioni', soloSeAcceso, async (req, res) => {
         try {
             const attiva = emergenzaAttiva();
@@ -133,8 +108,7 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // Per l'amministratore: tutte, anche quelle spente. Risponde anche a
-    // modulo spento, perché le funzioni si preparano prima di accenderlo.
+    // Risponde anche a modulo spento: le funzioni si preparano prima di accenderlo.
     app.get('/api/admin/funzioni', richiedePermesso('emergenze.funzioni'), async (req, res) => {
         try {
             const { rows } = await pool.query('SELECT id, sigla, nome, descrizione, attiva, ordine FROM funzioni ORDER BY ordine, sigla');
@@ -146,7 +120,6 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // Le persone da mettere nelle funzioni: solo nome, nome utente ed ente.
     // Chi gestisce le funzioni non ha per forza l'anagrafica (/api/admin/users).
     app.get('/api/admin/funzioni/persone', richiedePermesso('emergenze.funzioni'), async (req, res) => {
         try {
@@ -168,10 +141,16 @@ export function registraRotteFunzioni(app, ctx) {
         return { dati: { sigla, nome, descrizione: testo(corpo?.descrizione) || null, attiva: corpo?.attiva !== false, ordine: Number.isInteger(corpo?.ordine) ? corpo.ordine : null } };
     }
 
+    async function siglaGiaUsata(sigla, tranneId = null) {
+        const r = await pool.query('SELECT 1 FROM funzioni WHERE UPPER(sigla) = UPPER($1) AND ($2::int IS NULL OR id <> $2)', [sigla, tranneId]);
+        return r.rowCount > 0;
+    }
+
     app.post('/api/admin/funzioni', richiedePermesso('emergenze.funzioni'), async (req, res) => {
         const { dati, errore } = leggiFunzione(req.body);
         if (errore) return res.status(400).json({ message: errore });
         try {
+            if (await siglaGiaUsata(dati.sigla)) return res.status(409).json({ message: `C'è già una funzione con la sigla ${dati.sigla}.` });
             const { rows } = await pool.query(
                 `INSERT INTO funzioni (sigla, nome, descrizione, attiva, ordine)
                  VALUES ($1, $2, $3, $4, COALESCE($5, (SELECT COALESCE(MAX(ordine), 0) + 1 FROM funzioni)))
@@ -192,6 +171,7 @@ export function registraRotteFunzioni(app, ctx) {
         if (!id) return res.status(400).json({ message: 'Funzione non valida.' });
         if (errore) return res.status(400).json({ message: errore });
         try {
+            if (await siglaGiaUsata(dati.sigla, id)) return res.status(409).json({ message: `C'è già un'altra funzione con la sigla ${dati.sigla}.` });
             const { rows } = await pool.query(
                 `UPDATE funzioni SET sigla = $2, nome = $3, descrizione = $4, attiva = $5, ordine = COALESCE($6, ordine)
                  WHERE id = $1 RETURNING id, sigla, nome, descrizione, attiva, ordine`,
@@ -206,9 +186,7 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // Chi può toccare i membri: l'amministratore sempre e per chiunque; a
-    // emergenza aperta ogni operatore interno, ma solo per gli accessi
-    // temporanei (le persone arrivate per l'emergenza).
+    // A emergenza aperta ogni operatore interno, ma solo per gli accessi temporanei.
     async function puoGestireMembro(req, userId) {
         if (haPermesso(req, 'emergenze.funzioni')) return { ok: true };
         if (!interno(req)) return { ok: false, stato: 403, message: 'I membri delle funzioni li gestiscono gli operatori del COC.' };
@@ -279,12 +257,6 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // ------------------------------------------------------------------
-    // Incarichi
-
-    // Gli incarichi dell'emergenza in corso. ?funzione=ID per un tavolo solo,
-    // ?stato=tutti per vedere anche i conclusi. Un esterno vede solo quelli
-    // delle sue funzioni.
     app.get('/api/incarichi', soloSeAcceso, async (req, res) => {
         const attiva = emergenzaAttiva();
         if (!attiva) return res.json([]);
@@ -305,7 +277,6 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // Gli incarichi di una segnalazione: li vede chi vede la segnalazione.
     app.get('/api/reports/:id/incarichi', soloSeAcceso, async (req, res) => {
         const reportId = intero(req.params.id);
         if (!reportId) return res.status(400).json({ message: 'Segnalazione non valida.' });
@@ -315,7 +286,6 @@ export function registraRotteFunzioni(app, ctx) {
             if (rows[0] && !(attiva && rows[0].emergency_id === attiva.id) && !haPermesso(req, 'emergenze.archivio')) {
                 return res.status(403).json({ message: "Gli incarichi di un'emergenza chiusa li vede l'amministratore." });
             }
-            // Per ogni incarico: chi lo sta guardando può prenderlo o concluderlo?
             const mie = new Set((await pool.query('SELECT funzione_id FROM funzione_membri WHERE user_id = $1', [req.user.id])).rows.map(r => r.funzione_id));
             res.json(rows.map(i => ({ ...i, posso_agire: i.stato !== 'concluso' && (interno(req) || mie.has(i.funzione_id)) })));
         } catch (e) {
@@ -360,7 +330,6 @@ export function registraRotteFunzioni(app, ctx) {
             const incarico = await leggiIncarico(nuovo.rows[0].id);
             registraAudit(req, 'incarico.assegnato', { tipo: 'incarico', id: incarico.id, dettagli: { report_id: reportId, sigla, motivazione } });
             avvisaPostazioni(reportId, nota, req.user.id);
-            // Chi è nella funzione lo sa subito, anche sul telefono.
             const membri = (await pool.query('SELECT user_id FROM funzione_membri WHERE funzione_id = $1 AND user_id <> $2', [funzioneId, req.user.id])).rows.map(r => r.user_id);
             const numero = rep.rows[0].emergency_report_number ?? reportId;
             notificaA(membri, {
@@ -380,7 +349,6 @@ export function registraRotteFunzioni(app, ctx) {
         }
     });
 
-    // Prendere in carico o concludere: i membri della funzione e gli operatori interni.
     async function aggiornaIncarico(req, res, azione) {
         const id = intero(req.params.id);
         if (!id) return res.status(400).json({ message: 'Incarico non valido.' });
@@ -425,7 +393,6 @@ export function registraRotteFunzioni(app, ctx) {
     app.post('/api/incarichi/:id/presa', soloSeAcceso, (req, res) => aggiornaIncarico(req, res, 'presa'));
     app.post('/api/incarichi/:id/concludi', soloSeAcceso, (req, res) => aggiornaIncarico(req, res, 'concludi'));
 
-    // Annullare un incarico dato per sbaglio: solo se nessuno l'ha ancora preso.
     app.delete('/api/incarichi/:id', soloSeAcceso, async (req, res) => {
         if (!interno(req)) return res.status(403).json({ message: 'Gli incarichi li annullano gli operatori del COC.' });
         const id = intero(req.params.id);

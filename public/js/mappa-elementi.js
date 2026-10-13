@@ -1,22 +1,8 @@
-// Strade chiuse, zone interdette, zone di pericolosità e aree del piano sulla
-// mappa del centro operativo. Ogni tipo è un livello che si accende e si
-// spegne dal controllo dei livelli, con il suo colore come legenda.
-//
-// Disegnare (chi lavora in sala, a emergenza aperta; l'amministratore anche
-// gli elementi del piano):
-//   - strada chiusa: si tocca l'inizio e la fine del tratto e la linea segue
-//     la strada (OSRM, lo stesso servizio dei percorsi); senza rete si
-//     disegna a mano;
-//   - zone e aree: si disegna il contorno, poi si sceglie il tipo.
-// Cliccando un elemento: i suoi dati, e per chi può "Modifica", "Sposta i
-// punti" e "Togli" (una strada chiusa si "riapre": resta nel registro).
+// Strade chiuse, zone e aree del piano sulla mappa: vedi il manuale tecnico.
 
 const STILI = {
     strada_chiusa: { color: '#dc2626', weight: 7, opacity: 0.9, lineCap: 'round' },
-    // Le zone: bordo pieno con un alone bianco sotto, che lo stacca da
-    // qualunque mappa; dentro un velo leggero e, per interdizioni e pericoli,
-    // un tratteggio (incrociato per le interdette) che si riconosce anche dove
-    // le zone si sovrappongono e lascia leggere strade e nomi sotto.
+    // Il tratteggio si riconosce anche dove le zone si sovrappongono e lascia leggere la mappa sotto.
     zona_interdetta: { color: '#b91c1c', weight: 3, fillColor: '#ef4444', fillOpacity: 0.12, tratteggio: 'incrociato' },
     pericolo_alluvione: { color: '#1d4ed8', weight: 2.5, fillColor: '#3b82f6', fillOpacity: 0.1, dashArray: '9 5', tratteggio: 'righe' },
     pericolo_frana: { color: '#92400e', weight: 2.5, fillColor: '#b45309', fillOpacity: 0.1, dashArray: '9 5', tratteggio: 'righe' },
@@ -26,9 +12,7 @@ const STILI = {
     area_ammassamento: { color: '#6d28d9', weight: 3, fillColor: '#8b5cf6', fillOpacity: 0.16 },
     altro: { color: '#475569', weight: 2.5, fillColor: '#94a3b8', fillOpacity: 0.14 }
 };
-// I tratteggi come motivi SVG, una volta per pagina: il riempimento di una
-// zona li richiama con url(#lm-t-tipo). Righe a 45 gradi del colore del bordo
-// sopra il velo del colore di riempimento.
+// I motivi SVG si definiscono una volta per pagina: il riempimento li richiama con url(#lm-t-tipo).
 function definisciTratteggi() {
     if (document.getElementById('lm-tratteggi')) return;
     const ns = 'http://www.w3.org/2000/svg';
@@ -46,7 +30,6 @@ function definisciTratteggi() {
     svg.append(defs);
     document.body.append(svg);
 }
-// Lo stile di un'area: il riempimento col tratteggio, se il tipo ne ha uno.
 function stileArea(s, tipo) {
     return {
         color: s.color, weight: s.weight, opacity: 1, dashArray: s.dashArray, lineJoin: 'round',
@@ -64,16 +47,12 @@ const SINGOLARE = {
     area_ammassamento: 'Area di ammassamento soccorritori', altro: 'Altro'
 };
 const TIPI_AREA = ['zona_interdetta', 'pericolo_alluvione', 'pericolo_frana', 'pericolo_generico', 'area_attesa', 'area_accoglienza', 'area_ammassamento', 'altro'];
-// I gruppi del controllo dei livelli: un clic sul gruppo accende o spegne
-// tutti i suoi tipi, la freccia apre i tipi uno per uno.
 const GRUPPI = [
     { chiave: 'viabilita', titolo: 'Viabilità e interdizioni', tipi: ['strada_chiusa', 'zona_interdetta'] },
     { chiave: 'pericoli', titolo: 'Pericoli', tipi: ['pericolo_alluvione', 'pericolo_frana', 'pericolo_generico'] },
     { chiave: 'piano', titolo: 'Aree del piano di protezione civile', tipi: ['area_attesa', 'area_accoglienza', 'area_ammassamento'] }
 ];
-// Questi possono restare in vigore dopo la chiusura dell'emergenza.
 const DURANO = ['strada_chiusa', 'zona_interdetta'];
-// Questi di solito appartengono al piano, non all'emergenza.
 const DEL_PIANO = ['pericolo_alluvione', 'pericolo_frana', 'area_attesa', 'area_accoglienza', 'area_ammassamento'];
 
 const STILE = `
@@ -156,9 +135,6 @@ function el(tag, attributi = {}, ...figli) {
     return e;
 }
 
-// Il cartello di divieto di transito: rosso con la barra bianca, uguale su ogni sistema.
-// Le icone dei simboli che prendono il posto delle aree troppo piccole sullo
-// schermo: bianche, su un quadrato del colore del tipo.
 const ICONE = {
     area_attesa: '<circle cx="8" cy="6" r="2.4"/><circle cx="16" cy="6" r="2.4"/><path d="M4.5 19v-6.5a3.5 3.5 0 0 1 7 0V19zM12.5 19v-6.5a3.5 3.5 0 0 1 7 0V19z"/>',
     area_accoglienza: '<path d="M12 3 2.5 19h19zM12 10.5 8.6 19h6.8z" fill-rule="evenodd"/>',
@@ -169,19 +145,13 @@ const ICONE = {
     pericolo_generico: '<path d="M12 2.5 22 20H2z"/><path d="M11 9h2v6h-2zM11 16.2h2v2h-2z" style="fill:var(--lm-colore)"/>',
     altro: '<circle cx="12" cy="12" r="5"/>'
 };
-// Sotto questa misura sullo schermo (il lato più lungo, in pixel) un'area
-// diventa un simbolo.
 const AREA_PICCOLA = 34;
 const DIVIETO = '<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#dc2626" stroke="#fff" stroke-width="2"/><rect x="4.5" y="8.3" width="11" height="3.4" rx="0.6" fill="#fff"/></svg>';
 
 const quando = (v) => v ? new Date(v).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 
-// Il punto più interno di un'area (il "polo di inaccessibilità", come fa
-// polylabel di Mapbox): il centro del cerchio più grande che ci sta dentro.
-// Il baricentro di una forma a C o a L cade fuori dall'area; questo no.
-// Restituisce { lat, lng, raggio } con il raggio in metri, o null.
-// Con vista ({ ovest, sud, est, nord }) conta solo la parte d'area dentro
-// quel rettangolo: è il punto per un'area più grande dello schermo.
+// Il "polo di inaccessibilità" (come polylabel di Mapbox): il baricentro di una forma a C
+// cade fuori dall'area, questo no. Con vista conta solo la parte d'area nel rettangolo.
 function puntoInterno(geometria, vista = null) {
     const poligoni = geometria.type === 'Polygon' ? [geometria.coordinates] : geometria.type === 'MultiPolygon' ? geometria.coordinates : [];
     if (!poligoni.length) return null;
@@ -201,7 +171,7 @@ function puntoInterno(geometria, vista = null) {
     return migliore ? { lng: migliore.x / kx, lat: migliore.y / ky, raggio: Math.max(0, migliore.d) } : null;
 }
 
-// Un anello tagliato su un rettangolo (Sutherland-Hodgman): resta la parte dentro.
+// Sutherland-Hodgman.
 function ritaglia(anello, x0, y0, x1, y1) {
     const lati = [
         [p => p[0] >= x0, (a, b) => [x0, a[1] + (x0 - a[0]) * (b[1] - a[1]) / (b[0] - a[0])]],
@@ -251,7 +221,6 @@ function poloInterno(anelli) {
     const lato = Math.min(x1 - x0, y1 - y0);
     if (!(lato > 0)) return { x: x0, y: y0, d: 0 };
     const cella = (x, y, h) => { const d = distanzaDalBordo(x, y, anelli); return { x, y, h, d, max: d + h * Math.SQRT2 }; };
-    // Una coda con priorità (heap): prima le celle che promettono di più.
     const coda = [];
     const metti = (c) => {
         coda.push(c);
@@ -290,10 +259,7 @@ function poloInterno(anelli) {
     return migliore;
 }
 
-// La cartografia del territorio caricata sul server (cartografia.js sul
-// server): un fondo in più fra quelli della mappa. Se le mappe da internet
-// non arrivano (la linea è caduta ma il server si raggiunge) la mappa ci
-// passa da sola e lo dice; senza cartografia caricata dice dove si carica.
+// Se le mappe da internet non arrivano ma il server sì, si passa da sole alla cartografia locale.
 const ERRORI_PRIMA_DI_CAMBIARE = 4;
 export async function aggiungiCartografia(map, controllo, daInternet = []) {
     let info = null;
@@ -332,11 +298,8 @@ export async function aggiungiCartografia(map, controllo, daInternet = []) {
     return territorio;
 }
 
-// Il controllo dei livelli di Leaflet con i gruppi. Leaflet ricostruisce
-// l'elenco a ogni cambio; subito dopo le voci di un gruppo si spostano sotto
-// la sua intestazione, con la casella che accende o spegne tutto il gruppo
-// (piena, vuota o a metà) e la freccia che apre o chiude il dettaglio. Quali
-// gruppi sono aperti lo ricorda il browser.
+// Leaflet ricostruisce l'elenco dei livelli a ogni cambio: subito dopo le voci si spostano sotto
+// il loro gruppo.
 const CHIAVE_APERTI = 'orion.livelli.aperti';
 const leggiAperti = () => {
     try { return new Set(JSON.parse(localStorage.getItem(CHIAVE_APERTI) || '[]')); } catch { return new Set(); }
@@ -375,7 +338,6 @@ export function creaControlloLivelli(base, sovrapposti, opzioni) {
                 if (voce?.overlay) etichetta.set(voce.layer, input.closest('label'));
             });
             const nelGruppo = new Set(this._gruppi.flatMap(g => g.strati));
-            // I gruppi vanno dove stava la prima voce raggruppata.
             const prima = [...this._overlaysList.children].find(l => [...etichetta].some(([strato, lab]) => lab === l && nelGruppo.has(strato)));
             const segnaposto = document.createComment('gruppi');
             this._overlaysList.insertBefore(segnaposto, prima || null);
@@ -418,7 +380,6 @@ export function creaControlloLivelli(base, sovrapposti, opzioni) {
             segnaposto.remove();
             this._statoGruppi();
         },
-        // Tutto acceso, tutto spento o a metà.
         _statoGruppi() {
             (this._caselleGruppi || []).forEach(({ g, casella }) => {
                 const accesi = g.strati.filter(st => this._map?.hasLayer(st)).length;
@@ -426,7 +387,6 @@ export function creaControlloLivelli(base, sovrapposti, opzioni) {
                 casella.indeterminate = accesi > 0 && accesi < g.strati.length;
             });
         },
-        // Se ne manca anche uno si accende tutto il gruppo, se no si spegne.
         _commutaGruppo(g) {
             const accendi = g.strati.some(st => !this._map.hasLayer(st));
             this._handlingClick = true;
@@ -435,7 +395,7 @@ export function creaControlloLivelli(base, sovrapposti, opzioni) {
                 if (!accendi && this._map.hasLayer(st)) this._map.removeLayer(st);
             });
             this._handlingClick = false;
-            // Senza ricostruire l'elenco (si richiuderebbe sotto il mouse): solo le caselle.
+            // Senza ricostruire l'elenco, che si richiuderebbe sotto il mouse.
             this._layerControlInputs.forEach(input => {
                 const voce = this._getLayer(input.layerId);
                 if (voce) input.checked = this._map.hasLayer(voce.layer);
@@ -448,20 +408,16 @@ export function creaControlloLivelli(base, sovrapposti, opzioni) {
 
 export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, interno, admin, emergenzaAperta }) {
     if (!document.getElementById('lm-stile')) {
-        // I campioni della legenda: un colore per tipo, dalla stessa tabella degli stili.
         const campioni = Object.entries(STILI).map(([t, s]) =>
             `.lm-campione.t-${t} { border-color: ${s.color}; background: ${t === 'strada_chiusa' ? 'transparent'
                 : s.tratteggio ? `repeating-linear-gradient(45deg, ${s.color}99 0 2px, transparent 2px 5px)` : s.fillColor}; }`).join('\n');
         document.head.append(el('style', { id: 'lm-stile', testo: STILE + campioni }));
     }
     definisciTratteggi();
-    // Le zone sotto i marcatori, le strade sopra le zone.
     map.createPane('lm-zone').style.zIndex = 380;
     map.createPane('lm-strade').style.zIndex = 420;
-    // I divieti ai capi delle strade chiuse sopra la linea rossa, altrimenti un
-    // segnaposto più a nord finisce sotto la linea.
+    // Sopra la linea rossa, altrimenti un segnaposto più a nord finisce sotto la linea.
     map.createPane('lm-divieti').style.zIndex = 425;
-    // Le etichette delle aree sotto i segnaposti delle segnalazioni e delle squadre.
     const etichettePane = map.createPane('lm-etichette');
     etichettePane.style.zIndex = 390;
     etichettePane.style.pointerEvents = 'none';
@@ -470,7 +426,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         map.pm.setGlobalOptions({ snappable: true, pinning: false, templineStyle: { color: '#2563eb' }, hintlineStyle: { color: '#2563eb', dashArray: '4 4' } });
     }
 
-    // I simboli delle aree piccole: sopra zone e strade, sotto i segnaposti.
     map.createPane('lm-simboli').style.zIndex = 450;
 
     const livelli = {};
@@ -480,8 +435,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         controlloLivelli?.addOverlay(livelli[tipo], `${campione}${ETICHETTE[tipo]}`);
     });
     GRUPPI.forEach(g => controlloLivelli?.gruppo?.(g.chiave, g.titolo, g.tipi.map(t => livelli[t])));
-    // Lo sfondo attenuato, spento di base (i colori pieni si leggono meglio):
-    // il browser ricorda la scelta.
     const sfondo = L.layerGroup();
     sfondo.on('add', () => { map.getContainer().classList.add('lm-sfondo-attenuato'); ricorda('1'); });
     sfondo.on('remove', () => { map.getContainer().classList.remove('lm-sfondo-attenuato'); ricorda('0'); });
@@ -492,25 +445,18 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
     controlloLivelli?.addOverlay(sfondo, 'Sfondo attenuato');
 
     let elementi = [];
-    // [{ marcatore, strato, m }]: le etichette delle aree, che si accendono
-    // solo quando l'area sullo schermo è abbastanza grande da contenerle.
     let etichette = [];
-    // [{ m, presa, polo, limiti }]: le aree, per il simbolo quando sono piccole.
     let aree = [];
     let simboli = [];
 
-    // Una strada rimasta chiusa dopo l'emergenza la gestisce chi lavora in
-    // sala anche senza emergenza aperta: va riaperta quando riapre davvero.
+    // Una strada rimasta chiusa dopo l'emergenza va riaperta quando riapre davvero, anche senza emergenza.
     function puoModificare(m) {
         if (m.oltre_emergenza) return interno;
         if (m.emergency_id == null) return admin;
         return interno && emergenzaAperta();
     }
 
-    // Un'area non ferma i clic: dentro passano alla mappa (un punto da
-    // scegliere, un segnaposto, la mappa da trascinare). Si apre toccando il
-    // bordo, che ha una presa larga e invisibile e si ingrossa sotto il
-    // mouse, oppure il nome. Strade chiuse e aree puntiformi si toccano come prima.
+    // Un'area non ferma i clic: si apre toccando il bordo (una presa larga e invisibile) o il nome.
     function disegnaElemento(m) {
         const s = STILI[m.tipo] || STILI.altro;
         const pane = m.tipo === 'strada_chiusa' ? 'lm-strade' : 'lm-zone';
@@ -523,9 +469,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 pane, interactive: false,
                 style: () => ({ color: '#fff', weight: s.weight + 4, opacity: 0.9, fill: false, lineJoin: 'round' })
             }).addTo(gruppo));
-            // Le aree a tinta unita (quelle del piano) hanno in più una fascia
-            // larga e trasparente del loro colore lungo il bordo: si vedono da
-            // lontano senza coprirne l'interno. Le tratteggiate non ne hanno bisogno.
             if (!s.tratteggio) compagni.push(L.geoJSON(forma, {
                 pane, interactive: false,
                 style: () => ({ color: s.color, weight: 12, opacity: 0.22, fill: false, lineJoin: 'round' })
@@ -549,9 +492,7 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
             const polo = puntoInterno(m.geometria);
             if (polo) aree.push({ m, presa, polo: L.latLng(polo.lat, polo.lng), limiti: strato.getBounds() });
         }
-        // Per spostare i punti l'alone e la presa si tolgono: tornano col ridisegno.
         strato.lmCompagni = compagni;
-        // Ai due capi di una strada chiusa il simbolo del divieto, visibile anche da lontano.
         if (m.tipo === 'strada_chiusa') {
             const linee = m.geometria.type === 'LineString' ? [m.geometria.coordinates] : m.geometria.coordinates;
             linee.forEach(l => [l[0], l[l.length - 1]].forEach(([lng, lat]) => {
@@ -561,7 +502,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 }).addTo(livelli.strada_chiusa);
             }));
         }
-        // Il nome e il tipo delle aree (non delle strade: le dice già il divieto).
         if (m.tipo !== 'strada_chiusa' && /Polygon|Point/.test(m.geometria.type)) {
             const punto = m.geometria.type === 'Point';
             const polo = punto ? null : puntoInterno(m.geometria);
@@ -573,7 +513,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                     pane: 'lm-etichette', keyboard: false, bubblingMouseEvents: false,
                     icon: L.divIcon({ className: `lm-etichetta${punto ? ' lm-punto' : ''}`, html, iconSize: null })
                 }).addTo(gruppo);
-                // Il nome apre la scheda dell'area, come il bordo.
                 marcatore.on('click', () => presa.openPopup(marcatore.getLatLng()));
                 etichette.push({ marcatore, strato, m, polo, raggio: polo?.raggio ?? null });
                 marcatore.getElement()?.style.setProperty('--lm-colore', s.color);
@@ -583,18 +522,11 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         return strato;
     }
 
-    // Un'etichetta si vede da vicino (zoom 14 in su), se l'area la contiene
-    // intorno al suo punto più interno, e se non si sovrappone a un'altra già
-    // messa: prima quelle delle aree più grandi. Così non copre la mappa né i
-    // segnaposti, e una forma a C non la manda fuori dall'area. Si rifà a ogni
-    // spostamento: un'area più grande dello schermo tiene il nome in vista.
     function aggiornaEtichette() {
         const zoom = map.getZoom();
         const occupati = [];
-        // Metri per pixel a questa latitudine e a questo zoom.
         const metriPixel = (lat) => 40075016.686 * Math.cos(lat * Math.PI / 180) / 2 ** (zoom + 8);
         const dimensioni = map.getSize();
-        // La parte di mappa a sinistra sotto un pannello aperto (data-copre-mappa) non conta.
         const riquadro = map.getContainer().getBoundingClientRect();
         let sinistra = 0;
         document.querySelectorAll('[data-copre-mappa]').forEach(e => {
@@ -612,8 +544,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 const punto = m.geometria.type === 'Point';
                 let vede = zoom >= (punto ? 16 : 14);
                 if (vede && !punto) {
-                    // Il punto più interno di tutta l'area, se l'etichetta ci sta
-                    // dentro lo schermo; se no quello della parte d'area visibile.
                     marcatore.setLatLng([polo.lat, polo.lng]);
                     nodo.hidden = false;
                     const c = map.latLngToContainerPoint(marcatore.getLatLng());
@@ -630,8 +560,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                     nodo.hidden = false;
                     const w = nodo.offsetWidth, h = nodo.offsetHeight;
                     if (!punto) {
-                        // Il cerchio più grande dentro l'area, in pixel: deve
-                        // contenere l'altezza della scritta e buona parte della larghezza.
                         const diametro = 2 * raggio / metriPixel(marcatore.getLatLng().lat);
                         if (diametro < h + 6 || diametro < w * 0.75) vede = false;
                     }
@@ -645,12 +573,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 nodo.hidden = !vede;
             });
     }
-    // Un'area più piccola di AREA_PICCOLA pixel sullo schermo diventa un
-    // simbolo di misura fissa, col colore e l'icona del tipo: a zoom 12-13 un
-    // campo sportivo è di pochi pixel e non lo si vedrebbe. I simboli dello
-    // stesso tipo che si toccano diventano uno solo, con il numero; toccarlo
-    // avvicina la mappa su quelle aree, toccare un simbolo singolo ne apre la
-    // scheda. Avvicinandosi il simbolo lascia il posto alla forma.
     function aggiornaSimboli() {
         simboli.forEach(({ marcatore, gruppo }) => gruppo.removeLayer(marcatore));
         simboli = [];
@@ -664,13 +586,10 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
             const punto = map.latLngToContainerPoint(a.polo);
             const tipo = a.m.tipo in ICONE ? a.m.tipo : 'altro';
             if (!gruppi.has(tipo)) gruppi.set(tipo, []);
-            // Accanto a un simbolo già messo dello stesso tipo: si unisce.
             const vicino = gruppi.get(tipo).find(g => g.punto.distanceTo(punto) < 26);
             if (vicino) vicino.aree.push(a);
             else gruppi.get(tipo).push({ punto, aree: [a] });
         });
-        // Simboli di tipi diversi non si coprono: chi trova il posto occupato
-        // si sposta di poco, sul primo posto libero attorno al suo punto.
         const occupati = [];
         const libero = (p) => occupati.every(q => q.distanceTo(p) >= 27);
         const giri = [[0, 0]];
@@ -710,7 +629,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 el('button', { type: 'button', testo: 'Modifica', suClick: () => { map.closePopup(); apriModulo({ elemento: m }); } }),
                 el('button', { type: 'button', testo: 'Sposta i punti', suClick: () => { map.closePopup(); modificaForma(m, strato); } }),
                 el('button', { type: 'button', class: 'lm-pericolo', testo: m.tipo === 'strada_chiusa' ? 'Riapri la strada' : 'Togli', suClick: () => togli(m) }));
-            // Durante l'emergenza si decide se resterà anche dopo la chiusura.
             if (DURANO.includes(m.tipo) && m.emergency_id != null && emergenzaAperta()) {
                 azioni.append(el('button', {
                     type: 'button',
@@ -771,7 +689,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         } catch (e) { notifica(e.message, 'errore'); }
     }
 
-    // --- Guida in alto: cosa fare adesso, e come annullare ------------------
     let guida = null;
     function mostraGuida(testo, pulsanti = []) {
         togliGuida();
@@ -780,8 +697,7 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
     }
     function togliGuida() { guida?.remove(); guida = null; }
 
-    // Mentre si disegna, le forme che ci sono già non prendono i tocchi: una
-    // zona disegnata dentro un'altra aprirebbe il riquadro di quella sotto.
+    // Una zona disegnata dentro un'altra aprirebbe il riquadro di quella sotto.
     function inDisegno(si) {
         if (si) map.closePopup();
         map.getContainer().classList.toggle('lm-disegnando', si);
@@ -795,7 +711,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
     }
     document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && annullaCorrente) annulla(); });
 
-    // --- Strada chiusa: inizio e fine, la linea segue la strada --------------
     function stradaDaDueTocchi() {
         annulla();
         const punti = [];
@@ -831,7 +746,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         map.on('click', tocco);
     }
 
-    // --- A mano: una linea o un'area con Geoman -------------------------------
     function disegnaAMano(forma, tipo) {
         annulla();
         if (!map.pm) { notifica('Lo strumento di disegno non è caricato.', 'errore'); return; }
@@ -853,7 +767,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         map.on('pm:create', creato);
     }
 
-    // --- Spostare i punti di un elemento esistente ---------------------------
     function modificaForma(m, strato) {
         annulla();
         const forme = [];
@@ -861,7 +774,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         strato.eachLayer(l => { if (l.pm) { l.pm.enable({ allowSelfIntersection: false }); forme.push(l); } });
         if (!forme.length) { notifica('Questa forma non si modifica a mano.', 'attenzione'); return; }
         inDisegno(true);
-        // La forma che si modifica resta toccabile: i suoi punti si trascinano.
         forme.forEach(l => l.getElement?.()?.style.setProperty('pointer-events', 'auto'));
         const fine = () => { forme.forEach(l => { l.pm.disable(); l.getElement?.()?.style.removeProperty('pointer-events'); }); inDisegno(false); };
         annullaCorrente = () => { fine(); carica(); };
@@ -880,7 +792,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
             } })]);
     }
 
-    // --- Il modulo dei dati: tipo, nome, livello, note, piano o emergenza ----
     function apriModulo({ elemento = null, tipo = null, geometria = null }) {
         const forma = (elemento?.geometria || geometria).type;
         const ammessi = forma.includes('Line') ? ['strada_chiusa', 'altro'] : forma === 'Point' ? ['area_attesa', 'area_accoglienza', 'area_ammassamento', 'altro'] : TIPI_AREA;
@@ -896,7 +807,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         const aggiornaCampi = () => {
             const t = sceltaTipo.value;
             campoLivello.hidden = !t.startsWith('pericolo');
-            // Nuovo elemento: l'amministratore sceglie; un operatore disegna solo per l'emergenza.
             rigaPiano.hidden = !!elemento || !admin;
             if (!elemento && admin) piano.checked = DEL_PIANO.includes(t) || !emergenzaAperta();
         };
@@ -927,7 +837,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
                 await fetchApi(elemento ? `/api/mappa/elementi/${elemento.id}` : '/api/mappa/elementi', { method: elemento ? 'PUT' : 'POST', body: JSON.stringify(corpo) });
                 chiudi();
                 await carica();
-                // Il livello appena usato si accende, se era spento.
                 if (!map.hasLayer(livelli[corpo.tipo])) livelli[corpo.tipo].addTo(map);
             } catch (e) {
                 errore.textContent = e.message;
@@ -941,7 +850,6 @@ export function montaElementiMappa(map, controlloLivelli, { calcolaPercorso, int
         nome.focus();
     }
 
-    // --- Il pulsante "Disegna" in basso a sinistra -----------------------------
     if (interno || admin) {
         const Controllo = L.Control.extend({
             options: { position: 'bottomleft' },

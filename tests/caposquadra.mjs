@@ -1,5 +1,3 @@
-// tests/caposquadra.mjs
-//
 // Il caposquadra: si nomina componendo la squadra o con un clic dal centro
 // operativo, uno solo per squadra, e il suo telefono si vede al centro
 // operativo con la segreteria accesa. Con più telefoni nella stessa squadra
@@ -35,7 +33,6 @@ const admin = (await accediConFetch(BASE, process.env.ORION_ADMIN_USER || 'admin
 const segreteria = (await chiama('/api/branding/settings')).corpo?.segreteria_config;
 const segreteriaAccesa = (typeof segreteria === 'string' ? JSON.parse(segreteria) : segreteria)?.enabled === true;
 
-// Tre persone con la password, una con il telefono.
 const suffisso = Date.now().toString().slice(-5);
 const persone = [];
 for (const nome of ['Anna', 'Bruno', 'Carla']) {
@@ -49,7 +46,6 @@ for (const nome of ['Anna', 'Bruno', 'Carla']) {
 }
 const [anna, bruno, carla] = persone;
 await pool.query("UPDATE users SET telefono = '333 1234567' WHERE id = $1", [bruno.id]);
-// Un nome radio libero.
 const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
 const nomeRadio = ['Zulu', 'Yankee', 'X-Ray', 'Whiskey', 'Victor', 'Uniform', 'Tango'].find(n => !usati.has(n));
 let squadraId = null;
@@ -59,7 +55,6 @@ const posizione = (chi) => chiama('/api/location', { method: 'POST', token: chi.
 const invecchia = () => pool.query("UPDATE posizioni_squadre SET last_update = NOW() - INTERVAL '4 minutes' WHERE squadra_id = $1", [squadraId]);
 
 try {
-    // 1. Nominato componendo la squadra.
     let r = await chiama('/api/squadre', { method: 'POST', token: admin, body: {
         nome_radio: nomeRadio, nome: 'Prova caposquadra', caposquadra: anna.username,
         membri: persone.map(p => ({ username: p.username }))
@@ -69,7 +64,6 @@ try {
     let s = await squadra();
     verifica('il caposquadra è segnato, e in testa ai membri', s?.caposquadra?.username === anna.username && s.membri[0].username === anna.username && s.membri[0].caposquadra === true, s);
 
-    // 2. Il clic dal centro operativo.
     r = await chiama(`/api/squadre/${squadraId}/caposquadra`, { method: 'PUT', token: admin, body: { username: bruno.username } });
     verifica('si cambia con un clic', r.stato === 200 && r.corpo?.caposquadra?.username === bruno.username, r);
     s = await squadra();
@@ -90,12 +84,10 @@ try {
     const contesto = (await chiama('/api/app/contesto', { token: bruno.token })).corpo?.squadra;
     verifica("l'app sa chi è il caposquadra", contesto?.sono_caposquadra === true && contesto?.caposquadra?.username === bruno.username, contesto);
 
-    // 3. Modificare la squadra senza dire niente del caposquadra lo lascia com'è.
     r = await chiama(`/api/squadre/${squadraId}`, { method: 'PUT', token: admin, body: { nome_radio: nomeRadio, nome: 'Prova', membri: persone.map(p => ({ username: p.username })) } });
     s = await squadra();
     verifica('salvare la squadra senza "caposquadra" non lo toglie', r.stato === 200 && s.caposquadra?.username === bruno.username, s.caposquadra);
 
-    // 4. La posizione: la manda il caposquadra.
     await pool.query('DELETE FROM posizioni_squadre WHERE squadra_id = $1', [squadraId]);
     r = await posizione(anna);
     verifica('senza posizioni la prima arriva da chiunque', r.corpo?.accettata === true, r.corpo);
@@ -106,7 +98,6 @@ try {
     r = await posizione(carla);
     verifica('tutti gli altri', r.corpo?.accettata === false, r.corpo);
 
-    // 5. Il caposquadra tace: subentra un altro, e solo uno.
     await invecchia();
     r = await posizione(carla);
     verifica('dopo qualche minuto di silenzio del caposquadra subentra un altro', r.corpo?.accettata === true, r.corpo);
@@ -117,7 +108,6 @@ try {
     const loc = ((await chiama('/api/location', { token: admin })).corpo || []).find(p => p.squadra_id === squadraId);
     verifica('il centro operativo sa da quale telefono arriva', loc?.inviata_da?.username === bruno.username && loc.inviata_da.caposquadra === true, loc);
 
-    // 6. Senza caposquadra: chi la manda la tiene finché non tace.
     await chiama(`/api/squadre/${squadraId}/caposquadra`, { method: 'PUT', token: admin, body: { username: null } });
     s = await squadra();
     verifica('il caposquadra si toglie', s.caposquadra == null && !s.membri.some(m => m.caposquadra), s);
@@ -127,8 +117,6 @@ try {
     r = await posizione(anna);
     verifica('finché non tace', r.corpo?.accettata === true, r.corpo);
 
-    // 7. Nel registro dell'emergenza e nel resoconto: il caposquadra che la
-    // squadra aveva all'apertura, e le nomine durante.
     const stato = (await chiama('/api/emergencies/status', { token: admin })).corpo;
     if (stato?.emergency || stato?.active) {
         console.log("  --   un'emergenza è già aperta: controllo del registro saltato");
@@ -149,12 +137,10 @@ try {
         const r2 = await fetch(`${BASE}/api/admin/emergencies/${aperta.id}/resoconto`, { headers: { Authorization: `Bearer ${admin}` } });
         const testo = await r2.text();
         verifica('il resoconto dice chi è stato caposquadra', testo.includes(`Carla Capo${suffisso} caposquadra di ${nomeRadio}`) && testo.includes(`Anna Capo${suffisso} non è più caposquadra`), testo.split('\n').filter(l => l.includes('caposquadra')).join(' | '));
-        // La chiusura toglie i membri dalle squadre: si rimettono per l'ultima prova.
         await chiama(`/api/squadre/${squadraId}`, { method: 'PUT', token: admin, body: { nome_radio: nomeRadio, nome: 'Prova', membri: persone.map(p => ({ username: p.username })) } });
         await pool.query("UPDATE posizioni_squadre SET inviata_da = $2, last_update = NOW() WHERE squadra_id = $1", [squadraId, anna.username]);
     }
 
-    // 8. Chi la manda esce dalla squadra: gli altri subentrano subito.
     await chiama(`/api/squadre/${squadraId}`, { method: 'PUT', token: admin, body: { nome_radio: nomeRadio, nome: 'Prova', membri: [bruno, carla].map(p => ({ username: p.username })) } });
     r = await posizione(carla);
     verifica('se chi la mandava esce dalla squadra, un altro subentra subito', r.corpo?.accettata === true, r.corpo);

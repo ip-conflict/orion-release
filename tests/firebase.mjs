@@ -1,5 +1,3 @@
-// tests/firebase.mjs
-//
 // Le notifiche Firebase, facoltative: l'amministratore carica i due file del
 // progetto, il telefono riceve gli identificativi pubblici e registra il suo,
 // a ogni notifica il server manda a Google un segnale vuoto; spento Firebase
@@ -50,7 +48,6 @@ const suffisso = Date.now().toString().slice(-5);
 const PROGETTO = `orion-prova-${suffisso}`;
 let persona = null, ws = null, configurato = false;
 try {
-    // Un'istanza lasciata configurata da una prova interrotta.
     await chiama('/api/admin/firebase', { method: 'DELETE', token: admin });
     verifica('di base Firebase è spento', (await chiama('/api/admin/firebase', { token: admin })).corpo?.configurato === false);
 
@@ -69,7 +66,6 @@ try {
     verifica('un volontario non vede la configurazione', (await chiama('/api/admin/firebase', { token: sessione })).stato === 403);
     verifica('un volontario non la cambia', (await chiama('/api/admin/firebase', { method: 'PUT', token: sessione, body: {} })).stato === 403);
 
-    // I file sbagliati si rifiutano con un messaggio che dice cosa fare.
     const { account, pubblica } = creaAccount(PROGETTO);
     const altraApp = await chiama('/api/admin/firebase', { method: 'PUT', token: admin, body: { google_services: creaGoogleServices(PROGETTO, { pacchetto: 'it.altro.app' }), account } });
     verifica("senza l'app it.orion.app nel progetto si rifiuta", altraApp.stato === 400 && /it\.orion\.app/.test(altraApp.corpo?.message), altraApp);
@@ -81,7 +77,6 @@ try {
     verifica('una chiave che Google non accetta non si salva', sconosciuta.stato === 422 && /non funziona/.test(sconosciuta.corpo?.message), sconosciuta);
     verifica('e Firebase resta spento', (await chiama('/api/admin/firebase', { token: admin })).corpo?.configurato === false);
 
-    // Il telefono in ascolto saprà subito che la configurazione è cambiata.
     const ricevuti = [];
     ws = new WebSocket(BASE.replace(/^http/, 'ws'), { headers: { Authorization: `Avvisi ${avvisi}`, 'X-Orion-Client': 'app' } });
     ws.on('message', m => ricevuti.push(JSON.parse(m)));
@@ -114,7 +109,6 @@ try {
     verifica('la gestione utenti lo vede raggiungibile con Firebase', telefoni?.firebase === true, telefoni);
     verifica('lo stato di Firebase conta il telefono', (await chiama('/api/admin/firebase', { token: admin })).corpo?.telefoni >= 1);
 
-    // Una notifica: a Google va un segnale vuoto, il contenuto resta sul server.
     google.messaggi.length = 0;
     await chiama('/api/notifiche/prova', { method: 'POST', token: sessione, body: { ritardo: 0 } });
     verifica('a ogni notifica parte il segnale per il telefono', await aspetta(() => google.messaggi.some(m => m.token === fcm)), google.messaggi);
@@ -126,7 +120,6 @@ try {
     const coda = (await chiama('/api/avvisi/notifiche', { avvisi })).corpo;
     verifica('la notifica si legge dal server col token degli avvisi', coda?.notifiche?.some(x => x.tipo === 'prova'));
 
-    // Un secondo telefono che ha disinstallato l'app: Google dice UNREGISTERED e l'identificativo si toglie.
     const sessione2 = (await accediConFetch(BASE, n.username, password)).token;
     const avvisi2 = (await chiama('/api/app/avvisi', { method: 'POST', token: sessione2, body: { dispositivo: 'Telefono vecchio' } })).corpo?.avvisi;
     await chiama('/api/avvisi/firebase', { method: 'PUT', avvisi: avvisi2, body: { token: `morto-${suffisso}-${'b'.repeat(60)}`, progetto: PROGETTO } });
@@ -139,11 +132,9 @@ try {
     const dopoIlMorto = (await chiama('/api/admin/firebase', { token: admin })).corpo?.telefoni;
     verifica('il telefono che Google non conosce più viene tolto, gli altri restano', dopoIlMorto === primaDelMorto - 1 && google.messaggi.some(m => m.token === fcm), { primaDelMorto, dopoIlMorto });
 
-    // Il telefono che smette di usare Firebase (per esempio senza Google Play).
     const tolto = await chiama('/api/avvisi/firebase', { method: 'PUT', avvisi: avvisi2, body: { token: null } });
     verifica('il telefono può dire che non usa più Firebase', tolto.stato === 200 && tolto.corpo?.firebase === false, tolto);
 
-    // Spento: i telefoni registrati ricevono il segnale di rileggere la configurazione.
     google.messaggi.length = 0;
     ricevuti.length = 0;
     const spento = await chiama('/api/admin/firebase', { method: 'DELETE', token: admin });

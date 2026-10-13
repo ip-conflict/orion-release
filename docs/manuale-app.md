@@ -18,15 +18,30 @@ server. Dal browser del telefono, dopo l'accesso al web, ORION propone
 notifica, consentire una volta l'installazione da quella fonte, toccare
 "Installa".
 
+**Il primo accesso, tutto dal telefono.** Chi viene iscritto riceve un link
+(per email o su un foglio con un QR). Aperto sul telefono, il link propone
+**Continua nell'app**; se l'app non c'è ancora, la pagina spiega come
+installarla, poi si torna lì e si tocca di nuovo. Il QR del foglio si può
+anche inquadrare dall'app, con **Accedi con un QR**. Nell'app si sceglie la
+password, si accettano le condizioni d'uso e si lascia acceso **Conferma gli
+accessi da questo telefono** (per amministratori e segreteria sanitaria è
+obbligatorio). Seguono i dieci **codici di riserva**, da salvare fuori dal
+telefono con "Condividi o stampa", e la proposta dell'impronta.
+
 ![L'accesso](immagini/app/01-accesso.png)
 
-Al primo avvio si scrivono l'indirizzo della web app (lo stesso del browser),
-il nome utente e la password. Chi ha la verifica in due passaggi scrive anche
-il codice a sei cifre. Subito dopo l'app propone di entrare la volta dopo con
+Chi ha già un account scrive l'indirizzo della web app (lo stesso del
+browser), il nome utente e la password. Se il telefono è collegato, la
+verifica in due passaggi è solo l'impronta o il PIN; altrimenti si conferma da
+un altro telefono collegato, con il codice a sei cifre o con un codice di
+riserva. Chi la deve avere e non l'ha ancora tocca **Collega questo
+telefono**. Subito dopo l'app propone di entrare la volta dopo con
 l'**impronta**: conviene accettare, e la password non resta sul telefono.
+Dopo cinque password sbagliate di fila l'account si ferma per qualche minuto,
+e il messaggio dice quanto aspettare.
 
 Chi non è dell'associazione e ha ricevuto un QR dal centro operativo usa
-**Accedi con un codice** e inquadra il QR.
+**Accedi con un QR** e lo inquadra.
 
 Poi l'app chiede i permessi, uno alla volta: le **notifiche** (per sapere quando
 si viene chiamati o mandati su un intervento), la **fotocamera** (foto e
@@ -171,7 +186,14 @@ Download.
 Da I miei dati si apre **Il mio profilo**: la foto del tesserino (scattata o
 dalla galleria, da inquadrare nell'ovale), i dati anagrafici, la password, il
 fascicolo in PDF e gli avvisi sul telefono. Cambiando la password gli altri
-dispositivi devono rientrare.
+dispositivi devono rientrare. **Conferma gli accessi** collega questo telefono
+alla verifica in due passaggi, o lo scollega, chiedendo la password.
+
+**Entrare dal computer.** Con il telefono collegato, dopo la password il
+browser mostra un numero e sul telefono arriva "Stai entrando in ORION?" con
+tre numeri: si tocca quello del computer e si conferma con impronta o PIN. Se
+non si sta entrando, **Non sono io** blocca l'accesso. Un numero sbagliato lo
+blocca lo stesso.
 
 
 ## 7. Notifiche e avvisi
@@ -259,7 +281,16 @@ verbali, giorni prima di segnalare il materiale fuori, categorie, ubicazioni e
 i propri avvisi via email. La stampa delle etichette resta sul web.
 
 
-## 10. La segreteria
+## 10. Iscrivere un volontario
+
+Chi gestisce l'anagrafica trova nella schermata principale **Iscrivi un
+volontario**: nome, cognome ed email facoltativa. L'app mostra un QR da far
+inquadrare con la fotocamera del telefono della persona, che si attiva da sola
+come nel primo accesso. Il link vale sette giorni; se c'è l'email parte anche
+lì. I ruoli diversi da volontario si danno dal web.
+
+
+## 11. La segreteria
 
 ![La segreteria](immagini/app/27-segreteria.png)
 
@@ -275,21 +306,29 @@ cataloghi e tesserini restano sul web. Senza rete la segreteria non si apre:
 sono dati sanitari e sul telefono non si tengono.
 
 
-## 11. Gli aggiornamenti
+## 12. Gli aggiornamenti
 
-Quando l'associazione mette sul server una versione nuova, l'app la scarica da
-sola e la installa quando non la si sta usando; con un'emergenza aperta e si è
-in squadra, aspetta. La prima volta Android chiede di consentire
-l'installazione da ORION e di confermare. L'app installa solo un file firmato
-con la stessa chiave e più recente.
+Quando l'associazione mette sul server una versione nuova, l'app se ne
+accorge la prima volta che la si apre (o, se resta chiusa, entro un giorno),
+la scarica da sola e la installa quando non la si sta usando; con
+un'emergenza aperta e si è in squadra, aspetta. Nella schermata principale un
+riquadro dice a che punto è, e "Aggiorna ora" la installa subito. La prima
+volta Android chiede di consentire l'installazione da ORION (pulsante
+"Consenti", poi "Consenti da questa fonte") e di confermare; da Android 12 in
+poi le volte successive non chiede più niente. Dati e accesso restano. L'app
+installa solo un file firmato con la stessa chiave e più recente.
 
 
-## 12. Quando qualcosa non va
+## 13. Quando qualcosa non va
 
 | Cosa succede | Cosa fare |
 |---|---|
 | "Sessione scaduta" | Si rientra; se non va, la password è cambiata o l'account è sospeso |
+| "Troppi tentativi sbagliati per questo account" | Aspettare il tempo indicato e riprovare |
+| La password nuova viene rifiutata | Il messaggio dice perché: meglio una frase o più parole che non stanno insieme |
 | Il codice a sei cifre viene rifiutato | L'ora del telefono deve essere automatica |
+| La richiesta d'accesso non compare sul telefono | Aprire l'app: compare da sola; altrimenti "Usa un codice" nel browser |
+| Telefono collegato perso o cambiato | Un codice di riserva, poi si collega il nuovo; senza codici l'amministratore azzera la verifica |
 | Le notifiche non arrivano ad app chiusa | Avvisi sul telefono: sistemare le voci segnalate e fare la prova |
 | La sala non vede la squadra | Posizione "Consenti sempre" e persona in squadra |
 | Una consegna non compare sul web | È in coda: parte appena c'è campo |

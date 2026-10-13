@@ -1,6 +1,5 @@
-// Le rotte che rispondono senza sessione: accesso, recupero password,
-// tesserino pubblico, marchio dell'associazione, APK.
-
+import { accessoRiuscito, attesaPerAccount, erroreAccesso, messaggioAttesa } from './tentativiAccesso.js';
+import { controllaPassword } from './password.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -22,19 +21,15 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Il token di rinnovo dell'app: con l'impronta il telefono non tiene la
-// password ma questo token, casuale e revocabile, di cui il server conserva
-// solo l'impronta SHA-256. Scade dopo GIORNI_RINNOVO giorni senza uso.
+// Con l'impronta il telefono tiene questo token, non la password; il server ne conserva
+// solo l'impronta SHA-256.
 export const GIORNI_RINNOVO = 90;
 export const MAX_RINNOVI_PER_PERSONA = 5;
 export const impronta = (valore) => crypto.createHash('sha256').update(String(valore)).digest('hex');
 
 const FORMATO_TOKEN_TESSERINO = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// Il tesserino lo verifica chiunque durante un'emergenza (anche un vigile o un
-// sindaco), fuori emergenza solo chi ha una sessione, sempre se l'amministratore
-// lo ha aperto a tutti (badge_qr_always_on). I QR si possono spegnere del tutto
-// (badge_qr_enabled = 'false'): la verifica tace anche per quelli già stampati.
+// badge_qr_enabled = 'false' zittisce la verifica anche per i QR già stampati.
 export async function qrVolontariAttivi() {
     const r = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'badge_qr_enabled'");
     return !(r.rowCount > 0 && String(r.rows[0].setting_value) === 'false');
@@ -47,8 +42,6 @@ async function tesserinoConsultabile(req) {
     return !!(await utenteCollegato(req));
 }
 
-// L'utente della richiesta se ha una sessione valida, altrimenti null: per le
-// rotte pubbliche che mostrano di più a chi è dentro.
 async function utenteCollegato(req) {
     const token = req.signedCookies?.['__Secure-token'] || req.headers['authorization']?.split(' ')[1];
     if (!token) return null;
@@ -66,23 +59,19 @@ async function utenteCollegato(req) {
     }
 }
 
-// Le impostazioni che le pagine leggono senza essere amministratori. Elenco
-// chiuso: un'impostazione nuova resta privata finché non la si aggiunge qui.
+// Elenco chiuso: un'impostazione nuova resta privata finché non la si aggiunge qui.
 const IMPOSTAZIONI_PUBBLICHE = [
     'association_name', 'map_center_lat', 'map_center_lon', 'map_zoom_level',
     'minuti_attesa_critica', 'magazzino_enabled', 'card_district_label',
     'card_regional_entity_name', 'badge_qr_always_on', 'badge_qr_enabled', 'badge_cf_barcode', 'badge_modello', 'app_android_enabled',
     'segreteria_config', 'funzioni_enabled', 'attivita_enabled'
 ];
-// Della segreteria solo se è accesa e cosa blocca.
 const CAMPI_SEGRETERIA_PUBBLICI = ['enabled', 'block_on_medical', 'block_on_course'];
 
-// L'APK viaggia con il server e si scarica senza accesso: non contiene niente
-// di riservato, e chi la installa non ha ancora una sessione.
+// Senza accesso: chi installa l'app non ha ancora una sessione.
 export const CARTELLA_APK = path.join(__dirname, '..', 'app-android');
 
 export function registraRottePubbliche(app) {
-    // La pagina d'accesso.
     app.get('/', (req, res) => { res.sendFile(path.join(__dirname, '..', 'public', 'index.html')); });
     app.get('/login.html', (req, res) => { res.sendFile(path.join(__dirname, '..', 'public', 'index.html')); });
     app.get('/css/login.css', (req, res) => { res.sendFile(path.join(__dirname, '..', 'public','css', 'login.css')); });
@@ -121,7 +110,12 @@ export function registraRottePubbliche(app) {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
         let { username, password } = req.body;
-        username = username.toLowerCase();
+        username = String(username).toLowerCase();
+        const attesa = attesaPerAccount(username);
+        if (attesa) {
+            res.set('Retry-After', String(attesa));
+            return res.status(429).json({ message: messaggioAttesa(attesa), attesa });
+        }
         try {
           const result = await pool.query(
             `SELECT u.id, u.username, u.password, u.role, COALESCE(u.is_active, true) AS is_active,
@@ -132,18 +126,16 @@ export function registraRottePubbliche(app) {
           );
           const user = result.rows[0];
           const dummyHash = '$2b$12$invalidhashforcomparisonpurposesonly123456789';
-          // Un account appena creato o azzerato non ha password: credenziali non valide.
           const hashToCompare = user?.password || dummyHash;
           const isValid = await bcrypt.compare(password, hashToCompare);
             
-          // Sospeso: lo si dice chiaramente, la password è già stata dimostrata.
+          if (user && isValid) accessoRiuscito(username);
           if (user && isValid && !user.is_active) {
             logger.warn(`[Login] Accesso rifiutato a ${user.username}: account sospeso.`);
             return res.status(403).json({ message: 'Il tuo account è sospeso. Contatta la segreteria.' });
           }
 
           if (user && isValid) {
-            // Una password salvata con un costo più basso si rafforza al primo accesso.
             try {
               if (bcrypt.getRounds(user.password) < COSTO_BCRYPT) {
                 const piuForte = await bcrypt.hash(password, COSTO_BCRYPT);
@@ -152,25 +144,28 @@ export function registraRottePubbliche(app) {
             } catch (e) {
               logger.warn(`[Login] Impossibile rafforzare l'hash della password di ${user.username}: ${e.message}`);
             }
-            // La verifica in due passaggi, se c'è o se è obbligatoria: la
-            // sessione la dà /api/accesso/mfa, dopo il codice.
             const passo = await passoDopoLaPassword({ ...user, ruoli: user.ruoli?.length ? user.ruoli : [user.role] });
             if (passo) return res.status(401).json(passo);
             const { token, principale, ruoliUtente } = emettiSessione(res, user, user.ruoli);
             return res.json({ message: 'Login effettuato con successo', userId: user.id, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(user.id, ruoliUtente), token: token });
-          } else { return res.status(401).json({ message: 'Credenziali non valide' }); }
+          } else {
+            const pausa = erroreAccesso(username);
+            if (pausa) {
+              logger.warn(`[Login] Troppi errori per l'account "${username.slice(0, 50)}": pausa di ${pausa} secondi.`);
+              res.set('Retry-After', String(pausa));
+              return res.status(429).json({ message: messaggioAttesa(pausa), attesa: pausa });
+            }
+            return res.status(401).json({ message: 'Credenziali non valide' });
+          }
         } catch (err) { logger.error('Errore durante il login:', err); return res.status(500).json({ message: 'Errore interno del server' }); }
     });
 
-    // Il secondo passo, con il codice della verifica in due passaggi.
     registraRotteMfaPubbliche(app);
 
-    // L'accesso degli esterni temporanei con il codice (QR o link).
     registraAccessoTemporaneo(app, {
         pool, logger, emettiSessione, emergenzaAttiva: () => activeEmergency, limitatore: passwordLimiter
     });
 
-    // Il telefono rientra con il token di rinnovo, senza sessione.
     app.post('/api/app/rinnovo/accesso', passwordLimiter, async (req, res) => {
         const rinnovo = req.body?.rinnovo;
         if (typeof rinnovo !== 'string' || rinnovo.length < 40 || rinnovo.length > 200) {
@@ -189,19 +184,16 @@ export function registraRottePubbliche(app) {
             // Un solo messaggio per inesistente, scaduto e revocato.
             if (!utente) return res.status(401).json({ message: "Accesso con l'impronta non piu' valido: accedi con la password.", rinnovo_non_valido: true });
             if (!utente.attivo) return res.status(403).json({ message: 'Il tuo account è sospeso. Contatta la segreteria.', motivo: 'account_non_attivo' });
-            // L'impronta vale da secondo fattore: il token sta solo su quel
-            // telefono e si sblocca con il dito. Se pero' è nato prima della
-            // verifica in due passaggi, il codice si chiede una volta, qui,
-            // e da lì il token vale come quelli nati con la verifica.
+            // L'impronta vale da secondo fattore. Un token nato prima della verifica in due passaggi
+            // chiede il codice una volta, qui.
             const ruoli = utente.ruoli?.length ? utente.ruoli : [utente.role];
             if ((utente.mfa_attiva || mfaObbligatoria(ruoli, await permessiDellaPersona(utente.id, ruoli))) && !utente.rinnovo_mfa) {
                 const passo = await passoDopoLaPassword({ ...utente, ruoli }, { rinnovo: impronta(rinnovo) });
                 if (passo?.mfa === 'codice') {
                     return res.status(401).json({ ...passo, message: "Una volta sola: il codice della verifica in due passaggi, poi basta l'impronta." });
                 }
-                // La verifica non è ancora attivata: si attiva dal browser, poi si rientra con password e codice.
                 await pool.query('DELETE FROM token_rinnovo WHERE impronta = $1', [impronta(rinnovo)]);
-                return res.status(401).json({ message: 'Serve la verifica in due passaggi: attivala dal browser, poi accedi con la password e il codice.', rinnovo_non_valido: true });
+                return res.status(401).json({ message: 'Serve la verifica in due passaggi: accedi con la password.', rinnovo_non_valido: true });
             }
             const { token, principale, ruoliUtente } = emettiSessione(res, utente, utente.ruoli, { mfa: utente.rinnovo_mfa });
             res.json({ message: 'Accesso effettuato', userId: utente.id, username: utente.username, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(utente.id, ruoliUtente), token });
@@ -217,7 +209,7 @@ export function registraRottePubbliche(app) {
         if (!token || !newPassword || !id) return res.status(400).json({ message: 'Dati mancanti o link non valido.' });
 
         try {
-            const result = await pool.query('SELECT username, reset_token, reset_token_expires FROM users WHERE id = $1', [id]);
+            const result = await pool.query('SELECT username, nome, cognome, email, reset_token, reset_token_expires FROM users WHERE id = $1', [id]);
             if (result.rowCount === 0) return res.status(400).json({ message: 'Utente non trovato.' });
 
             const user = result.rows[0];
@@ -232,10 +224,8 @@ export function registraRottePubbliche(app) {
             if (!isValid) return res.status(400).json({ message: 'Token non valido.' });
 
 
-            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|\\;:'",.<>\/?~]).{12,}$/;
-            if (newPassword.length < 12 || !passwordRegex.test(newPassword)) {
-                return res.status(400).json({ message: "La password non rispetta i criteri minimi di sicurezza." });
-            }
+            const problemaPassword = controllaPassword(newPassword, user);
+            if (problemaPassword) return res.status(400).json({ message: problemaPassword });
 
 
             const newPasswordHash = await bcrypt.hash(newPassword, COSTO_BCRYPT);
@@ -245,7 +235,6 @@ export function registraRottePubbliche(app) {
             );
             await chiudiSessioni(id);
 
-            // Lo username torna alla pagina: il login lo trova già scritto.
             res.status(200).json({ message: 'Password aggiornata con successo.', username: user.username });
         } catch (error) {
             logger.error('Errore reset password:', error);
@@ -253,7 +242,6 @@ export function registraRottePubbliche(app) {
         }
     });
 
-    // Password dimenticata.
     app.post('/api/auth/forgot-password', apiLimiter, async (req, res) => {
         const { identificativo } = req.body;
         if (!identificativo) return res.status(400).json({ message: 'Inserisci username o email.' });
@@ -295,7 +283,6 @@ export function registraRottePubbliche(app) {
             );
 
             if (!emailResult.success) {
-                // Nel log per l'amministratore, non a chi ha chiesto.
                 logger.error(`[Forgot password] Invio email fallito per l'utente ${user.username}: ${emailResult.error}`);
             }
             res.status(200).json(genericResponse);
@@ -357,7 +344,6 @@ export function registraRottePubbliche(app) {
             const baseCourseRes = await client.query(baseCourseQuery, [user.id]);
             const isCourseBaseOk = baseCourseRes.rowCount > 0;
 
-            // Di ogni corso l'ultimo rinnovo, se valido.
             const coursesQuery = `
             SELECT DISTINCT ON (cc.id) cc.name, cc.course_code, uc.expiry_date
             FROM user_courses uc JOIN courses_catalog cc ON uc.course_id = cc.id
@@ -387,7 +373,6 @@ export function registraRottePubbliche(app) {
                 available: true,
                 nome: user.nome,
                 cognome: user.cognome,
-                // La foto passa dal tesserino, con le sue condizioni.
                 photo_url: user.photo_url ? `/api/public/volunteer/${token}/photo` : null,
                 ruolo: user.role,
                 operativita_globale: isGlobalmenteOperativo,

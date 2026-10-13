@@ -1,14 +1,7 @@
 #!/usr/bin/env node
-// scripts/mfa-azzera.mjs
-//
-// Toglie la verifica in due passaggi a una persona, dalla console del server.
-// Serve quando l'unico amministratore ha perso il telefono e i codici di
-// riserva: dal web lo farebbe un altro amministratore. Chiude anche le sue
-// sessioni; un amministratore la riattiva al prossimo accesso.
-//
+// Toglie la verifica in due passaggi a una persona, quando l'unico amministratore ha perso
+// il telefono. Dalla cartella di ORION, con l'utente del servizio (legge .env).
 //   node scripts/mfa-azzera.mjs <username>
-//
-// Va lanciato dalla cartella di ORION, con l'utente del servizio (legge .env).
 
 import 'dotenv/config';
 import pg from 'pg';
@@ -29,6 +22,7 @@ try {
         const id = r.rows[0].id;
         await client.query('UPDATE users SET mfa_attiva = false, mfa_segreto = NULL, mfa_attivata_il = NULL, mfa_ultimo_passo = NULL, sessioni_valide_dal = NOW() WHERE id = $1', [id]);
         await client.query('DELETE FROM mfa_codici_riserva WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM telefoni_chiave WHERE user_id = $1', [id]);
         await client.query('DELETE FROM token_rinnovo WHERE user_id = $1', [id]);
         await client.query(
             `INSERT INTO audit_log (user_id, username, action, entity_type, entity_id, details) VALUES (NULL, 'console', 'mfa.azzerata', 'utente', $1, $2)`,

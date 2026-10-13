@@ -1,14 +1,4 @@
-// La simulazione nel centro operativo:
-//   - per tutti, la fascia SIMULAZIONE sotto l'intestazione e lo stato
-//     viola: nessuno la scambia per un'emergenza vera;
-//   - per chi apre le emergenze, "Emergenza reale": apre quella vera e
-//     ferma la simulazione (le squadre restano);
-//   - per la regia (src/copione.js), il pannello Regia a destra: l'orologio
-//     dello scenario con Avvia, Pausa e Riprendi; il prossimo evento; gli
-//     eventi con "Fai uscire ora", "+5 minuti", "Salta"; le segnalazioni da
-//     telefonare con il testo da leggere e "Collega" quando la sala le ha
-//     inserite; l'evento inventato al momento; le osservazioni.
-//
+// La simulazione nel centro operativo: fascia, "Emergenza reale" e pannello della regia.
 // Il centro operativo chiama Regia.emergenza(emergenza) a ogni cambio.
 
 (function () {
@@ -112,15 +102,11 @@
     let pannello = null;
     let ticchettio = null;
     let improvvisa = false;
-    // Quello che si sta scrivendo nei moduli resta anche quando il pannello si ridisegna.
     const VUOTA = () => ({ tipo: 'comunicazione', titolo: '', testo: '', squadra: '', indirizzo: '', lat: null, lng: null });
     let bozza = VUOTA();
     let bozzaOss = '';
     let segnaposto = null;
 
-    // --- Le comunicazioni alla sala ---------------------------------------------------
-    // Escono dal copione e restano in primo piano finché chi è davanti allo
-    // schermo non le segna lette (il browser ricorda quali).
     const CHIAVE_LETTE = 'orion.comunicazioniLette';
     const lette = () => { try { return new Set(JSON.parse(localStorage.getItem(CHIAVE_LETTE) || '[]')); } catch { return new Set(); } };
     function segnaLetta(chiave) {
@@ -161,7 +147,6 @@
     }
     document.addEventListener('ws:comunicazione_sala', (e) => mostraComunicazione(e.detail || {}));
 
-    // --- La fascia e i pulsanti ----------------------------------------------------
     function fascia() {
         const sim = emergenza?.simulazione === true;
         document.body.classList.toggle('in-simulazione', sim);
@@ -177,7 +162,6 @@
             f.textContent = sim ? `SIMULAZIONE · ${emergenza.name || emergenza.code} · non è un'emergenza reale` : '';
         }
         const stato = document.getElementById('emergency-status-display');
-        // Chiusa la simulazione, via il suo vestito: lo stato torna come lo disegna il centro operativo.
         if (!sim && stato?.dataset.simulazione) {
             stato.style.background = stato.style.color = stato.style.border = '';
             delete stato.dataset.simulazione;
@@ -190,7 +174,6 @@
             stato.style.color = '#5b21b6';
             stato.style.border = '1px solid #6d28d9';
         }
-        // Chi apre le emergenze: "Emergenza reale" ferma la simulazione.
         const apri = document.getElementById('open-emergency-btn');
         if (apri) {
             if (sim && haPermesso('emergenze.apertura')) {
@@ -213,7 +196,6 @@
         } else if (chiudi) chiudi.textContent = 'Chiudi emergenza';
         const btn = document.getElementById('regia-btn');
         if (btn) btn.hidden = !(sim && regia);
-        // Senza emergenza aperta, chi apre le emergenze o organizza le attività apre una simulazione al volo.
         const alVolo = document.getElementById('simulazione-btn');
         if (alVolo) {
             const esterno = typeof ruoliUtente === 'function' && ruoliUtente().includes('esterno');
@@ -221,11 +203,6 @@
         }
     }
 
-    // --- La simulazione al volo ------------------------------------------------------
-    // Senza passare dal calendario: un addestramento (o un'esercitazione) che
-    // comincia adesso, con chi lo apre nella regia, il copione di uno scenario
-    // preparato (pagina Simulazioni) o di una vecchia simulazione se si vuole,
-    // e la sala aperta subito.
     async function apriAlVolo() {
         const velo = el('div', 'sv-velo');
         const f = el('form', 'sv-finestra');
@@ -268,7 +245,6 @@
         document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { chiudi(); document.removeEventListener('keydown', esc); } });
         document.body.appendChild(velo);
         titolo.focus();
-        // Le scelte: "s:N" uno scenario, "a:N" il copione di un'attività.
         const eventi = (n) => `${n} ${n === 1 ? 'evento' : 'eventi'}`;
         const scenariPronti = new Map();
         const [scenari, copioni] = await Promise.all([
@@ -285,7 +261,6 @@
             for (const c of copioni) g.appendChild(new Option(`${data(c.inizio).toLocaleDateString('it-IT')} · ${c.titolo} (${eventi(c.eventi)})`, `a:${c.id}`));
             copione.appendChild(g);
         }
-        // Uno scenario porta con sé natura, durata e testo, se non sono già scritti.
         copione.addEventListener('change', () => {
             const s = scenariPronti.get(copione.value);
             if (!s) return;
@@ -315,7 +290,6 @@
         });
     }
 
-    // --- La regia -----------------------------------------------------------------------
     async function carica() {
         if (!emergenza?.simulazione || (typeof ruoliUtente === 'function' && ruoliUtente().includes('esterno'))) {
             regia = null;
@@ -331,8 +305,7 @@
         }
         fascia();
         if (!pannello) return;
-        // Chi sta scrivendo in un modulo del pannello non perde il cursore: il
-        // ridisegno aspetta che esca dal campo, intanto corre solo l'orologio.
+        // Chi scrive in un modulo del pannello non perde il cursore: il ridisegno aspetta.
         const attivo = document.activeElement;
         if (attivo && pannello.contains(attivo) && /^(INPUT|TEXTAREA|SELECT)$/.test(attivo.tagName)) {
             aggiornaOrologio();
@@ -471,7 +444,6 @@
             if (e.segnalante) det.push(`Chi chiama: ${e.segnalante}${e.telefono ? ` (${e.telefono})` : ''}`);
         } else if (e.stato === 'atteso') {
             if (e.tipo === 'imprevisto') det.push(`Alla squadra ${e.squadra}`);
-            // La comunicazione si legge già qui: la regia sa cosa sta per arrivare alla sala.
             if (e.tipo === 'comunicazione' && e.testo) det.push(`Dirà: ${e.testo}`);
             if (e.indirizzo) det.push(e.indirizzo);
             if (e.modo === 'telefono') det.push('Per telefono: quando esce, la telefoni tu');
@@ -492,7 +464,6 @@
         return d;
     }
 
-    // La sala ha inserito la segnalazione telefonata: si sceglie quale.
     async function collega(e, dove) {
         let elenco = [];
         try { elenco = (await fetchApi(`/api/reports?limit=100&status_type=all&emergency_id=${emergenza.id}`)).reports || []; } catch (err) { return notifica(err.message, 'errore'); }
@@ -522,7 +493,6 @@
         testo.addEventListener('input', () => { bozza.testo = testo.value; });
         squadra.addEventListener('input', () => { bozza.squadra = squadra.value; });
 
-        // Dove: per la segnalazione, un indirizzo da cercare o un punto toccato sulla mappa.
         const dove = el('div', 'rg-dove');
         const indirizzo = el('input'); indirizzo.placeholder = 'Indirizzo (facoltativo)'; indirizzo.maxLength = 200; indirizzo.value = bozza.indirizzo;
         indirizzo.addEventListener('input', () => { bozza.indirizzo = indirizzo.value; });
@@ -584,7 +554,6 @@
         return box;
     }
 
-    // Il punto dell'evento improvvisato sulla mappa della sala, finché non esce.
     function mostraSegnaposto() {
         const m = window.mappaCentroOperativo;
         segnaposto?.remove();
@@ -616,7 +585,6 @@
         return box;
     }
 
-    // --- Avvio -------------------------------------------------------------------------------
     const stile = document.createElement('style');
     stile.textContent = STILE;
     document.head.appendChild(stile);

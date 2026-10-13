@@ -1,7 +1,5 @@
-// Backup, ripristino e aggiornamenti dalla pagina Sistema, senza SSH. Tre
-// scelte reggono tutto: il ripristino è una transazione sola (o entra tutto o
-// niente); prima di toccare qualcosa si fa un backup di sicurezza, e se non
-// riesce ci si ferma; niente richiede i permessi di root.
+// Il ripristino è una transazione sola; prima di toccare qualcosa si fa un backup
+// di sicurezza, e se non riesce ci si ferma; niente richiede root.
 
 import fs from 'fs';
 import path from 'path';
@@ -17,12 +15,11 @@ import readline from 'readline';
 import { PassThrough, Transform } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import { apriFile, cifraturaPronta, fileCifrato } from './cifratura.js';
+import { fetchEsterno, controllaIndirizzo } from './indirizziEsterni.js';
 
-// Il nome di un file di backup: lettere, cifre, punto, trattino e underscore.
-// Tutto il resto è un tentativo di uscire dalla cartella.
+// Qualunque altro carattere è un tentativo di uscire dalla cartella.
 const NOME_BACKUP_VALIDO = /^[A-Za-z0-9._-]+\.sql\.gz$/;
 
-// La parola che l'amministratore deve scrivere per confermare il ripristino.
 // Un "sei sicuro?" con due pulsanti lo si clicca per abitudine.
 const PAROLA_CONFERMA = 'RIPRISTINA';
 
@@ -35,11 +32,9 @@ export function registraRotteManutenzione(app, ctx) {
         emergenzaAttiva = () => null, notificaA = null, inviaEmail = null
     } = ctx;
 
-    // Dove finisce il resoconto dell'ultimo ripristino: l'applicazione si
-    // riavvia subito dopo, quindi l'esito non può restare in memoria.
+    // L'applicazione si riavvia subito dopo il ripristino: l'esito non può restare in memoria.
     const FILE_ESITO = path.join(cartellaApp, 'ultimo-ripristino.json');
 
-    // Stato dell'operazione in corso, per la pagina che guarda.
     let operazione = null; // { tipo, iniziata, passi: [], finita, esito, messaggio }
 
     function iniziaOperazione(tipo) {
@@ -71,8 +66,7 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // I backup dell'applicazione e quelli di cron (scritti da root): questi
-    // ultimi si leggono e si ripristinano, ma da qui non si cancellano.
+    // Quelli di cron li scrive root: si leggono e si ripristinano, non si cancellano.
     const CARTELLE = [
         { chiave: 'app', percorso: cartellaApp, etichetta: 'Applicazione', cancellabile: true },
         { chiave: 'notte', percorso: cartellaCron, etichetta: 'Backup notturno', cancellabile: false }
@@ -99,7 +93,6 @@ export function registraRotteManutenzione(app, ctx) {
                         cancellabile: cartella.cancellabile,
                         dimensione: info.size,
                         quando: info.mtime.toISOString(),
-                        // Il motivo sta nel nome: db_<data>_<motivo>.sql.gz.
                         motivo: descriviMotivo(nome)
                     });
                 } catch { /* file sparito fra readdir e stat */ }
@@ -134,14 +127,12 @@ export function registraRotteManutenzione(app, ctx) {
         return { cartella, percorso };
     }
 
-    // Un archivio può essere troncato o di un altro programma: lo si scopre prima.
     async function verificaArchivio(percorso) {
         const info = await fs.promises.stat(percorso).catch(() => null);
         if (!info || !info.isFile()) return { valido: false, motivo: 'il file non esiste' };
         if (info.size < 1000) return { valido: false, motivo: `il file è troppo piccolo (${info.size} byte)` };
 
-        // Un backup cifrato si legge solo con la chiave dei dati: il controllo
-        // del contenuto (e del tag di autenticità) si fa sul flusso decifrato.
+        // Il controllo del contenuto (e del tag di autenticità) si fa sul flusso decifrato.
         const cifrato = await fileCifrato(percorso);
         if (cifrato && !cifraturaPronta()) {
             return { valido: false, motivo: 'è cifrato e la chiave dei dati non è disponibile: inserisci prima la chiave di recupero (riquadro Cifratura)' };
@@ -159,7 +150,6 @@ export function registraRotteManutenzione(app, ctx) {
             }
         }
 
-        // Basta l'inizio per riconoscere un dump di PostgreSQL.
         const inizio = await new Promise(async (risolvi, rifiuta) => {
             let letto = '';
             const decompressore = zlib.createGunzip();
@@ -192,11 +182,9 @@ export function registraRotteManutenzione(app, ctx) {
         return { valido: true, dimensione: info.size };
     }
 
-    // Un dump viene eseguito da psql, e psql esegue anche i suoi comandi con
-    // la barra rovesciata: "\! comando" lancia un programma sul server. Un
-    // backup fatto da pg_dump ne ha solo tre: \restrict e \unrestrict, che
-    // proteggono proprio da questo, e \. che chiude i dati di un COPY. Qualunque
-    // altro è un archivio manomesso.
+    // psql esegue anche i comandi con la barra rovesciata ("\! comando" lancia un
+    // programma). pg_dump usa solo \restrict, \unrestrict e \. : qualunque altro è un
+    // archivio manomesso.
     function esaminaRiga(stato, riga) {
         if (stato.inCopy) {
             if (riga === '\\.') stato.inCopy = false;
@@ -238,9 +226,7 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Lo stesso controllo mentre il dump scorre verso psql: se il file fosse
-    // cambiato dopo la verifica, il flusso si interrompe e la transazione unica
-    // non lascia niente a metà.
+    // Lo stesso controllo mentre il dump scorre verso psql, se il file fosse cambiato dopo la verifica.
     function filtroComandiPsql(alRifiuto) {
         const stato = { inCopy: false };
         const decodifica = new StringDecoder('utf8');
@@ -276,7 +262,6 @@ export function registraRotteManutenzione(app, ctx) {
         });
     }
 
-    // Il ripristino: cancellazione dello schema e dump in un'unica transazione.
     async function ripristinaDatabase(percorso) {
         const prefisso =
             '-- Preparato da ORION prima del ripristino\n' +
@@ -313,7 +298,6 @@ export function registraRotteManutenzione(app, ctx) {
 
         const flusso = new PassThrough();
         flusso.write(prefisso);
-        // Se psql si ferma, EPIPE non aggiunge niente al suo messaggio.
         let erroreFiltro = null;
         const fermaPsql = () => processo.kill('SIGKILL');
         const invio = pipeline(await apriFile(percorso), zlib.createGunzip(), filtroComandiPsql(fermaPsql), flusso)
@@ -329,8 +313,6 @@ export function registraRotteManutenzione(app, ctx) {
         if (erroreFiltro) throw new Error(`${erroreFiltro.message} Il database NON è stato modificato.`);
     }
 
-    // psql è preciso ma parla in inglese e per tecnici. Le due o tre cause
-    // ricorrenti meritano una frase in italiano che dica anche cosa fare.
     function spiegaErrorePsql(errori, codice) {
         const testo = (errori || '').trim();
         if (/role .* does not exist/i.test(testo)) {
@@ -347,8 +329,7 @@ export function registraRotteManutenzione(app, ctx) {
         return `psql è terminato con codice ${codice}. Il database NON è stato modificato. Dettaglio: ${testo.slice(0, 400)}`;
     }
 
-    // I file caricati si ripristinano dalla copia del backup notturno, che è
-    // speculare: la situazione dell'ultima notte, non del giorno del dump.
+    // La copia dei file è quella dell'ultima notte, non del giorno del dump.
     async function ripristinaFileCaricati() {
         const origine = cartellaFile;
         const copiate = [];
@@ -376,7 +357,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Rotte
     app.get('/api/sistema/backup', soloAdmin, async (req, res) => {
         try {
             res.json({
@@ -436,8 +416,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     });
 
-    // Caricare un backup da fuori serve quando si sposta l'installazione su
-    // un'altra macchina, o quando l'unica copia buona è su una chiavetta.
     app.post('/api/sistema/backup/carica', soloAdmin, caricaArchivio.single('archivio'), async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'Nessun file ricevuto.' });
         const percorso = req.file.path;
@@ -467,7 +445,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     });
 
-    // Lo stato dell'operazione in corso, o l'esito dell'ultima.
     app.get('/api/sistema/operazione', soloAdmin, async (req, res) => {
         if (operazione) return res.json(operazione);
         try {
@@ -478,8 +455,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     });
 
-    // "Ho capito": l'esito si mette da parte e la pagina non lo ripropone più.
-    // Il file resta (ultimo-ripristino-visto.json) per chi volesse rileggerlo.
     app.delete('/api/sistema/operazione', soloAdmin, async (req, res) => {
         if (operazione && !operazione.finita) return res.status(409).json({ message: "L'operazione è ancora in corso." });
         operazione = null;
@@ -491,7 +466,6 @@ export function registraRotteManutenzione(app, ctx) {
         res.json({ message: 'Fatto.' });
     });
 
-    // Il ripristino vero e proprio
     app.post('/api/sistema/ripristino', soloAdmin, async (req, res) => {
         const { cartella, nome, password, conferma, ripristina_file } = req.body || {};
 
@@ -524,8 +498,6 @@ export function registraRotteManutenzione(app, ctx) {
         });
         logger.warn(`[Manutenzione] RIPRISTINO richiesto da ${req.user.username} dal file ${nome}.`);
 
-        // La risposta parte subito: il ripristino dura dei secondi e la pagina
-        // segue i passi interrogando /api/sistema/operazione.
         res.json({ message: 'Ripristino avviato.', avviato: true });
 
         eseguiRipristino(trovato.percorso, { ripristinaFile: !!ripristina_file, chi: req.user.username })
@@ -537,8 +509,7 @@ export function registraRotteManutenzione(app, ctx) {
     });
 
     async function eseguiRipristino(percorso, { ripristinaFile, chi }) {
-        // 1. Backup di sicurezza. Se non riesce, ci si ferma qui: senza una via
-        //    di ritorno non si comincia nemmeno.
+        // Senza una via di ritorno non si comincia nemmeno.
         passo('Backup di sicurezza dei dati attuali');
         const sicurezza = await eseguiBackup('pre-ripristino');
         if (!sicurezza) {
@@ -551,8 +522,7 @@ export function registraRotteManutenzione(app, ctx) {
         ultimoPasso('fatto');
         operazione.backup_sicurezza = path.basename(sicurezza);
 
-        // 2. Da qui in avanti nessuno deve scrivere: l'applicazione risponde
-        //    "in manutenzione" a tutti, compreso chi ha una pagina aperta.
+        // Da qui nessuno deve scrivere: "in manutenzione" a tutti, anche a chi ha una pagina aperta.
         impostaManutenzione({ motivo: 'ripristino di un backup', iniziata: new Date().toISOString() });
         avvisaClienti('manutenzione', { attiva: true, motivo: 'ripristino di un backup' });
 
@@ -560,7 +530,6 @@ export function registraRotteManutenzione(app, ctx) {
             passo('Ripristino del database');
             await ripristinaDatabase(percorso);
             ultimoPasso('fatto');
-            // Un backup di una versione precedente riporta lo schema di allora.
             passo('Allineamento del database a questa versione');
             const applicate = await applicaMigrazioniMancanti();
             ultimoPasso(applicate < 0 ? 'errore' : applicate > 0 ? 'fatto' : 'saltato');
@@ -582,8 +551,7 @@ export function registraRotteManutenzione(app, ctx) {
                     passo('Nessuna copia dei file trovata: i documenti restano quelli attuali', 'saltato');
                 }
             } catch (e) {
-                // Il database è già tornato indietro: fermarsi adesso non
-                // rimetterebbe le cose a posto. Si segnala e si va avanti.
+                // Il database è già tornato indietro: fermarsi non rimetterebbe le cose a posto.
                 ultimoPasso('errore');
                 logger.error('[Manutenzione] Copia dei file caricati non riuscita:', { error: e.message });
             }
@@ -604,8 +572,8 @@ export function registraRotteManutenzione(app, ctx) {
               'Dopo il riavvio rifai l\'accesso, perché anche gli utenti e le password sono tornati a quelli del backup.');
         logger.warn(`[Manutenzione] Ripristino completato (richiesto da ${chi}). Riavvio del processo.`);
 
-        // Lo stato in memoria non corrisponde più al database: si riparte.
-        // Sotto PM2 il processo torna su da solo; senza, resta in manutenzione.
+        // Lo stato in memoria non corrisponde più al database: si riparte. Senza PM2
+        // resta in manutenzione.
         if (sottoPm2) {
             setTimeout(() => process.exit(0), 1500);
         } else {
@@ -617,13 +585,10 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Aggiornamenti. Le migrazioni si applicano prima di toccare i file,
-    // leggendole dal pacchetto nuovo: se falliscono, gira ancora la versione
-    // di prima. Prima di sostituire i file si mette da parte il codice attuale.
+    // Le migrazioni si applicano prima di toccare i file: se falliscono, gira ancora
+    // la versione di prima.
     const CONFIG_AGGIORNAMENTI = {
-        // attivo: il controllo giornaliero automatico, con l'avviso agli
-        // amministratori. Di base spento: da solo ORION non contatta nessuno.
-        // "Controlla adesso" funziona sempre, perché lo preme una persona.
+        // Di base spento: da solo ORION non contatta nessuno.
         attivo: false,
         origine: 'github',
         repo: 'ip-conflict/orion-release',
@@ -652,8 +617,7 @@ export function registraRotteManutenzione(app, ctx) {
             [chiave, JSON.stringify(valore)]);
     }
 
-    // Confronto fra numeri di versione: 3.24.0 viene dopo 3.9.1, che
-    // confrontando le stringhe non sarebbe vero.
+    // 3.24.0 viene dopo 3.9.1, che fra stringhe non sarebbe vero.
     function versionePiuRecente(candidata, riferimento) {
         const pezzi = (v) => String(v).replace(/^v/, '').split(/[.-]/).map(n => parseInt(n, 10) || 0);
         const a = pezzi(candidata);
@@ -665,8 +629,6 @@ export function registraRotteManutenzione(app, ctx) {
         return false;
     }
 
-    // Cosa sa dire l'applicazione di se stessa, e cosa serve sapere prima di
-    // premere "aggiorna".
     async function statoAggiornamenti() {
         const config = await leggiImpostazione('aggiornamenti_config', CONFIG_AGGIORNAMENTI);
         const ultimo = await leggiImpostazione('aggiornamenti_stato', {
@@ -689,8 +651,8 @@ export function registraRotteManutenzione(app, ctx) {
         };
     }
 
-    // I motivi per cui l'aggiornamento non puo' partire vanno detti PRIMA, non
-    // a meta' strada: a meta' strada l'installazione e' gia' stata toccata.
+    // I motivi per cui non si può aggiornare si dicono prima: a metà strada
+    // l'installazione è già stata toccata.
     async function verificaRequisiti() {
         const problemi = [];
         const avvertenze = [];
@@ -712,7 +674,6 @@ export function registraRotteManutenzione(app, ctx) {
             }
         } catch { /* statfs non disponibile: si prosegue, il download fallira' semmai da solo */ }
 
-        // In emergenza l'applicazione non si ferma, nemmeno per pochi minuti.
         const emergenza = emergenzaAttiva();
         if (emergenza) {
             problemi.push(`C'è un'emergenza aperta (${emergenza.code}): si aggiorna dopo averla chiusa.`);
@@ -737,11 +698,10 @@ export function registraRotteManutenzione(app, ctx) {
         });
     }
 
-    // La versione pubblicata: dalle release di GitHub o da un manifesto JSON.
     async function cercaVersione(config) {
         if (config.origine === 'manifesto') {
             if (!config.manifesto) throw new Error('Non e\' stato indicato l\'indirizzo del manifesto.');
-            const risposta = await fetch(config.manifesto, { headers: { 'Accept': 'application/json' } });
+            const risposta = await fetchEsterno(config.manifesto, { headers: { 'Accept': 'application/json', 'User-Agent': 'ORION' } });
             if (!risposta.ok) throw new Error(`Il manifesto ha risposto ${risposta.status}.`);
             const dati = await risposta.json();
             if (!dati.versione || !dati.pacchetto) {
@@ -757,7 +717,7 @@ export function registraRotteManutenzione(app, ctx) {
         }
 
         const indirizzo = `${config.api.replace(/\/$/, '')}/repos/${config.repo}/releases/latest`;
-        const risposta = await fetch(indirizzo, {
+        const risposta = await fetchEsterno(indirizzo, {
             headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'ORION' }
         });
         if (risposta.status === 404) {
@@ -789,6 +749,17 @@ export function registraRotteManutenzione(app, ctx) {
         if (corpo.origine && !origini.includes(corpo.origine)) {
             return res.status(400).json({ message: `L'origine puo' valere ${origini.join(' o ')}.` });
         }
+        if (corpo.repo !== undefined && corpo.repo && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(corpo.repo))) {
+            return res.status(400).json({ message: 'Il progetto si scrive come proprietario/nome (per esempio ip-conflict/orion-release).' });
+        }
+        for (const campo of ['api', 'manifesto']) {
+            if (!corpo[campo]) continue;
+            try {
+                await controllaIndirizzo(String(corpo[campo]));
+            } catch (e) {
+                return res.status(400).json({ message: e.message });
+            }
+        }
         const attuale = await leggiImpostazione('aggiornamenti_config', CONFIG_AGGIORNAMENTI);
         const nuova = {
             attivo: corpo.attivo === undefined ? attuale.attivo : !!corpo.attivo,
@@ -802,8 +773,6 @@ export function registraRotteManutenzione(app, ctx) {
         res.json(nuova);
     });
 
-    // Un controllo: chiede l'ultima versione e ne salva l'esito. Lancia se il
-    // servizio non risponde, dopo aver salvato l'errore.
     async function controllaVersione(config) {
         const precedente = await leggiImpostazione('aggiornamenti_stato', {});
         try {
@@ -816,13 +785,11 @@ export function registraRotteManutenzione(app, ctx) {
                 pacchetto: trovata.pacchetto,
                 sha256: trovata.sha256,
                 errore: null,
-                // L'ultima versione già annunciata: un avviso per versione.
                 avvisata: precedente.avvisata || null
             });
             return trovata;
         } catch (e) {
-            // fetch senza rete dice solo "fetch failed": all'amministratore
-            // serve sapere che è il server a non arrivare a internet.
+            // fetch senza rete dice solo "fetch failed".
             const errore = e instanceof TypeError
                 ? 'Il server non riesce a raggiungere internet: controllate la sua connessione (o il proxy) e riprovate.'
                 : e.message;
@@ -847,9 +814,7 @@ export function registraRotteManutenzione(app, ctx) {
         }
     });
 
-    // Il controllo giornaliero, se acceso. Il server lo chiama ogni ora e
-    // parte solo quando l'ultimo controllo ha più di un giorno: un server
-    // riavviato spesso non interroga GitHub a ogni avvio.
+    // Un server riavviato spesso non interroga GitHub a ogni avvio.
     const ORE_TRA_CONTROLLI = 24;
     async function controlloAutomatico() {
         try {
@@ -865,8 +830,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Una notifica sull'app e un'email agli amministratori, una volta sola
-    // per versione.
     async function avvisaAmministratori(nuova) {
         const stato = await leggiImpostazione('aggiornamenti_stato', {});
         if (stato.avvisata === nuova) return;
@@ -933,15 +896,13 @@ export function registraRotteManutenzione(app, ctx) {
         try {
             await aggiornaDaCartella(stato, lavoro);
         } finally {
-            // La cartella di lavoro pesa quanto le dipendenze: non resta in
-            // mezzo ai backup, né dopo un errore né dopo un successo.
+            // La cartella di lavoro pesa quanto le dipendenze: non resta fra i backup.
             await fs.promises.rm(lavoro, { recursive: true, force: true }).catch(() => {});
         }
     }
 
     async function aggiornaDaCartella(stato, lavoro) {
-        // 1. Backup del database. Come per il ripristino: se non riesce, non si
-        //    comincia nemmeno.
+        // Se il backup non riesce non si comincia nemmeno.
         passo('Backup del database');
         const sicurezza = await eseguiBackup('pre-aggiornamento');
         if (!sicurezza) {
@@ -952,21 +913,16 @@ export function registraRotteManutenzione(app, ctx) {
         ultimoPasso('fatto');
         operazione.backup_sicurezza = path.basename(sicurezza);
 
-        // 2. Scarica il pacchetto
         passo(`Scaricamento della versione ${stato.versione}`);
         const archivio = path.join(lavoro, 'pacchetto.tar.gz');
         await scaricaFile(stato.pacchetto, archivio);
-        if (stato.sha256) {
-            const impronta = await improntaFile(archivio);
-            if (impronta !== stato.sha256.toLowerCase()) {
-                ultimoPasso('errore');
-                chiudiOperazione('errore', 'Il pacchetto scaricato non corrisponde all\'impronta dichiarata: scaricamento interrotto, niente e\' stato toccato.');
-                return;
-            }
+        if (stato.sha256 && await improntaFile(archivio) !== stato.sha256.toLowerCase()) {
+            ultimoPasso('errore');
+            chiudiOperazione('errore', 'Il pacchetto scaricato non corrisponde all\'impronta dichiarata: scaricamento interrotto, niente e\' stato toccato.');
+            return;
         }
         ultimoPasso('fatto');
 
-        // 3. Scompatta e controlla che sia davvero ORION
         passo('Verifica del pacchetto');
         const radice = await scompattaPacchetto(archivio, lavoro);
         const descrizione = JSON.parse(await fs.promises.readFile(path.join(radice, 'package.json'), 'utf8'));
@@ -985,9 +941,7 @@ export function registraRotteManutenzione(app, ctx) {
         await allineaNumeroVersione(radice, descrizione, stato.versione);
         ultimoPasso('fatto');
 
-        // 4. Le dipendenze si installano nella cartella di lavoro, accanto al
-        //    codice nuovo: se npm non ce la fa, il database e i file sono
-        //    ancora quelli di prima e l'applicazione continua a girare.
+        // Le dipendenze nella cartella di lavoro: se npm fallisce, l'installazione è intatta.
         passo('Installazione delle dipendenze della versione nuova');
         try {
             await installaDipendenze(radice);
@@ -998,7 +952,6 @@ export function registraRotteManutenzione(app, ctx) {
             return;
         }
 
-        // 5. Migrazioni prima dei file.
         passo('Aggiornamento del database');
         try {
             await applicaMigrazioni(radice);
@@ -1010,8 +963,7 @@ export function registraRotteManutenzione(app, ctx) {
             return;
         }
 
-        // 6. Copia di sicurezza del codice attuale: il database ha i suoi
-        // backup, il codice no.
+        // Il database ha i suoi backup, il codice no.
         passo('Copia di sicurezza della versione attuale');
         const copiaCodice = await archiviaCodice();
         ultimoPasso(copiaCodice ? 'fatto' : 'errore');
@@ -1021,7 +973,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
         operazione.copia_codice = path.basename(copiaCodice);
 
-        // 7. Da qui in avanti si tocca l'installazione: porte chiuse.
         impostaManutenzione({ motivo: 'aggiornamento del programma in corso', iniziata: new Date().toISOString() });
         avvisaClienti('manutenzione', { attiva: true, motivo: 'aggiornamento' });
 
@@ -1058,13 +1009,8 @@ export function registraRotteManutenzione(app, ctx) {
         });
     }
 
-    // --- Tornare a una versione precedente ------------------------------------
-    // Ogni aggiornamento dalla pagina Sistema lascia due cose: il backup del
-    // database fatto prima (db_..._pre-aggiornamento) e il codice della
-    // versione lasciata (codice_..._v<versione>.tar.gz). Con quelle si torna
-    // indietro: il codice di allora, con le sue dipendenze, e a scelta anche
-    // i dati di allora. Prima si mettono da parte database e codice attuali,
-    // e il ritorno lascia a sua volta le stesse due cose: si può tornare avanti.
+    // Ogni aggiornamento lascia il backup del database (pre-aggiornamento) e il codice
+    // lasciato (codice_..._v<versione>.tar.gz): con quelli si torna indietro.
     const NOME_CODICE_VALIDO = /^codice_(\d{8})_(\d{6})_v([0-9A-Za-z.+-]{1,40})\.tar\.gz$/;
     const NOME_DB_PRIMA = /^db_(\d{8})_(\d{6})_(pre-aggiornamento|pre-ritorno)\.sql\.gz$/;
     const PAROLA_RITORNO = 'TORNA';
@@ -1073,8 +1019,7 @@ export function registraRotteManutenzione(app, ctx) {
     const istanteDa = (giorno, ora) =>
         Date.UTC(+giorno.slice(0, 4), +giorno.slice(4, 6) - 1, +giorno.slice(6, 8), +ora.slice(0, 2), +ora.slice(2, 4), +ora.slice(4, 6));
 
-    // La versione scritta nel package.json dell'archivio: quella nel nome
-    // potrebbe essere sbagliata (un pacchetto che non aggiornava il numero).
+    // Quella nel nome può essere sbagliata (un pacchetto che non aggiornava il numero).
     async function versioneDellArchivio(percorso, nome, mtime) {
         const memo = versioniLette.get(nome);
         if (memo && memo.mtime === mtime) return memo.versione;
@@ -1087,7 +1032,6 @@ export function registraRotteManutenzione(app, ctx) {
         return versione;
     }
 
-    // Le migrazioni di un archivio, dai nomi dei file in migrations/.
     const migrazioniLette = new Map(); // nome -> { mtime, nomi }
     async function migrazioniDellArchivio(percorso, nome, mtime) {
         const memo = migrazioniLette.get(nome);
@@ -1101,9 +1045,8 @@ export function registraRotteManutenzione(app, ctx) {
         return nomi;
     }
 
-    // Le modifiche al database che la versione scelta non conosce: le hanno
-    // fatte le versioni successive. Tenendo i dati si annullano, dalla più
-    // recente, con il "down" delle migrazioni della versione installata.
+    // Tenendo i dati, le migrazioni successive si annullano dalla più recente con il
+    // "down" della versione installata.
     async function modificheDaAnnullare(nomiVecchi) {
         const { rows } = await pool.query('SELECT name FROM pgmigrations ORDER BY run_on DESC, id DESC');
         const vecchie = new Set(nomiVecchi);
@@ -1134,7 +1077,6 @@ export function registraRotteManutenzione(app, ctx) {
             const info = await fs.promises.stat(percorso).catch(() => null);
             if (!info?.isFile()) continue;
             const istante = istanteDa(m[1], m[2]);
-            // Il backup dei dati fatto dalla stessa operazione, poco prima.
             const coppia = backup.filter(b => b.istante <= istante && istante - b.istante <= 6 * 3600 * 1000)
                 .sort((a, b) => b.istante - a.istante)[0];
             const migrazioni = await migrazioniDellArchivio(percorso, nome, info.mtimeMs);
@@ -1142,14 +1084,12 @@ export function registraRotteManutenzione(app, ctx) {
             elenco.push({
                 nome,
                 versione: (await versioneDellArchivio(percorso, nome, info.mtimeMs)) || m[3],
-                // Tenendo i dati: cosa si toglie dal database, e se si può.
                 modifiche: daAnnullare ? { annullabili: daAnnullare.annullabili, elenco: daAnnullare.nomi.map(descriviMigrazione) } : null,
                 lasciata_il: new Date(istante).toISOString(),
                 dimensione: info.size,
                 dati: coppia ? { nome: coppia.nome, del: new Date(coppia.istante).toISOString() } : null
             });
         }
-        // Una riga per versione, la copia più recente; quella in uso non serve.
         const viste = new Set();
         return elenco.sort((a, b) => b.lasciata_il.localeCompare(a.lasciata_il))
             .filter(v => v.versione !== versioneInstallata && !viste.has(v.versione) && viste.add(v.versione));
@@ -1216,7 +1156,6 @@ export function registraRotteManutenzione(app, ctx) {
     });
 
     async function tornaAllaVersione(scelta, archivio, backupDati, lavoro) {
-        // 1. Database e codice di adesso, da parte: senza, non si comincia.
         passo('Backup del database attuale');
         const sicurezza = await eseguiBackup('pre-ritorno');
         if (!sicurezza) {
@@ -1237,7 +1176,6 @@ export function registraRotteManutenzione(app, ctx) {
         ultimoPasso('fatto');
         operazione.copia_codice = path.basename(copiaCodice);
 
-        // 2. La versione di allora, con le sue dipendenze, nella cartella di lavoro.
         passo(`Preparazione della versione ${scelta.versione}`);
         const radice = await scompattaPacchetto(archivio, lavoro);
         const descrizione = JSON.parse(await fs.promises.readFile(path.join(radice, 'package.json'), 'utf8'));
@@ -1257,7 +1195,6 @@ export function registraRotteManutenzione(app, ctx) {
             return;
         }
 
-        // 3. Porte chiuse: i dati (se richiesto) e poi i file.
         impostaManutenzione({ motivo: 'ritorno a una versione precedente', iniziata: new Date().toISOString() });
         avvisaClienti('manutenzione', { attiva: true, motivo: 'ritorno a una versione precedente' });
 
@@ -1277,7 +1214,6 @@ export function registraRotteManutenzione(app, ctx) {
                 return;
             }
         } else {
-            // I dati restano; il database torna alla forma di quella versione.
             try {
                 const nomiVecchi = (await fs.promises.readdir(path.join(radice, 'migrations')))
                     .map(f => f.match(/^(.+)\.c?js$/)?.[1]).filter(Boolean);
@@ -1293,7 +1229,6 @@ export function registraRotteManutenzione(app, ctx) {
                         migrationsTable: 'pgmigrations',
                         direction: 'down',
                         count: daAnnullare.nomi.length,
-                        // Tutte o nessuna.
                         singleTransaction: true,
                         log: () => {},
                         logger: { debug: () => {}, info: () => {}, warn: m => logger.warn(`[Migrazioni] ${m}`), error: m => logger.error(`[Migrazioni] ${m}`) }
@@ -1335,10 +1270,8 @@ export function registraRotteManutenzione(app, ctx) {
         else impostaManutenzione({ motivo: 'ritorno completato: riavvia l\'applicazione', iniziata: new Date().toISOString(), riavvio_manuale: true });
     }
 
-    // La versione installata si legge da package.json. Se chi pubblica la
-    // release non lo aggiorna, ORION si crederebbe ancora alla versione di
-    // prima e riproporrebbe lo stesso aggiornamento all'infinito: vale il
-    // numero della release.
+    // Se chi pubblica non aggiorna package.json, ORION riproporrebbe lo stesso
+    // aggiornamento all'infinito: vale il numero della release.
     async function allineaNumeroVersione(radice, descrizione, versione) {
         if (!versione || descrizione.version === versione) return;
         logger.warn(`[Manutenzione] Il pacchetto dichiara la versione ${descrizione.version}, la release e' la ${versione}: vale la release.`);
@@ -1354,7 +1287,7 @@ export function registraRotteManutenzione(app, ctx) {
     }
 
     async function scaricaFile(indirizzo, destinazione) {
-        const risposta = await fetch(indirizzo, { headers: { 'User-Agent': 'ORION' }, redirect: 'follow' });
+        const risposta = await fetchEsterno(indirizzo, { headers: { 'User-Agent': 'ORION', 'Accept': 'application/octet-stream' } });
         if (!risposta.ok) throw new Error(`Scaricamento non riuscito: il server ha risposto ${risposta.status}.`);
         await pipeline(risposta.body, fs.createWriteStream(destinazione));
         const info = await fs.promises.stat(destinazione);
@@ -1380,14 +1313,18 @@ export function registraRotteManutenzione(app, ctx) {
         throw new Error('Il pacchetto non ha la forma attesa: non si capisce quale sia la cartella del programma.');
     }
 
-    // Le migrazioni si leggono dal pacchetto nuovo, con il suo node-pg-migrate.
     async function applicaMigrazioni(radice) {
         const binario = [radice, cartellaApplicazione]
             .map(c => path.join(c, 'node_modules', '.bin', 'node-pg-migrate'))
             .find(b => fs.existsSync(b));
         if (!binario) throw new Error('node-pg-migrate non e\' installato.');
-        const url = `postgres://${connessioneDb.utente}:${encodeURIComponent(connessioneDb.password)}` +
+        let url = `postgres://${connessioneDb.utente}:${encodeURIComponent(connessioneDb.password)}` +
                     `@${connessioneDb.host}:${connessioneDb.porta}/${connessioneDb.database}`;
+        if (process.env.DB_SSL === 'true') {
+            const parametri = new URLSearchParams({ sslmode: process.env.DB_SSL_STRICT === 'false' ? 'no-verify' : 'verify-full' });
+            if (process.env.DB_SSL_CA) parametri.set('sslrootcert', process.env.DB_SSL_CA);
+            url += `?${parametri}`;
+        }
         // Un database nato prima della 1.0 si allinea alla base della 1.0.
         await allineaMigrazioni(url);
         await eseguiComando(binario, ['up', '-m', path.join(radice, 'migrations')], {
@@ -1418,23 +1355,14 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Cosa non si sovrascrive né si cancella. La cartella dell'applicazione è
-    // anche la home dell'utente di sistema: lì dentro stanno .pm2 (la lista dei
-    // processi e i suoi canali di controllo), la cache e la configurazione di
-    // npm. Tutto ciò che comincia col punto resta com'è, e così i dati, i
-    // loghi e l'app Android messa a mano in app-android.
-    // chiave-dati.key: con --delete-after l'aggiornamento la cancellerebbe, e
-    // senza chiave file e backup cifrati non si leggono più.
+    // La cartella è anche la home dell'utente di sistema (.pm2, npm): tutto ciò che
+    // comincia col punto resta. Senza chiave-dati.key i file cifrati non si leggono più.
     const ESCLUSIONI = ['/.*', '/uploads', '/protected_uploads', '/logs', '/app-android',
                         '/public/uploads', '/public/logo.png', '/public/logo2.png',
                         '/chiave-dati.key', '/PRIMO-ACCESSO.txt'];
 
-    // L'app Android arriva con la release. app-android resta fuori dalla
-    // sostituzione (un APK messo a mano non si perde), ma l'APK del pacchetto
-    // si copia quando e' piu' nuovo di quello installato e firmato con la
-    // stessa chiave: senza, i telefoni non vedrebbero mai la versione nuova.
-    // Un APK firmato da altri o piu' nuovo resta com'e'. Un errore qui non
-    // ferma l'aggiornamento del server.
+    // app-android resta fuori (un APK messo a mano non si perde), ma l'APK del pacchetto
+    // si copia se più nuovo e firmato con la stessa chiave.
     async function aggiornaAppAndroid(radice) {
         const leggi = async (cartella) => {
             try {
@@ -1480,16 +1408,12 @@ export function registraRotteManutenzione(app, ctx) {
 
     async function copiaVersione(radice) {
         if (eseguibilePresente('rsync')) {
-            // --delete-after toglie i file che la versione nuova non ha più,
-            // node_modules compreso; --chmod toglie la scrittura a gruppo e altri.
             const argomenti = ['-a', '--delete-after', '--chmod=Dgo-w,Fgo-w'];
             ESCLUSIONI.forEach(e => argomenti.push(`--exclude=${e}`));
             argomenti.push(`${radice}/`, `${cartellaApplicazione}/`);
             await eseguiComando('rsync', argomenti, {}, 15 * 60 * 1000);
             return;
         }
-        // Senza rsync si copia a mano: i file nuovi coprono i vecchi, e
-        // node_modules si sostituisce per intero.
         const protette = new Set(ESCLUSIONI.filter(e => !e.slice(1).includes('/')).map(e => e.slice(1)));
         for (const voce of await fs.promises.readdir(radice)) {
             if (voce.startsWith('.') || protette.has(voce)) continue;
@@ -1513,8 +1437,7 @@ export function registraRotteManutenzione(app, ctx) {
         } catch (e) {
             throw new Error(`L'installazione delle dipendenze non e' riuscita: ${e.message}`);
         }
-        // npm a volte esce con successo senza aver installato davvero: si
-        // controlla che un binario chiave ci sia, come fa update.sh.
+        // npm a volte esce con successo senza aver installato niente.
         if (!fs.existsSync(path.join(radice, 'node_modules', '.bin', 'node-pg-migrate'))) {
             throw new Error('npm e\' terminato senza errori ma le dipendenze non risultano installate.');
         }

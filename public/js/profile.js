@@ -1,5 +1,3 @@
-// GESTIONE PROFILO VOLONTARIO (Anagrafica, QR Code, PDF)
-
 let currentUserData = null;
 let currentLibrettoData = null; 
 let brandingSettings = {
@@ -31,7 +29,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-print-badge').addEventListener('click', generatePDFLibretto);
 });
 
-// NAVIGAZIONE
 function setupNavigation() {
     const navLibretto = document.getElementById('nav-libretto');
     const navPassword = document.getElementById('nav-password');
@@ -51,20 +48,17 @@ function setupNavigation() {
     });
 }
 
-// CARICAMENTO DATI PROFILO
 async function loadUserProfile() {
     try {
         const user = await fetchApi('/api/users/me');
         currentUserData = user;
 
-        // Compila intestazione
         document.getElementById('profile-fullname').textContent = `${user.nome} ${user.cognome}`;
         document.getElementById('profile-role').textContent = user.role;
         if (user.photo_url) {
             document.getElementById('profile-photo').src = user.photo_url;
         }
 
-        // Compila Modulo Anagrafica
         document.getElementById('prof_cf').value = user.codice_fiscale || '';
         document.getElementById('prof_telefono').value = user.telefono || '';
         document.getElementById('prof_indirizzo').value = user.indirizzo || '';
@@ -82,17 +76,13 @@ async function loadUserProfile() {
     }
 }
 
-// GENERAZIONE QR CODE
 function generateQRCode(token) {
     const container = document.getElementById('qrcode-container');
     container.innerHTML = '';
-    // Niente token: l'associazione ha spento i QR dei tesserini, e il riquadro
-    // non ha niente da mostrare.
     const blocco = document.getElementById('blocco-qr-profilo');
     if (blocco) blocco.hidden = !token;
     if (!token) return;
 
-    // L'URL pubblico che chi scansiona il QR Code aprirà
     const verificationUrl = `${window.location.origin}/badge.html?token=${token}`;
 
     new QRCode(container, {
@@ -105,7 +95,6 @@ function generateQRCode(token) {
     });
 }
 
-// SALVATAGGIO ANAGRAFICA
 document.getElementById('profile-anagrafica-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('btn-save-profile');
@@ -129,7 +118,6 @@ document.getElementById('profile-anagrafica-form').addEventListener('submit', as
         
         currentUserData = { ...currentUserData, ...payload };
         
-        // Feedback visivo
         btn.style.background = '#10b981';
         btn.innerHTML = '<i class="fas fa-check"></i> Salvato!';
         setTimeout(() => {
@@ -145,8 +133,6 @@ document.getElementById('profile-anagrafica-form').addEventListener('submit', as
     }
 });
 
-// CARICAMENTO LIBRETTO (Corsi e Visite)
-// Le presenze dell'anno: attività ed emergenze, con le ore e l'attestato di ognuna.
 async function caricaMiePresenze() {
     const card = document.getElementById('card-mie-presenze');
     const lista = document.getElementById('my-presenze-list');
@@ -271,8 +257,6 @@ async function loadMioLibretto(userId) {
             courseList.innerHTML = '<li style="color: var(--text-muted); padding: 10px 0;">Nessun corso registrato.</li>';
         }
 
-        // 3. DPI in dotazione. Il riquadro compare solo se il magazzino è
-        // acceso: senza quel modulo sarebbe una scatola vuota per sempre.
         const cardDpi = document.getElementById('card-miei-dpi');
         if (cardDpi) {
             cardDpi.hidden = !data.magazzino_attivo;
@@ -287,10 +271,6 @@ async function loadMioLibretto(userId) {
     }
 }
 
-// MATERIALE DA CONFERMARE
-// Le consegne del magazzino che aspettano la conferma di chi le ha ricevute.
-// È la stessa conferma che si dà dall'app: chi non l'ha installata la dà da
-// qui, e il verbale si può aprire e stampare.
 async function caricaDaConfermare() {
     const box = document.getElementById('box-da-confermare');
     const elenco = document.getElementById('elenco-da-confermare');
@@ -352,7 +332,6 @@ async function caricaDaConfermare() {
     });
 }
 
-// UPLOAD FOTO PROFILO
 function setupPhotoUpload() {
     const photoInput = document.getElementById('photo-upload');
     photoInput.addEventListener('change', async (e) => {
@@ -363,7 +342,6 @@ function setupPhotoUpload() {
             notifica('La foto è troppo grande (più di 25 MB).', 'errore');
             return;
         }
-        // Prima si inquadra: ne esce un JPEG piccolo, con il viso al centro.
         const file = await window.ritagliaFoto(scelta);
         if (!file) return;
 
@@ -389,7 +367,6 @@ function setupPhotoUpload() {
     });
 }
 
-// HELPER: Converte un URL immagine in Base64 per il PDF
 async function getBase64ImageFromUrl(imageUrl) {
     try {
         const res = await fetch(imageUrl);
@@ -407,7 +384,6 @@ async function getBase64ImageFromUrl(imageUrl) {
     }
 }
 
-// GENERAZIONE LIBRETTO PDF (pdfMake)
 async function generatePDFLibretto() {
     if (!currentUserData || !currentLibrettoData) {
         notifica('Attendi il caricamento completo dei dati.', 'attenzione'); return;
@@ -464,29 +440,23 @@ async function generatePDFLibretto() {
             pageSize: 'A4',
             pageMargins: [40, 40, 40, 40],
             content: [
-                // Header (Logo + Titolo)
                 { columns: headerColumns, margin: [0, 0, 0, 15] },
-                // Linea separatrice azzurra
                 { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#3b82f6' }], margin: [0, 0, 0, 20] },
                 
-                // Sezione Profilo
                 { columns: profileColumns, margin: [0, 0, 0, 30] },
                 
-                // TABELLA VISITE MEDICHE
                 { text: 'SORVEGLIANZA SANITARIA', style: 'sectionHeader' },
                 {
                     table: {
                         headerRows: 1,
                         widths: ['*', 'auto', 'auto', 'auto'],
                         body: [
-                            // Intestazione tabella
                             [
                                 { text: 'TIPO VISITA', style: 'tableHeader' }, 
                                 { text: 'DATA ESECUZIONE', style: 'tableHeader' }, 
                                 { text: 'DATA SCADENZA', style: 'tableHeader' }, 
                                 { text: 'ESITO', style: 'tableHeader' }
                             ],
-                            // Righe dati
                             ...(Array.isArray(currentLibrettoData.medical_records) ? currentLibrettoData.medical_records : (currentLibrettoData.medical_record ? [currentLibrettoData.medical_record] : [])).map((m, index, arr) => {
                                 const isLatest = arr.findIndex(x => x.visit_type_id === m.visit_type_id) === index;
                                 const isExpired = new Date(m.expiry_date) < new Date();
@@ -502,7 +472,6 @@ async function generatePDFLibretto() {
                             })
                         ]
                     },
-                    // Stile a righe alternate (zebra) per le tabelle
                     layout: {
                         hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 0 : 1; },
                         vLineWidth: function (i, node) { return 0; },
@@ -514,21 +483,18 @@ async function generatePDFLibretto() {
                     margin: [0, 0, 0, 30]
                 },
 
-                // TABELLA CORSI
                 { text: 'FORMAZIONE E SPECIALIZZAZIONI', style: 'sectionHeader' },
                 {
                     table: {
                         headerRows: 1,
                         widths: ['*', 'auto', 'auto', 'auto'],
                         body: [
-                            // Intestazione tabella
                             [
                                 { text: 'CORSO FREQUENTATO', style: 'tableHeader' }, 
                                 { text: 'ACQUISITO IL', style: 'tableHeader' }, 
                                 { text: 'SCADENZA', style: 'tableHeader' },
                                 { text: 'STATO', style: 'tableHeader' }
                             ],
-                            // Righe dati
                             ...(currentLibrettoData.courses || []).map((c, index, arr) => {
                                 const isLatest = arr.findIndex(x => x.course_id === c.course_id) === index;
                                 const isExpired = c.expiry_date && new Date(c.expiry_date) < new Date();
@@ -570,12 +536,10 @@ async function generatePDFLibretto() {
         console.error("Errore generazione PDF:", error);
         notifica("Si è verificato un errore durante la generazione del PDF. Riprova.", 'errore');
     } finally {
-        // Ripristina il bottone
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
 }
-// CAMBIO PASSWORD (Invariato)
 function setupPasswordForm() {
     const pwdForm = document.getElementById('change-password-form');
     if (pwdForm) {

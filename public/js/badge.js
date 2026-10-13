@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    // Estrae il token dall'URL
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
@@ -21,10 +20,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const data = await response.json();
 
-        // LOG DI DEBUG: Premi F12 nel browser per vedere questi dati!
         console.log("Dati ricevuti dal server ORION:", data);
 
-        // Il tesserino è disattivato (nessuna emergenza attiva): non mostrare alcun dato personale.
+        // Il tesserino non è consultabile: nessun dato personale.
         if (data.available === false) {
             loading.style.display = 'none';
             unavailableMsg.style.display = 'block';
@@ -58,7 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             coursesUl.innerHTML = data.corsi_attivi.map(c => {
                 let textScadenza = 'Nessuna Scadenza';
                 if (c.expiry_date) {
-                    // Forza il formato Europeo: gg/mm/aaaa
                     const d = new Date(c.expiry_date);
                     textScadenza = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
@@ -75,7 +72,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             coursesUl.innerHTML = '<li class="course-item" style="color: var(--danger-text);"><i class="fas fa-times"></i> Nessuna specializzazione in validità.</li>';
         }
 
-        // Timestamp di verifica
         document.getElementById('verify-time').textContent = new Date().toLocaleString('it-IT');
 
         loading.style.display = 'none';

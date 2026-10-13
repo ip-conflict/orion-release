@@ -1,16 +1,9 @@
-// Le quattro cose che servono davvero: consegna, rientro, chi ha cosa, cosa
-// scade e cosa manca. Il resto (anagrafica, impostazioni) sta in una quinta
-// scheda che vede solo il magazziniere.
-//
-// Chi usa questa pagina è un volontario, spesso col telefono in mano e di
-// fretta: ogni schermata fa una cosa sola, in tre passi numerati, e i
-// bersagli da toccare sono grandi. Niente scorciatoie da tastiera, niente
-// tabelle da far scorrere di lato.
+// Chi usa questa pagina ha spesso il telefono in mano e fretta: ogni schermata fa una cosa
+// sola, con bersagli grandi e niente tabelle da far scorrere di lato.
 
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
 
-    // "1 pezzo", "3 pezzi": le altre unità (paia, litri, kit) restano come sono.
     const unitaDi = (n, unita) => (Number(n) === 1 && unita === 'pezzi' ? 'pezzo' : unita || '');
     const ETICHETTE_FAMIGLIA = { dpi: 'DPI', attrezzatura: 'Attrezzatura', veicolo: 'Veicolo' };
     const GRUPPI_TAGLIA = { busto: 'taglie del busto', pantaloni: 'taglie dei pantaloni', scarpe: 'taglie delle scarpe' };
@@ -25,25 +18,19 @@ document.addEventListener('DOMContentLoaded', () => {
         consumo: 'Consumo', smarrimento: 'Smarrimento',
         dismissione: 'Dismissione', rettifica: 'Rettifica'
     };
-    // Le scadenze che ha senso chiedere cambiano con la famiglia: un elmetto non
-    // fa la revisione e una motosega non ha una "scadenza DPI". Proporle tutte
-    // significa far scegliere fra voci che non c'entrano.
     const SCADENZE_PER_TIPO = {
         veicolo: ['revisione', 'assicurazione', 'bollo', 'tagliando'],
         attrezzatura: ['manutenzione', 'verifica_periodica', 'collaudo'],
         dpi: ['scadenza_dpi', 'verifica_periodica']
     };
 
-    // Le unità che si possono frazionare sono le misure (litri, chili, metri):
-    // pezzi, paia, kit e sacchi si contano interi, e le frecce dei campi
-    // scalano di uno. La stessa lista sta in src/magazzino.js, che controlla.
+    // La stessa lista sta in src/magazzino.js, che controlla.
     const UNITA_FRAZIONABILI = [
         'l', 'lt', 'litro', 'litri', 'ml', 'cl', 'hl',
         'kg', 'chilo', 'chili', 'chilogrammi', 'g', 'gr', 'grammi', 'q', 'quintali', 't', 'tonnellate',
         'm', 'mt', 'metro', 'metri', 'cm', 'mm', 'km', 'mq', 'm2', 'm²', 'mc', 'm3', 'm³'
     ];
     const frazionabile = (unita) => UNITA_FRAZIONABILI.includes(String(unita || '').trim().toLowerCase().replace(/\.$/, ''));
-    // Il passo dei campi quantità: un casco si consegna intero.
     const passo = (unita) => (frazionabile(unita) ? '0.01' : '1');
 
     const stato = {
@@ -55,8 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ubicazioni: [],
         scelti: new Map(),     // bene_id -> quantità da consegnare
         rientranti: new Map(), // bene_id -> { quantita, km }
-        // Le opzioni del magazzino che cambiano i moduli (verbale di rientro):
-        // lette una volta, quando servono.
         config: null
     };
 
@@ -67,25 +52,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return stato.config;
     }
 
-    // Dai permessi (src/permessi.js): l'inventario a chi gestisce il magazzino,
-    // consegne e rientri a chi ha il permesso delle consegne.
     const sonoMagazziniere = haPermesso('magazzino.gestione');
     const consegnaERientra = haPermesso('magazzino.consegne');
 
-    // Il bene aperto nella scheda: lo leggono i movimenti e le manutenzioni,
-    // che lavorano su quello e non su una riga dell'elenco.
     let beneCorrente = null;
 
-    // Servizio
-    // Con un'azione (per esempio "Stampa il verbale") l'avviso resta finché non
-    // si fa altro, così il link non si perde.
     let timerAvviso = null;
     function avvisa(testo, genere = 'avviso', azione = null) {
         const box = $('avviso-magazzino');
         box.className = `avviso ${genere === 'avviso' ? '' : genere}`.trim();
         box.textContent = testo;
         if (azione && azione.fai) {
-            // Un'azione nella pagina (per esempio "Consegna questo"), non un collegamento.
             const bottone = document.createElement('button');
             bottone.type = 'button';
             bottone.className = 'azione-avviso';
@@ -108,9 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function nascondiAvviso() { $('avviso-magazzino').hidden = true; }
 
-    // La fotocamera di Android apre il QR dell'etichetta nel browser: se
-    // l'associazione distribuisce l'app, si offre di aprirlo lì. L'app sa da
-    // sola se mostrare la scheda o partire con la consegna.
+    // La fotocamera di Android apre il QR dell'etichetta nel browser: se c'è l'app, si offre di aprirlo lì.
     async function offriApp(codice) {
         if (!/Android/i.test(navigator.userAgent || '')) return;
         try {
@@ -131,8 +106,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Date(valore).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
-    // "fra 3 giorni", "scaduta da 12 giorni": un numero di giorni da solo
-    // obbliga a fare il conto, e chi legge ha fretta.
     function quantoManca(giorni) {
         const n = Number(giorni);
         if (!Number.isFinite(n)) return '';
@@ -154,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return bene.gestione === 'quantita' ? Number(bene.in_magazzino) : 1;
     }
 
-    // Schede
     const pannelli = {
         consegna: $('pannello-consegna'),
         rientro: $('pannello-rientro'),
@@ -185,9 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
         b.addEventListener('click', () => apriScheda(b.dataset.scheda));
     });
 
-    // Caricamento iniziale
-    // Modulo spento: la pagina lo dice una volta sola e si ferma, invece di
-    // mostrare quattro schede vuote e una fila di messaggi d'errore.
     function mostraModuloSpento() {
         nascondiAvviso();
         document.querySelector('.schede-magazzino').hidden = true;
@@ -203,7 +172,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ]);
             stato.beni = beni;
             stato.persone = destinatari.persone;
-            // Squadre e mezzi solo se hanno ancora materiale da far rientrare.
             stato.squadre = destinatari.squadre;
             stato.veicoli = destinatari.veicoli;
             riempiDestinatari();
@@ -215,7 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Il materiale si consegna a una persona.
     function riempiDestinatari() {
         const select = $('destinatario');
         const prima = select.value;
@@ -226,8 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             select.innerHTML = '<option value="">(nessuno disponibile)</option>';
             return;
         }
-        // Nessuno scelto di partenza: chi ha fretta non deve consegnare per
-        // sbaglio alla prima persona dell'elenco.
+        // Nessuno scelto di partenza: chi ha fretta non deve consegnare per sbaglio al primo dell'elenco.
         select.innerHTML = '<option value="">Scegli la persona…</option>';
         voci.forEach(([id, testo]) => {
             const o = document.createElement('option');
@@ -240,9 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
         caricaTagliePersona();
     }
 
-    // Il verbale dipende da cosa si consegna. DPI: con la conferma dei DPI
-    // c'è sempre e non si sceglie, altrimenti si propone se il magazzino lo
-    // prevede. Attrezzature e mezzi: si propone solo se previsto, mai imposto.
     async function aggiornaRigaVerbale() {
         const config = await configMagazzino();
         const tipi = [...stato.scelti.keys()].map(id => stato.beni.find(b => b.id === id)?.tipo).filter(Boolean);
@@ -253,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const riga = $('riga-verbale');
         const appena = riga.hidden;
         riga.hidden = !(scegliDpi || scegliAltro);
-        // Proposto spuntato quando compare; poi resta la scelta di chi consegna.
         if (appena && !riga.hidden) $('genera-verbale').checked = true;
         $('testo-verbale').textContent = dpi && config.conferma_dpi && scegliAltro
             ? 'Mettere nel verbale anche attrezzature e mezzi (i DPI ci sono comunque, con la conferma)'
@@ -261,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('nota-conferma-dpi').hidden = !(dpi && config.conferma_dpi);
     }
 
-    // Lo stesso per il rientro: solo da una persona, e secondo cosa torna.
     async function aggiornaRigaVerbaleRientro() {
         const config = await configMagazzino();
         const persona = $('detentore-rientro').value.startsWith('persona:');
@@ -274,10 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (appena && previsto) $('genera-verbale-rientro').checked = true;
     }
 
-    // Le taglie della persona scelta, dal server: quelle dei DPI che ha già
-    // ricevuto (si dicono sotto il nome) e quelle dedotte da un DPI con la
-    // stessa scala (la polo XL da chi ha la giacca XL). Nel riquadro del DPI
-    // la taglia giusta è segnata.
     stato.taglie = new Map();
     async function caricaTagliePersona() {
         const id = $('destinatario').value;
@@ -298,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     $('destinatario').addEventListener('change', caricaTagliePersona);
     $('destinatario').addEventListener('change', () => aggiornaRiepilogoConsegna());
-    // 'sua' se l'ha già ricevuta per questo DPI, 'probabile' se viene da un altro.
     const taglieUguali = (a, b) => String(a).trim().toUpperCase() === String(b).trim().toUpperCase();
     function suaTaglia(b) {
         const t = b.modello_id && stato.taglie.get(b.modello_id);
@@ -319,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const nomeConTaglia = (b) => b.taglia && !taglieUguali(b.taglia, 'unica') ? `${b.denominazione} ${b.taglia}` : b.denominazione;
 
     function disegnaConsegnabili() {
-        // Ogni parola cercata deve comparire: "giacca xl" trova la giacca in XL.
         const parole = $('cerca-consegna').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
         const contenitore = $('elenco-consegnabili');
         contenitore.innerHTML = '';
@@ -334,7 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Le taglie di uno stesso DPI stanno in un solo riquadro.
         const gruppi = new Map();
         disponibili.forEach(b => {
             const chiave = b.modello_id && b.gestione === 'quantita' ? `m${b.modello_id}` : `b${b.id}`;
@@ -353,7 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
         quantita.min = quantita.step;
         quantita.max = String(quantitaDisponibile(bene));
         quantita.value = stato.scelti.get(bene.id) ?? 1;
-        // Sta dentro l'etichetta della spunta, che dà il nome solo a lei.
         quantita.setAttribute('aria-label', `Quanti: ${bene.denominazione}${bene.taglia ? `, taglia ${bene.taglia}` : ''}`);
         quantita.addEventListener('click', e => e.preventDefault());
         quantita.addEventListener('input', () => {
@@ -363,8 +316,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return quantita;
     }
 
-    // Un DPI a taglie: il nome una volta, le taglie disponibili come pulsanti.
-    // Toccata una taglia, compare il campo per quante.
     function rigaGruppoTaglie(beni) {
         const primo = beni[0];
         const riga = document.createElement('div');
@@ -457,8 +408,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         riga.append(spunta, dettagli, famiglia);
 
-        // Sugli sfusi si sceglie quanti; sui pezzi unici la domanda non
-        // esiste e il campo non compare.
         const quantita = bene.gestione === 'quantita' ? campoQuantita(bene) : null;
         if (quantita) riga.appendChild(quantita);
 
@@ -516,7 +465,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let testo = `${quanti === 1 ? 'Consegnato 1 oggetto' : `Consegnati ${quanti} oggetti`} a ${esito.destinatario}.`;
             if (esito.verbale_id) testo += ` Verbale n. ${esito.verbale_id} pronto.`;
             if (esito.avvisi?.length) testo += ` ${esito.avvisi.join(' ')}`;
-            // Dal verbale si stampa, oppure si allega la foto del foglio firmato.
             const stampa = esito.verbale_id
                 ? { testo: 'Apri il verbale (stampa o foto)', href: `/magazzino-verbale.html?id=${esito.verbale_id}`, nuovaScheda: true }
                 : null;
@@ -565,10 +513,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('riepilogo-rientro').textContent = 'Nessun oggetto scelto.';
         const scelta = $('detentore-rientro').value;
         const contenitore = $('elenco-rientro');
-        // Come per la consegna, il verbale lo firma una persona: una squadra
-        // o un mezzo non firmano. E solo se il magazzino lo ha acceso per
-        // quello che torna (aggiornaRigaVerbaleRientro): di base il rientro è
-        // spunta e registra, niente altro. Acceso, parte spuntato.
         $('riga-verbale-rientro').hidden = true;
         if (!scelta) { contenitore.innerHTML = ''; return; }
 
@@ -610,8 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             riga.append(spunta, dettagli);
 
-            // Sugli sfusi si scrive quanti ne tornano: la differenza il server
-            // la registra come consumo, senza chiedere altro.
             let quantita = null;
             if (bene.gestione === 'quantita') {
                 quantita = document.createElement('input');
@@ -626,10 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 riga.appendChild(quantita);
             }
 
-            // Se ne torna meno di quanto è uscito, il resto va detto: niente
-            // scelta preimpostata, perché qualunque default sarebbe sbagliato
-            // una volta su due (i guanti restano al volontario, i sacchi di
-            // sabbia sono finiti nell'argine).
+            // Niente scelta preimpostata: qualunque default sarebbe sbagliato una volta su due.
             let resto = null;
             if (bene.gestione === 'quantita') {
                 resto = document.createElement('select');
@@ -640,8 +579,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 riga.appendChild(resto);
             }
 
-            // Sui veicoli si chiedono i chilometri: è l'unico momento in cui
-            // qualcuno li ha davvero sotto gli occhi.
             let km = null;
             if (bene.tipo_bene === 'veicolo') {
                 km = document.createElement('input');
@@ -714,8 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const righe = [...stato.rientranti.entries()].map(([bene_id, dati]) => ({
             bene_id, quantita: dati.quantita, km: dati.km, resto: dati.resto
         }));
-        // Da chi rientra: e' il detentore scelto sopra. Il server ne ha
-        // bisogno per scalare il materiale a quantita' a lui, e solo a lui.
+        // Il server ne ha bisogno per scalare il materiale a quantità a lui, e solo a lui.
         const [tipoDetentore, idDetentore] = $('detentore-rientro').value.split(':');
         const da = tipoDetentore && idDetentore ? { tipo: tipoDetentore, id: Number(idDetentore) } : undefined;
         const verbale = tipoDetentore === 'persona' && !$('riga-verbale-rientro').hidden && $('genera-verbale-rientro').checked;
@@ -734,7 +670,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 : null);
             if (esito.verbale_id) segnalaVerbaliSullaScheda();
             if (tipoDetentore !== 'persona') {
-                // Una squadra o un mezzo che ha reso tutto esce dall'elenco.
                 const destinatari = await fetchApi('/api/magazzino/destinatari');
                 stato.squadre = destinatari.squadre;
                 stato.veicoli = destinatari.veicoli;
@@ -760,7 +695,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchApi('/api/magazzino/modelli?nascosti=1').catch(() => [])
             ]);
             detentoriCaricati = righe;
-            // Solo le categorie e i modelli di cui qualcosa è fuori: le altre voci darebbero un elenco vuoto.
             const presenti = new Set(righe.flatMap(r => [`c:${r.categoria_id || 0}`, r.modello_id ? `m:${r.modello_id}` : null]));
             riempiFiltroCategoria($('filtro-categoria-detentori'), categorie, modelliDpi, '', presenti);
             disegnaChiHaCosa();
@@ -785,8 +719,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Raggruppato per detentore: la domanda è "chi ha cosa", non
-        // "quale oggetto sta dove".
         const gruppi = new Map();
         righe.forEach(r => {
             const chiave = r.destinatario_nome || 'Destinatario non indicato';
@@ -809,7 +741,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 const quantita = c.gestione === 'quantita' ? ` x${Number(c.quantita)} ${unitaDi(Number(c.quantita), c.unita_misura)}` : '';
                 const matricola = c.matricola ? ` (${c.matricola})` : '';
-                // La taglia: è quella che serve per sostituirlo o riconsegnarne uno uguale.
                 const taglia = c.taglia && c.taglia !== 'Unica' ? ` · taglia ${c.taglia}` : '';
                 li.textContent = `${c.denominazione}${taglia}${matricola}${quantita} — dal ${dataBreve(c.da_quando)}`;
                 elenco.appendChild(li);
@@ -877,8 +808,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Il pallino rosso sulla scheda: si deve vedere che c'è da guardare senza
-    // dover aprire.
     async function segnalaScadenzeSullaScheda() {
         try {
             const scadenze = await fetchApi('/api/magazzino/scadenze?giorni=15');
@@ -889,17 +818,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sonoMagazziniere) {
         document.querySelectorAll('.solo-magazziniere').forEach(e => { e.hidden = false; });
     }
-    // Senza il permesso delle consegne niente Consegna e Rientro: si parte da "Chi ha cosa".
     if (!consegnaERientra) {
         document.querySelectorAll('.schede-magazzino .scheda[data-scheda="consegna"], .schede-magazzino .scheda[data-scheda="rientro"]')
             .forEach(b => { b.hidden = true; });
         apriScheda('chi-ha-cosa');
     }
 
-    // Il filtro per categoria: le categorie del tipo scelto e, sotto quelle
-    // dei DPI, i singoli modelli a taglie ("Calzature" e, dentro, "Scarpe
-    // antinfortunistiche"). Valori: "c:<id>" categoria (0 = senza), "m:<id>" modello.
-    // [presenti], se c'è, limita le voci a quelle che hanno qualcosa da mostrare.
+    // Valori: "c:<id>" categoria (0 = senza), "m:<id>" modello. [presenti] limita le voci a
+    // quelle con qualcosa da mostrare.
     function riempiFiltroCategoria(select, categorie, modelliDpi, tipo, presenti = null) {
         const prima = select.value;
         const c = (v) => !presenti || presenti.has(v);
@@ -921,7 +847,6 @@ document.addEventListener('DOMContentLoaded', () => {
         select.value = [...select.options].some(o => o.value === prima) ? prima : '';
     }
 
-    // Un bene (o un modello, o una riga di "chi ha cosa") rientra nel filtro?
     function corrispondeCategoria(voce, valore) {
         if (!valore) return true;
         const id = Number(valore.slice(2));
@@ -955,12 +880,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const contenitore = $('elenco-inventario');
         contenitore.innerHTML = '';
 
-        // Le taglie dei DPI a taglie stanno nei loro riquadri qui sopra.
         const categoria = $('filtro-categoria').value;
         const righe = stato.beni
             .filter(b => !b.modello_id)
             .filter(b => !tipo || b.tipo === tipo)
-            // Scegliendo un modello di DPI a taglie qui sotto non resta niente: è nel suo riquadro.
             .filter(b => !categoria.startsWith('m:') && corrispondeCategoria(b, categoria))
             .filter(b => !cerca || `${b.denominazione} ${b.matricola || ''} ${b.categoria || ''}`.toLowerCase().includes(cerca));
 
@@ -991,8 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Il foglio delle etichette stampa quello che si sta guardando, non tutto
-    // il magazzino: i filtri dell'inventario viaggiano nell'indirizzo.
+    // I filtri dell'inventario viaggiano nell'indirizzo: le etichette stampano quello che si guarda.
     function aggiornaLinkEtichette() {
         const p = new URLSearchParams();
         if ($('filtro-tipo').value) p.set('tipo', $('filtro-tipo').value);
@@ -1006,13 +928,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('cerca-inventario').addEventListener('input', () => { disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette(); });
     $('filtro-tipo').addEventListener('change', () => {
-        // Le categorie cambiano col tipo: una scelta che non c'è più si azzera.
         riempiFiltroCategoria($('filtro-categoria'), stato.categorie || [], modelli, $('filtro-tipo').value);
         disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette();
     });
     $('filtro-categoria').addEventListener('change', () => { disegnaInventario(); disegnaModelli(); aggiornaLinkEtichette(); });
 
-    // DPI a taglie
     let modelli = [];
     const numero = (v) => { const n = Number(v); return Number.isInteger(n) ? n : Math.round(n * 100) / 100; };
 
@@ -1030,7 +950,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const cerca = $('cerca-inventario').value.trim().toLowerCase();
         const tipo = $('filtro-tipo').value;
         box.innerHTML = '';
-        // Sono DPI: con il filtro su attrezzature o veicoli non c'entrano.
         const categoria = $('filtro-categoria').value;
         const visibili = tipo && tipo !== 'dpi' ? [] : modelli
             .filter(m => categoria.startsWith('m:') ? String(m.id) === categoria.slice(2) : corrispondeCategoria(m, categoria))
@@ -1063,8 +982,6 @@ document.addEventListener('DOMContentLoaded', () => {
         totale.textContent = `${numero(inCasa)} ${unitaDi(numero(inCasa), m.unita_misura)}` + (fuori ? ` · ${numero(fuori)} fuori` : '');
         testa.append(titolo, totale);
 
-        // Una casella per taglia, nell'ordine del modello. Toccandola si apre
-        // la scheda di quella taglia: movimenti, scadenze, etichetta.
         const taglie = document.createElement('div');
         taglie.className = 'taglie-modello';
         m.taglie.forEach(t => {
@@ -1102,7 +1019,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modifica.type = 'button';
         modifica.textContent = 'Modifica';
         modifica.addEventListener('click', () => apriModaleModello('modifica', m));
-        // Le etichette di tutte le taglie, una per scomparto dello scaffale.
         const etichette = document.createElement('a');
         etichette.href = `/magazzino-etichette.html?modello=${m.id}`;
         etichette.target = '_blank';
@@ -1117,8 +1033,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('mostra-modelli-nascosti').addEventListener('change', () => caricaModelli().catch(e => avvisa(e.message, 'errore')));
 
-    // Una finestra sola per tre cose: nuovo DPI (nome, taglie e quantità
-    // iniziali), modifica (nome, categoria, taglie) e carico (solo quantità).
     let modaleModello = { modo: 'nuovo', modello: null };
 
     function taglieDalCampo() {
@@ -1282,10 +1196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // I miei avvisi via email
-    // Le impostazioni qui sopra valgono per l'associazione, queste solo per
-    // chi è collegato: due blocchi vicini che fanno cose diverse, quindi il
-    // titolo lo dice ("I tuoi avvisi") e la nota pure.
     function mostraAvvisi(avvisi) {
         $('avvisi-attivo').checked = !!avvisi.attivo;
         $('avvisi-frequenza').value = avvisi.frequenza;
@@ -1314,9 +1224,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Una prova serve a sapere se la posta funziona prima di fidarsi: la
-    // configurazione SMTP sbagliata si scopre così, non fra un mese quando una
-    // revisione è scaduta e l'email non è mai arrivata.
     $('btn-prova-avvisi').addEventListener('click', async (evento) => {
         const pulsante = evento.currentTarget;
         pulsante.disabled = true;
@@ -1337,8 +1244,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let verbaliCaricati = [];
     let movimentiCaricati = [];
-    // Due elenchi lunghi nella stessa scheda: si mostrano i più recenti e il
-    // resto a richiesta, altrimenti il registro finisce sotto duecento verbali.
     const PASSO_VERBALI = 12;
     const PASSO_MOVIMENTI = 50;
     let quantiVerbali = PASSO_VERBALI;
@@ -1458,8 +1363,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cerca-movimenti').addEventListener('input', daCapoMovimenti);
     $('filtro-movimenti').addEventListener('change', daCapoMovimenti);
 
-    // Il pallino sulla scheda: ci sono consegne che il volontario non ha
-    // ancora confermato.
     async function segnalaVerbaliSullaScheda() {
         if (!sonoMagazziniere) return;
         try {
@@ -1501,8 +1404,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return b;
     }
 
-    // Una voce del catalogo che si modifica sul posto: niente finestre in più
-    // per cambiare una parola.
     function voceCatalogo({ nome, sottotitolo, aRiposo, modifica, elimina, eliminabile, perche }) {
         const voce = document.createElement('div');
         voce.className = 'voce-catalogo' + (aRiposo ? ' a-riposo' : '');
@@ -1684,7 +1585,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { avvisa(err.message, 'errore'); }
     });
 
-    // Scheda di un bene
     function riempiSelect(select, voci, vuoto, attuale = null) {
         select.innerHTML = `<option value="">${vuoto}</option>`;
         voci.filter(v => v.attiva !== false || v.id === attuale).forEach(v => {
@@ -1706,8 +1606,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('campo-quantita').hidden = gestione !== 'quantita';
         $('campo-unita').hidden = gestione !== 'quantita';
         if (veicolo) {
-            // Un veicolo è sempre un esemplare solo: il menu lo dice e non
-            // lascia scegliere l'opzione che poi il server rifiuterebbe.
             $('bene-gestione').value = 'singolo';
             $('bene-gestione').disabled = true;
         } else {
@@ -1731,10 +1629,6 @@ document.addEventListener('DOMContentLoaded', () => {
             data.dataset.scadenza = tipo;
             if (valori[tipo]?.scadenza) data.value = String(valori[tipo].scadenza).slice(0, 10);
 
-            // La periodicità accanto alla data: "scade il 5 ottobre, ogni 12
-            // mesi" è una frase sola, e messa in un campo lontano nessuno la
-            // compilerebbe. Lasciandola vuota la scadenza resta una tantum,
-            // come prima.
             const ogni = document.createElement('span');
             ogni.className = 'ogni';
             ogni.textContent = 'ogni';
@@ -1758,8 +1652,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('bene-unita').addEventListener('input', () => { $('bene-quantita').step = passo($('bene-unita').value); });
     $('bene-gestione').addEventListener('change', adattaCampiAlTipo);
 
-    // Le categorie si offrono per il tipo scelto: un veicolo nella categoria
-    // "Calzature" non lo cerca nessuno.
     function riempiCategorie(attuale = null) {
         const tipo = $('bene-tipo').value;
         riempiSelect($('bene-categoria'), stato.categorie.filter(c => c.tipo === tipo || c.id === attuale), '(senza categoria)');
@@ -1781,7 +1673,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('bene-tipo').disabled = false;
         $('storia-bene').hidden = true;
         $('documenti-bene').hidden = true;
-        // Un bene che non esiste ancora non si può movimentare né manutenere.
         beneCorrente = null;
         $('azioni-bene').hidden = true;
         $('manutenzioni-bene').hidden = true;
@@ -1789,9 +1680,6 @@ document.addEventListener('DOMContentLoaded', () => {
         apriModaleBene();
     });
 
-    // I documenti dell'archivio del gruppo collegati a un bene: il libretto
-    // d'uso e manutenzione, prima di tutto. Si aprono in un'altra scheda.
-    // [modifica]: chi tiene l'archivio o il magazzino li toglie con la x.
     async function disegnaDocumentiBene(id, box, modifica = false) {
         box.replaceChildren();
         let documenti = [];
@@ -1825,8 +1713,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return documenti.length;
     }
 
-    // I documenti nella scheda del bene: chi tiene l'archivio o il magazzino li
-    // collega dall'archivio o carica il libretto da qui, anche per i beni uguali.
     const puoCollegare = () => haPermesso('gruppo.documenti', 'magazzino.gestione');
     async function mostraDocumentiBene(bene) {
         if (!bene) return;
@@ -1898,8 +1784,6 @@ document.addEventListener('DOMContentLoaded', () => {
             $('bene-gestione').value = bene.gestione;
             $('bene-gestione').disabled = true;
             $('bene-denominazione').value = bene.denominazione;
-            // Una taglia di un DPI a taglie prende nome e categoria dal suo
-            // modello: si cambiano da lì, per tutte le taglie insieme.
             $('bene-denominazione').readOnly = !!bene.modello_id;
             $('bene-denominazione').title = bene.modello_id ? 'Il nome si cambia dal DPI a taglie, per tutte le taglie insieme.' : '';
             $('bene-matricola').value = bene.matricola || '';
@@ -1934,20 +1818,15 @@ document.addEventListener('DOMContentLoaded', () => {
             $('storia-bene').hidden = false;
             await mostraDocumentiBene(bene);
 
-            // Movimenti e manutenzioni sono cose da magazziniere: chi non lo è
-            // la scheda non la apre nemmeno, ma il controllo sta anche qui.
+            // La scheda chi non è magazziniere non la apre nemmeno, ma il controllo sta anche qui.
             chiudiFormMovimento();
             $('form-intervento').hidden = true;
             $('azioni-bene').hidden = !sonoMagazziniere;
             $('manutenzioni-bene').hidden = !sonoMagazziniere;
 
             if (sonoMagazziniere) {
-                // Un bene già dismesso non si movimenta più: i pulsanti che
-                // non porterebbero a niente non si mostrano.
                 const dismesso = !!bene.dismesso_il;
                 document.querySelectorAll('.azione-movimento').forEach(b => {
-                    // La rettifica corregge una giacenza: su un pezzo unico,
-                    // che è uno per definizione, non vuol dire niente.
                     const soloSfusi = b.dataset.movimento === 'rettifica' && bene.gestione !== 'quantita';
                     b.hidden = dismesso || soloSfusi;
                 });
@@ -1969,8 +1848,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function chiudiModaleBene() { $('modale-bene').hidden = true; }
 
-    // "Consegna questo": dalla scheda di un bene, o dal QR della sua etichetta,
-    // la consegna si apre con il bene già scelto. Resta da dire a chi va.
     function consegnabile(id) {
         return consegnaERientra && stato.beni.some(b => b.id === id && b.disponibile && !b.dismesso_il && quantitaDisponibile(b) > 0);
     }
@@ -1982,7 +1859,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         chiudiModaleBene();
         apriScheda('consegna');
-        // Si consegna da qui: l'offerta di aprirlo nell'app non serve più.
         $('apri-in-app').hidden = true;
         $('cerca-consegna').value = '';
         stato.scelti.set(id, 1);
@@ -2043,8 +1919,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Movimenti sulla scheda di un bene: dismissione, manutenzione,
-    // smarrimento, rettifica.
     const MOVIMENTI = {
         carico: {
             titolo: 'Quante unità entrano in magazzino',
@@ -2089,9 +1963,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('etichetta-nota-movimento').textContent = config.nota;
         $('movimento-nota').value = '';
 
-        // Su un pezzo unico la quantità è sempre 1 e chiederla è un campo in
-        // più da sbagliare. L'unica eccezione è la rettifica, che sui pezzi
-        // unici non ha senso e infatti non si propone.
         const sfuso = bene.gestione === 'quantita';
         $('campo-quantita-movimento').hidden = !sfuso;
         $('etichetta-quantita-movimento').textContent = `${config.titolo} (${bene.unita_misura})`;
@@ -2122,8 +1993,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (config.notaObbligatoria && !nota) {
             return avvisa(`Per questa operazione serve una spiegazione: ${config.nota.toLowerCase()}.`, 'errore');
         }
-        // Chiedere conferma solo dove serve: la dismissione è l'unica che non
-        // si annulla con un movimento contrario.
+        // Conferma solo per la dismissione, l'unica che non si annulla con un movimento contrario.
         if (movimentoScelto === 'dismissione' &&
             !confirm(`"${beneCorrente.denominazione}" uscirà dagli elenchi del magazzino. La sua storia resta. Procedo?`)) {
             return;
@@ -2145,7 +2015,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Manutenzioni
     function disegnaInterventi(interventi) {
         const box = $('elenco-interventi');
         box.innerHTML = '';
@@ -2199,12 +2068,8 @@ document.addEventListener('DOMContentLoaded', () => {
             o.textContent = ETICHETTE_SCADENZA[t] || t;
             select.appendChild(o);
         });
-        // La data di oggi già compilata: si registra quasi sempre l'intervento
-        // appena fatto, e una data vuota è un campo in più da riempire.
         $('intervento-data').value = new Date().toISOString().slice(0, 10);
 
-        // Se la scadenza ha già una periodicità la si ripropone, così non va
-        // ridigitata a ogni giro.
         const scadenzaEsistente = (beneCorrente.scadenze || []).find(x => x.tipo === select.value);
         $('intervento-periodicita').value = scadenzaEsistente?.periodicita_mesi || '';
     });
@@ -2237,7 +2102,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Barra laterale e avvio
     (async () => {
         try {
             const impostazioni = await fetch('/api/branding/settings').then(r => r.json());
@@ -2251,19 +2115,13 @@ document.addEventListener('DOMContentLoaded', () => {
         await caricaTutto();
         segnalaVerbaliSullaScheda();
 
-        // Una scheda precisa dall'indirizzo (?scheda=registro): ci si torna dal
-        // verbale stampato, e ci arrivano i collegamenti dalle altre pagine.
         const schedaChiesta = new URLSearchParams(window.location.search).get('scheda');
         const bottoneScheda = schedaChiesta && document.querySelector(`.schede-magazzino .scheda[data-scheda="${CSS.escape(schedaChiesta)}"]`);
         if (bottoneScheda && !bottoneScheda.hidden && $('modulo-spento').hidden) apriScheda(schedaChiesta);
 
-        // Arrivo da un QR: si apre direttamente la scheda del bene inquadrato.
-        // Il codice sta nell'indirizzo, così la fotocamera di qualunque
-        // telefono basta e non serve un'applicazione.
+        // Il codice sta nell'indirizzo: basta la fotocamera di qualunque telefono.
         const parametri = new URLSearchParams(window.location.search);
 
-        // Arrivo dal fascicolo di un volontario: la consegna si apre già
-        // puntata su di lui, che è la ragione per cui si è cliccato.
         const persona = parseInt(parametri.get('persona'), 10);
         if (persona) {
             const select = $('destinatario');
@@ -2284,16 +2142,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     await caricaInventario();
                     await apriSchedaBene(id);
                 } else {
-                    // Chi non tiene l'inventario non ha la scheda, ma la
-                    // domanda che si fa inquadrando un'etichetta è "cos'è
-                    // questo e chi ce l'ha": quella si può rispondere lo stesso.
                     const bene = await fetchApi(`/api/magazzino/beni/${id}`);
                     const dove = bene.disponibile
                         ? 'in magazzino'
                         : `presso ${bene.destinatario_nome || 'un detentore non indicato'}`;
                     avvisa(`${bene.denominazione}${bene.matricola ? ` (${bene.matricola})` : ''} — ${dove}.`, 'avviso',
                         consegnabile(id) ? { testo: 'Consegna questo', fai: () => consegnaQuesto(id) } : null);
-                    // E il suo libretto, che è l'altra cosa che si cerca col bene in mano.
                     $('documenti-qr').hidden = !(await disegnaDocumentiBene(bene.id, $('documenti-qr')));
                 }
             } catch (e) {

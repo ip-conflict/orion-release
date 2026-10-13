@@ -1,6 +1,3 @@
-// Caricamento dei file: cartelle, limiti, e il controllo che il contenuto
-// sia davvero quello che dichiara di essere.
-
 import crypto from 'crypto';
 import fs from 'fs';
 import logger from './logger.js';
@@ -33,7 +30,6 @@ const storage = multer.diskStorage({
     }
 });
 
-// Certificati: solo PDF e immagini, fino a 30 MB.
 const fileFilter = (req, file, cb) => {
     const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     if (allowedMimeTypes.includes(file.mimetype)) {
@@ -50,8 +46,7 @@ export const uploadCertificate = multer({
     limits: { fileSize: 30 * 1024 * 1024 } // 30 MegaBytes di limite tassativo
 });
 
-// I documenti del magazzino (verbali di manutenzione, fatture): cartella a
-// parte perché i permessi sono diversi da quelli dei fascicoli.
+// Cartella a parte: i permessi sono diversi da quelli dei fascicoli.
 export const magazzinoDir = path.join(__dirname, '..', 'protected_uploads', 'magazzino');
 if (!fs.existsSync(magazzinoDir)) {
     fs.mkdirSync(magazzinoDir, { recursive: true });
@@ -69,7 +64,6 @@ export const uploadDocumentoMagazzino = multer({
     limits: { fileSize: 30 * 1024 * 1024 }
 });
 
-// I fogli firmati dei verbali: si leggono solo con i permessi del verbale.
 export const verbaliDir = path.join(magazzinoDir, 'verbali');
 fs.mkdirSync(verbaliDir, { recursive: true });
 export const uploadScansioneVerbale = multer({
@@ -86,7 +80,6 @@ export const uploadScansioneVerbale = multer({
     limits: { fileSize: 20 * 1024 * 1024 }
 });
 
-// Un backup caricato da fuori entra nella cartella dei backup come gli altri.
 // Il contenuto lo verifica src/manutenzione.js prima di usarlo.
 export const uploadArchivioBackup = multer({
     storage: multer.diskStorage({
@@ -111,7 +104,6 @@ const photoStorage = multer.diskStorage({
         cb(null, dir);
     },
     filename: (req, file, cb) => {
-        // Nome casuale e non indovinabile.
         cb(null, `user_${crypto.randomBytes(24).toString('hex')}${path.extname(file.originalname).toLowerCase()}`);
     }
 });
@@ -125,7 +117,6 @@ export const uploadPhoto = multer({
     }
 });
 
-// Immagini delle segnalazioni, fogli per l'importazione, documenti delle emergenze, loghi.
 const protectedImagesDir = path.join(__dirname, '..', 'protected_uploads', 'images');
 if (!fs.existsSync(protectedImagesDir)) fs.mkdirSync(protectedImagesDir, { recursive: true });
 
@@ -207,8 +198,7 @@ const LOGO_FILENAME = 'logo.png';
 export const LOGO_FILE_PATH = path.join(publicDir, LOGO_FILENAME);
 export const LOGO_URL_PATH = `/${LOGO_FILENAME}`;
 
-// I loghi arrivano in un file temporaneo e sostituiscono quello attuale solo
-// dopo la verifica: un file rifiutato non deve portarsi via il logo buono.
+// Il logo nuovo prende il posto del vecchio solo dopo la verifica.
 const storageLogo = multer.diskStorage({
     destination: (req, file, cb) => cb(null, publicDir),
     filename: (req, file, cb) => {
@@ -222,7 +212,6 @@ export const uploadLogoMulter = multer({
     fileFilter: imageFileFilter // Riusiamo lo stesso filtro per le immagini
 });
 
-// Il secondo logo (l'ente sovraordinato), per il tesserino.
 const LOGO2_FILENAME = 'logo2.png';
 export const LOGO2_FILE_PATH = path.join(publicDir, LOGO2_FILENAME);
 export const LOGO2_URL_PATH = `/${LOGO2_FILENAME}`;
@@ -240,8 +229,7 @@ export const uploadLogo2Multer = multer({
     fileFilter: imageFileFilter
 });
 
-// Il tipo dichiarato dal browser non conta: il tipo vero si legge dai primi
-// byte del file salvato, prima di servirlo o usarlo.
+// Il tipo vero si legge dai primi byte del file salvato, non da quello dichiarato dal browser.
 
 async function detectRealFileType(filePath) {
     try {
@@ -260,7 +248,6 @@ export function cleanupRejectedFiles(files) {
     });
 }
 
-// true se il file va bene (o non c'è); altrimenti lo cancella e risponde 400.
 export async function verifySingleUploadedImage(req, res, allowedMimeTypes) {
     if (!req.file) return true;
     const detected = await detectRealFileType(req.file.path);
@@ -287,8 +274,7 @@ export async function verifyMultipleUploadedImages(req, res, allowedMimeTypes) {
     return true;
 }
 
-// I documenti binari devono avere la firma attesa; CSV e TXT, che non ne
-// hanno, passano solo se non somigliano a nessun formato binario noto.
+// CSV e TXT, che non hanno firma, passano solo se non somigliano a un formato binario noto.
 export async function verifyDocumentUpload(req, res) {
     if (!req.file) return true;
     const allowedBinaryTypes = [
@@ -321,7 +307,6 @@ export async function verifyExcelUpload(filePath, originalname) {
     const detected = await detectRealFileType(filePath);
     if (ext === '.csv') return !detected;
     const allowedBinaryTypes = [
-        // Il vecchio .xls passa di qui: più avanti si respinge spiegando come salvarlo.
         'application/x-cfb', // .xls legacy
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
         'application/zip'
@@ -336,8 +321,6 @@ if (!fs.existsSync(publicDir)) {
     logger.info(`Cartella creata: ${publicDir}`);
 }
 
-// Le foto profilo si vedono solo con una sessione; il tesserino pubblico le
-// mostra tramite il proprio token, quando è consultabile.
 const CARTELLA_FOTO = path.resolve(__dirname, '..', 'uploads', 'photos');
 
 export function inviaFoto(res, nomeFile) {

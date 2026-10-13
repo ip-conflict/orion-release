@@ -1,23 +1,19 @@
-// Quello che serve solo all'app Android: il contesto (chi sono, cosa posso
-// fare) e la coda di notifiche per persona. Per il resto l'app usa le rotte del web.
+// Solo per l'app Android: il contesto e la coda di notifiche per persona.
 
 import fs from 'fs';
 import path from 'path';
 import { haPermesso } from './permessi.js';
 
-// Il formato delle risposte: si incrementa solo per cambi che rompono l'app.
+// Si incrementa solo per cambi che rompono l'app.
 export const VERSIONE_CONTRATTO = 1;
 
-// Ogni quanto l'app chiusa controlla la coda: un'ora, un quarto d'ora durante
-// un'emergenza (il minimo di Android, che raggruppa questi controlli).
+// Un quarto d'ora è il minimo di Android, che raggruppa questi controlli.
 const MINUTI_CONTROLLO_PERIODICO = 60;
 const MINUTI_CONTROLLO_IN_EMERGENZA = 15;
 
-// Le lette restano un mese, le mai lette tre; chi ha una scadenza sparisce prima.
 const GIORNI_TENUTA_LETTE = 30;
 const GIORNI_TENUTA_NON_LETTE = 90;
 
-// La categoria di ogni tipo: sul telefono ognuna ha il suo canale.
 const CATEGORIE_NOTIFICHE = ['emergenza', 'personale', 'segreteria', 'magazzino'];
 const CATEGORIA_DEL_TIPO = {
     emergenza_aperta: 'emergenza',
@@ -37,22 +33,17 @@ const CATEGORIA_DEL_TIPO = {
     prova: 'personale'
 };
 
-// Una notifica che non è ancora scaduta.
 const VALIDA = '(scade_il IS NULL OR scade_il > NOW())';
 
-// La coda di notifiche, separata dalle rotte: la usano anche magazzino e scadenze.
 export function creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni = null, inSimulazione = () => false }) {
 
-    // Mette una notifica nella coda e la consegna subito a chi è collegato.
     // Non lancia: restituisce la notifica o null (doppione o errore).
-    // oreValidita: dopo quante ore non ha più senso.
     async function notifica(userId, { tipo, titolo, testo = null, riferimento = null, chiave = null, categoria = null, oreValidita = null }, esecutore = pool) {
         if (!userId || !tipo || !titolo) {
             logger.error('[Notifiche] Notifica incompleta, scartata:', { userId, tipo, titolo });
             return null;
         }
         const cat = CATEGORIE_NOTIFICHE.includes(categoria) ? categoria : (CATEGORIA_DEL_TIPO[tipo] || 'personale');
-        // Durante una simulazione in sala ogni avviso dell'emergenza lo dice nel titolo.
         if (cat === 'emergenza' && inSimulazione() && !String(titolo).startsWith('[SIMULAZIONE]')) titolo = `[SIMULAZIONE] ${titolo}`;
         try {
             const r = await esecutore.query(
@@ -78,7 +69,6 @@ export function creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni = nu
         if (typeof avvisaUtente === 'function' && creata) {
             avvisaUtente(userId, 'notifica', { notifica: creata });
         }
-        // Con Firebase configurato: il segnale ai telefoni che non ascoltano il server.
         if (typeof svegliaTelefoni === 'function' && creata) svegliaTelefoni(userId);
     }
 
@@ -89,8 +79,6 @@ export function creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni = nu
         return n;
     }
 
-    // Fa scadere subito quello che ha perso significato, per tipo, categoria,
-    // riferimento o persona.
     async function scadi({ tipo = null, categoria = null, riferimento = null, userId = null, prefissoChiave = null } = {}) {
         try {
             const r = await pool.query(
@@ -127,8 +115,6 @@ export function creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni = nu
     return { notifica, notificaA, scadi, consegna, pulisci };
 }
 
-// La coda di una persona: le ultime 50, o quelle dopo "dopo" in ordine
-// crescente. La leggono l'app con la sessione e il telefono col token degli avvisi.
 export async function leggiNotifiche(pool, userId, dopo = null) {
     const elenco = dopo === null
         ? await pool.query(
@@ -144,8 +130,6 @@ export async function leggiNotifiche(pool, userId, dopo = null) {
     return { notifiche: elenco.rows, non_lette: nonLette.rows[0].n };
 }
 
-// L'APK nella cartella app-android, con versione.json: la versione e la più
-// vecchia che questo server accetta.
 export function leggiVersioneApp(cartella, logger) {
     try {
         const grezzo = fs.readFileSync(path.join(cartella, 'versione.json'), 'utf8');
@@ -166,13 +150,11 @@ export function leggiVersioneApp(cartella, logger) {
     }
 }
 
-// app_android_enabled: se l'app è a disposizione del personale (di base sì).
 export async function appDistribuita(pool) {
     const r = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'app_android_enabled'");
     return r.rowCount === 0 || String(r.rows[0].setting_value) !== 'false';
 }
 
-// Rotte
 export function registraRotteApp(app, ctx) {
     const {
         pool, logger, haRuolo, ruoliDi, ruoloPrincipale,
@@ -187,30 +169,20 @@ export function registraRotteApp(app, ctx) {
         try { return JSON.parse(grezzo); } catch { return grezzo; }
     }
 
-    // Cosa può fare questa persona: l'app mostra solo questo, ma decidono le rotte.
-    // L'emergenza la vede nell'app solo chi è in una squadra: gli altri non
-    // c'entrano finché il centro operativo non li mette in squadra. Gli esterni
-    // esistono solo per l'emergenza e la vedono sempre, anche in attesa di squadra.
-    // L'archivio dei documenti lo consultano tutti gli interni.
+    // L'app mostra solo questo, ma decidono le rotte. L'emergenza la vede solo chi è in
+    // squadra; gli esterni sempre, anche in attesa di squadra.
     function capacita(req, moduli, inSquadra, inSala = false, regia = false) {
         const esterno = ruoliDi(req.user).includes('esterno');
         const elenco = [];
-        // La squadra COC: in sala si seguono tutte le segnalazioni, anche dall'app.
         if (inSala) elenco.push('emergenza.sala');
-        // La regia di una simulazione in sala: dal telefono annota le osservazioni.
         if (regia) elenco.push('regia');
         if (esterno) {
             elenco.push('emergenza');
-            // I documenti del gruppo segnati per l'emergenza (il piano comunale).
             if (emergenzaAttiva()) elenco.push('documenti');
         } else {
             elenco.push('io', 'documenti');
             if (inSquadra) elenco.push('emergenza');
-            // Il calendario con le attività e le scadenze, a modulo acceso.
             if (moduli.attivita) elenco.push('calendario');
-            // Dai permessi (permessi.js): consegna e rientro a chi ha quello delle
-            // consegne, l'inventario a chi gestisce il magazzino, la segreteria a
-            // chi gestisce visite e corsi.
             if (moduli.magazzino && haPermesso(req, 'magazzino.consegne')) elenco.push('magazzino.consegna');
             if (moduli.magazzino && haPermesso(req, 'magazzino.gestione')) elenco.push('magazzino.inventario');
             if (moduli.segreteria && haPermesso(req, 'volontari.sanitario')) elenco.push('segreteria');
@@ -218,7 +190,6 @@ export function registraRotteApp(app, ctx) {
         return elenco;
     }
 
-    // Il web, dopo un accesso da Android, chiede se proporre l'app.
     app.get('/api/app/offerta', async (req, res) => {
         try {
             const versione = leggiVersioneApp(cartellaApk, logger);
@@ -239,7 +210,6 @@ export function registraRotteApp(app, ctx) {
                 impostazione('segreteria_config'),
                 impostazione('association_name'),
                 pool.query(
-                    // Con il caposquadra: l'app dice chi manda la posizione della squadra.
                     `SELECT s.id, s.nome, s.nome_radio, s.coc, sm.caposquadra AS sono_caposquadra,
                             (SELECT json_build_object('username', c.username, 'nome', c.nome, 'cognome', c.cognome)
                                FROM squadra_membri c WHERE c.squadra_id = s.id AND c.caposquadra LIMIT 1) AS caposquadra
@@ -261,8 +231,6 @@ export function registraRotteApp(app, ctx) {
             };
             const configMagazzino = moduli.magazzino ? await leggiConfigMagazzino() : null;
             const emergenza = emergenzaAttiva();
-            // Le funzioni di supporto di cui fa parte, con gli incarichi ancora
-            // aperti in questa emergenza: l'app mostra "Le mie attività".
             const funzioniAccese = String(funzioniAcceso) === 'true';
             const mieFunzioni = funzioniAccese ? (await pool.query(`
                 SELECT f.id, f.sigla, f.nome, m.referente,
@@ -272,7 +240,6 @@ export function registraRotteApp(app, ctx) {
                 WHERE m.user_id = $1 AND f.attiva ORDER BY f.ordine, f.sigla`, [req.user.id, emergenza?.id ?? null])).rows : [];
             const versioneApp = await appDistribuita(pool) ? leggiVersioneApp(cartellaApk, logger) : null;
             const ruoli = ruoliDi(req.user);
-            // Chi conduce la simulazione aperta: chi organizza, il responsabile, la regia.
             const regia = emergenza?.simulazione === true && emergenza.attivita_id && !ruoli.includes('esterno')
                 && (haPermesso(req, 'gruppo.attivita') || (await pool.query(
                     `SELECT 1 FROM attivita a WHERE a.id = $1 AND (a.responsabile_id = $2
@@ -298,9 +265,7 @@ export function registraRotteApp(app, ctx) {
                     cognome: req.user.cognome || null,
                     ruoli,
                     ruolo_principale: ruoloPrincipale(ruoli),
-                    // Cosa può fare oltre alla base (permessi.js): l'app lo mostra nel profilo.
                     permessi: req.user.permessi || [],
-                    // Gli esterni temporanei: l'app dice fino a quando vale.
                     temporaneo: anagrafica.rows[0]?.temporaneo === true,
                     ente: anagrafica.rows[0]?.ente || null
                 },
@@ -318,7 +283,6 @@ export function registraRotteApp(app, ctx) {
                     codice: emergenza.code,
                     nome: emergenza.name || null,
                     inizio: emergenza.start_time || null,
-                    // Una simulazione in sala: l'app la segna su ogni schermata.
                     simulazione: emergenza.simulazione === true,
                     attivita_id: emergenza.attivita_id ?? null
                 } : null,
@@ -326,8 +290,7 @@ export function registraRotteApp(app, ctx) {
                 funzioni: funzioniAccese ? { mie: mieFunzioni } : null,
                 notifiche: {
                     non_lette: nonLette.rows[0].n,
-                    // In emergenza più spesso per tutti: chi viene messo in
-                    // squadra lo deve sapere presto anche ad app chiusa.
+                    // In emergenza più spesso: chi viene messo in squadra lo deve sapere presto anche ad app chiusa.
                     controllo_minuti: emergenza ? MINUTI_CONTROLLO_IN_EMERGENZA : MINUTI_CONTROLLO_PERIODICO
                 }
             });
@@ -337,7 +300,6 @@ export function registraRotteApp(app, ctx) {
         }
     });
 
-    // Le proprie notifiche: con "dopo" solo le nuove, senza le ultime 50; in ordine crescente.
     app.get('/api/notifiche', async (req, res) => {
         const dopo = req.query.dopo === undefined ? null : parseInt(req.query.dopo, 10);
         if (dopo !== null && (!Number.isInteger(dopo) || dopo < 0)) {
@@ -350,8 +312,6 @@ export function registraRotteApp(app, ctx) {
             res.status(500).json({ message: 'Errore nel leggere le notifiche.' });
         }
     });
-
-    // Segna come lette, per "ids" o "fino_a". Solo le proprie.
 
     app.post('/api/notifiche/lette', async (req, res) => {
         const corpo = req.body || {};

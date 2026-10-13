@@ -1,5 +1,3 @@
-// Il fascicolo dei volontari: visite, corsi, cataloghi, tesserino.
-
 import crypto from 'crypto';
 import fs from 'fs';
 import logger from './logger.js';
@@ -16,11 +14,9 @@ import { runDailyExpiryCheck } from './scadenze.js';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { cancellaFile, fileDaIndirizzi } from './eliminazionePersona.js';
 
-// Gli esiti che la segreteria può scegliere.
 const ESITI_VISITA = ['Idoneo', 'Non Idoneo'];
 
-// Una persona, un corso o un tipo di visita che non esistono: il certificato
-// appena caricato non resta orfano sul disco.
+// Il certificato appena caricato non resta orfano sul disco.
 async function riferimentoInesistente(error, req) {
     if (error?.code !== '23503') return false;
     if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
@@ -28,8 +24,7 @@ async function riferimentoInesistente(error, req) {
 }
 
 export function registraRotteSegreteria(app) {
-    // Il libretto: suo, o di chi gestisce visite e corsi. Chi gestisce solo
-    // l'anagrafica lo legge senza visite e corsi (dati_sanitari: false).
+    // Chi gestisce solo l'anagrafica lo legge senza visite e corsi (dati_sanitari: false).
     app.get('/api/users/:userId/libretto', (req, res, next) => {
         if (haPermesso(req, 'volontari.anagrafica') && !haPermesso(req, 'volontari.sanitario')) {
             req.senzaDatiSanitari = Number(req.params.userId) !== req.user.id;
@@ -60,8 +55,7 @@ export function registraRotteSegreteria(app) {
             ORDER BY uc.acquisition_date DESC
         `, [userId]);
 
-            // I DPI dal magazzino: i pezzi singoli da chi li ha adesso, quelli a
-            // quantità dal conto per detentore (lo stesso bene può essere di più persone).
+            // Lo stesso bene a quantità può essere di più persone: conta il saldo per detentore.
             const equipmentRes = await client.query(
                 `SELECT b.id, b.denominazione AS item_name, b.taglia AS size,
                     s.ultimo_movimento_il AS delivery_date,
@@ -94,7 +88,6 @@ export function registraRotteSegreteria(app) {
                 [userId]
             );
 
-            // La sezione dei DPI compare solo a magazzino acceso.
             const magazzino = await client.query(
                 "SELECT setting_value FROM branding_settings WHERE setting_key = 'magazzino_enabled'");
             const magazzinoAttivo = magazzino.rowCount > 0 && String(magazzino.rows[0].setting_value) === 'true';
@@ -117,7 +110,6 @@ export function registraRotteSegreteria(app) {
     });
 
 
-    // Il QR e la foto per stampare il tesserino di un volontario.
     app.get('/api/admin/users/:id/tesserino', richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
@@ -132,7 +124,6 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    // La foto la carica anche la segreteria, che stampa i tesserini.
     app.post('/api/admin/users/:id/photo', richiedePermesso('volontari.anagrafica'), uploadPhoto.single('photo'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
@@ -141,7 +132,6 @@ export function registraRotteSegreteria(app) {
         await proteggiCaricati(req.file);
         const photoUrl = `/api/photos/${req.file.filename}`;
         try {
-            // La foto di prima non serve più: si toglie dal disco.
             const r = await pool.query(
                 `UPDATE users u SET photo_url = $1 FROM (SELECT photo_url AS vecchia FROM users WHERE id = $2) v
                   WHERE u.id = $2 AND u.eliminato_il IS NULL RETURNING v.vecchia`, [photoUrl, userId]);
@@ -158,7 +148,6 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-    // Tesserino perso: un token nuovo, il vecchio QR non vale più.
     app.post('/api/admin/users/:id/rigenera-tesserino', richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) return res.status(400).json({ message: 'ID Utente non valido' });
@@ -187,7 +176,6 @@ export function registraRotteSegreteria(app) {
             if (result.rowCount === 0) {
                 return res.status(404).json({ message: 'Visita non trovata.' });
             }
-            // Con la visita se ne va il suo certificato.
             await cancellaFile(fileDaIndirizzi([result.rows[0].document_url]));
             
             res.json({ message: 'Visita eliminata con successo.' });
@@ -287,7 +275,6 @@ export function registraRotteSegreteria(app) {
         const client = await pool.connect();
         
         try {
-            // L'ultima visita di ciascuno.
             const medicalQuery = `
             SELECT * FROM (
                 SELECT u.id, u.nome, u.cognome, 
@@ -310,7 +297,6 @@ export function registraRotteSegreteria(app) {
         `;
             const medicalRes = await client.query(medicalQuery);
 
-            // L'ultimo rinnovo di ciascun corso.
             const coursesQuery = `
             SELECT * FROM (
                 SELECT DISTINCT ON (u.id, cc.id) 
@@ -437,7 +423,6 @@ export function registraRotteSegreteria(app) {
 
         try {
             if (courseId === 1) {
-                // Del corso base (id 1) si cambiano solo codice e validità.
                 const result = await pool.query(
                     'UPDATE courses_catalog SET validity_months = $1, course_code = $2 WHERE id = $3 RETURNING *',
                     [months, code, courseId]
@@ -463,7 +448,6 @@ export function registraRotteSegreteria(app) {
         const courseId = parseInt(req.params.id, 10);
         
         try {
-            // Il corso base non si elimina, né un corso che qualcuno ha nel libretto.
             if (courseId === 1) {
                 return res.status(403).json({ message: 'Operazione negata: Questo è un requisito di sistema e non può essere eliminato.' });
             }
@@ -502,7 +486,6 @@ export function registraRotteSegreteria(app) {
         try {
             const expDate = expiry_date ? expiry_date : null;
             const delDoc = delete_document === 'true';
-            // Il documento di prima, da togliere dal disco se viene sostituito o rimosso.
             const prima = (await client.query('SELECT document_url FROM user_courses WHERE id = $1', [recordId])).rows[0]?.document_url;
 
             if (req.file) {
@@ -540,7 +523,6 @@ export function registraRotteSegreteria(app) {
         try {
             const result = await pool.query('DELETE FROM user_courses WHERE id = $1 RETURNING id, document_url', [recordId]);
             if (result.rowCount === 0) return res.status(404).json({ message: 'Corso non trovato nel libretto.' });
-            // Con il corso se ne va il suo attestato.
             await cancellaFile(fileDaIndirizzi([result.rows[0].document_url]));
             
             res.json({ message: 'Corso eliminato dal libretto.' });
@@ -552,11 +534,8 @@ export function registraRotteSegreteria(app) {
     });
 
     app.get('/api/documents/certificates/:filename',
-        // Il proprietario si legge dal database, dalla riga che punta a questo
-        // file: il numero nel nome non è una prova (i certificati sostituiti
-        // dalle rotte di modifica portano nel nome l'id della riga, non
-        // dell'utente). Senza una riga che lo richiami, il file non esiste per
-        // chi chiede.
+        // Il proprietario si legge dalla riga che punta al file: il numero nel nome non è una
+        // prova (i certificati sostituiti portano l'id della riga, non dell'utente).
         async (req, res, next) => {
             const filename = req.params.filename;
             if (!/^cert-\d+-[0-9a-f]+\.[a-z0-9]+$/i.test(filename)) {
@@ -594,7 +573,6 @@ export function registraRotteSegreteria(app) {
             await proteggiCaricati(req.file);
             const recordId = parseInt(req.params.id, 10);
             const { last_visit_date, expiry_date, status } = req.body;
-            // Prima i campi obbligatori, poi il confronto fra date.
             if (isNaN(recordId) || !last_visit_date || !expiry_date || !status) {
                 return res.status(400).json({ message: 'Dati incompleti o ID non valido.' });
             }
@@ -613,7 +591,6 @@ export function registraRotteSegreteria(app) {
             const client = await pool.connect();
             try {
                 const delete_document = req.body.delete_document === 'true';
-                // Il certificato di prima, da togliere dal disco se viene sostituito o rimosso.
                 const prima = (await client.query('SELECT document_url FROM user_medical_records WHERE id = $1', [recordId])).rows[0]?.document_url;
 
                 if (req.file) {
@@ -671,8 +648,6 @@ export function registraRotteSegreteria(app) {
         }
     });
 
-
-    // Il riepilogo alla segreteria subito, invece che il primo del mese.
 
     app.post('/api/admin/report-scadenze', checkAdminRole, async (req, res) => {
         try {

@@ -1,12 +1,8 @@
-// Gli esterni temporanei: chi si presenta al COC durante un'emergenza senza
-// essere dell'associazione (un'ambulanza, un tecnico del Comune). Basta un
-// nome: ORION crea un esterno e un codice da inquadrare come QR o da mandare
-// come link. Tutto finisce alla chiusura dell'emergenza; l'utente resta in
-// anagrafica, disattivato, perché i registri lo citano.
+// Accessi esterni temporanei: finiscono con l'emergenza; l'utente resta in anagrafica,
+// disattivato, perché i registri lo citano.
 
 import crypto from 'crypto';
 
-// Il codice vale al massimo una settimana, poi se ne genera uno nuovo.
 const GIORNI_CODICE = 7;
 const impronta = (valore) => crypto.createHash('sha256').update(String(valore)).digest('hex');
 const testo = (v, max) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
@@ -14,17 +10,14 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const CODICE_NON_VALIDO = 'Codice non valido o scaduto: chiedine uno nuovo al centro operativo.';
 
-// Uno username leggibile da chi guarda gli elenchi: "est.mario.rossi.4f2a".
 function usernameDa(nome) {
     const base = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
         .replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').slice(0, 30) || 'ospite';
     return `est.${base}.${crypto.randomBytes(2).toString('hex')}`;
 }
 
-// Il codice si tiene anche cifrato, per farlo rivedere dal centro operativo
-// a chi non l'ha ancora usato. La chiave viene da JWT_SECRET: chi la conosce
-// puo' gia' firmare qualunque sessione, quindi non si aggiunge rischio. Si
-// entra comunque solo con l'impronta.
+// La chiave viene da JWT_SECRET: chi la conosce può già firmare qualunque sessione,
+// quindi non si aggiunge rischio. Si entra comunque solo con l'impronta.
 function chiaveCodici() {
     return crypto.createHash('sha256').update(`orion-accessi-temporanei:${process.env.JWT_SECRET || ''}`).digest();
 }
@@ -62,10 +55,7 @@ async function nuovoCodice(client, userId, creatoDa) {
     return { codice, scade_il: r.rows[0].scade_il };
 }
 
-/**
- * Chiude gli esterni temporanei di un'emergenza, dentro la transazione di
- * chiusura. Restituisce gli id, per chiudere le sessioni dopo il COMMIT.
- */
+// Restituisce gli id, per chiudere le sessioni dopo il COMMIT.
 export async function chiudiEsterniTemporanei(client, emergencyId) {
     const { rows } = await client.query(
         `SELECT id, username FROM users
@@ -79,9 +69,6 @@ export async function chiudiEsterniTemporanei(client, emergencyId) {
     return ids;
 }
 
-/**
- * L'accesso con il codice: pubblica come il login.
- */
 export function registraAccessoTemporaneo(app, ctx) {
     const { pool, logger, emettiSessione, emergenzaAttiva, limitatore } = ctx;
 
@@ -116,7 +103,6 @@ export function registraAccessoTemporaneo(app, ctx) {
     });
 }
 
-/** La gestione, per chi sta al centro operativo. */
 export function registraRotteEsterniTemporanei(app, ctx) {
     const {
         pool, logger, registraAudit, nomeUtente, emergenzaAttiva, erroreRichiesta, nonEsterni,
@@ -142,7 +128,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     }
 
-    // Nuovo esterno: un nome, e se si vuole l'ente, la squadra e un'email.
     app.post('/api/esterni-temporanei', nonEsterni, async (req, res) => {
         const emergenza = emergenzaAttiva();
         if (!emergenza) {
@@ -173,8 +158,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
             const userId = u.rows[0].id;
             await scriviRuoli(client, userId, ['esterno']);
 
-            // In una squadra esistente o in una nuova.
-
             let squadra = null;
             const squadraId = parseInt(req.body?.squadra_id, 10);
             const nuova = req.body?.nuova_squadra;
@@ -204,8 +187,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                 }], req);
             }
 
-            // Nella funzione di supporto che lo ha chiamato (il medico nella F2),
-            // se il modulo è acceso: un accesso temporaneo lo può mettere ogni operatore.
             let funzione = null;
             const funzioneId = parseInt(req.body?.funzione_id, 10);
             if (Number.isInteger(funzioneId) && funzioneId > 0) {
@@ -248,7 +229,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     });
 
-    // Quelli dell'emergenza in corso, attivi e revocati.
     app.get('/api/esterni-temporanei', nonEsterni, async (req, res) => {
         const emergenza = emergenzaAttiva();
         if (!emergenza) return res.json([]);
@@ -279,7 +259,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         return u && emergenza && u.temporaneo_emergenza_id === emergenza.id ? u : null;
     }
 
-    // Un codice nuovo: il vecchio smette di valere (perso, inoltrato, scaduto).
     app.post('/api/esterni-temporanei/:id/codice', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
@@ -295,9 +274,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     });
 
-    // Il codice di adesso, per mostrarlo di nuovo: il QR sul posto o il link
-    // da rimandare. Se non si legge (accesso nato prima della 1.0.3, segreto
-    // cambiato) lo dice, e se ne genera uno nuovo.
     app.get('/api/esterni-temporanei/:id/codice', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
@@ -315,7 +291,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     });
 
-    // Il link di adesso, di nuovo per email.
     app.post('/api/esterni-temporanei/:id/invia', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const email = testo(req.body?.email, 100);
@@ -337,9 +312,7 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     });
 
-    // Un'altra persona al posto di questa (cambio turno sull'ambulanza): nome
-    // ed ente nuovi, codice nuovo, e chi c'era prima esce dall'app. Squadra e
-    // registri restano quelli di questo accesso.
+    // Squadra e registri restano quelli di questo accesso.
     app.put('/api/esterni-temporanei/:id/persona', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });
@@ -362,7 +335,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                  WHERE sm.username = $3 AND s.id = sm.squadra_id RETURNING s.id, s.nome_radio, s.nome`,
                 [nomeU, cognomeU, u.username]);
             if (membro.rowCount) {
-                // Nel registro della squadra: esce chi c'era, entra chi subentra.
                 const sq = membro.rows[0];
                 const voce = { squadra_id: sq.id, nome_radio: sq.nome_radio, squadra_nome: sq.nome, username: u.username, motivo: 'operazione' };
                 await annotaRegistroSquadre(client, [
@@ -389,7 +361,6 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         }
     });
 
-    // Revoca subito: esce dalla squadra, il codice e le sessioni non valgono più.
     app.delete('/api/esterni-temporanei/:id', nonEsterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID non valido.' });

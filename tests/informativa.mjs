@@ -1,5 +1,3 @@
-// tests/informativa.mjs
-//
 // L'accettazione delle condizioni d'uso: chi entra per la prima volta riceve
 // 428 su ogni richiesta finché non le accetta; il testo si legge anche senza
 // accesso; una versione nuova pubblicata dall'amministratore la fa accettare
@@ -42,7 +40,6 @@ try {
     verifica('dicono che ci sono solo cookie tecnici', /solo cookie tecnici/.test(pubblica.corpo?.condizioni));
     verifica('e quali dati restano dopo l\'eliminazione', /non ripudio/.test(pubblica.corpo?.condizioni) && /si cancellano/.test(pubblica.corpo?.condizioni));
 
-    // Un volontario nuovo, con la sua password.
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: `Privacy${suffisso}`, cognome: 'Collaudo', role: 'volontario' } })).corpo;
     persona = n.id;
     const q = new URL(n.magicLink).searchParams;
@@ -65,7 +62,6 @@ try {
     const sbloccata = await chiama('/api/app/contesto', { token });
     verifica('dopo, si lavora', sbloccata.stato === 200, sbloccata.stato);
 
-    // L'amministratore riscrive il testo e pubblica: si riaccetta.
     statoIniziale = (await chiama('/api/admin/informativa', { token: admin })).corpo;
     verifica('lo stato per l\'amministratore conta chi ha accettato',
         statoIniziale?.con_presa_visione >= 2 && statoIniziale?.attivi >= statoIniziale?.con_presa_visione, statoIniziale);
@@ -83,7 +79,6 @@ try {
     const interna = await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { privacy_versione: '1' } });
     verifica('la versione non si cambia dalle impostazioni generali', interna.stato === 400, interna.stato);
 } finally {
-    // Il testo torna com'era.
     if (statoIniziale) await chiama('/api/admin/informativa', { method: 'PUT', token: admin, body: { testi: statoIniziale.testi } });
     if (persona) await chiama(`/api/users/${persona}`, { method: 'DELETE', token: admin, body: { beni: [] } });
 }

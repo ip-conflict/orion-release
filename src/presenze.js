@@ -1,19 +1,4 @@
-// Le presenze: chi c'era, quando e per quante ore, a un'attività del gruppo o
-// a un'emergenza. Finiscono nel libretto di ognuno, nel riepilogo annuale e
-// negli attestati (per il datore di lavoro, per esempio).
-//
-// Quelle delle attività le scrive chi chiude l'attività (src/attivita.js).
-// Quelle delle emergenze si calcolano alla chiusura dal registro delle
-// squadre (emergency_team_log), che dice chi è entrato e uscito da quale
-// squadra e quando: si sommano gli intervalli di ognuno, chi è passato da una
-// squadra all'altra non conta due volte, chi era in una squadra già pronta
-// conta dall'apertura. Contano solo gli interni: anche chi è nella squadra
-// COC, la sala. Si scrivono da sole e si correggono dopo, con il registro
-// delle operazioni; chi in sala non era in nessuna squadra si aggiunge a mano.
-//
-// Le correzioni e il riepilogo di tutti sono di chi ha gruppo.attivita; il
-// riepilogo lo legge anche chi gestisce l'anagrafica. Ognuno vede le sue e ne
-// scarica l'attestato.
+// Presenze: vedi "Attività, calendario e presenze" nel manuale tecnico.
 
 import pdfmake from 'pdfmake';
 import logger from './logger.js';
@@ -39,12 +24,8 @@ export function oreDa(minuti) {
     return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`;
 }
 
-// --- Le attività --------------------------------------------------------------
-
-// I presenti di un'attività: [{ user_id, inizio?, fine? }], con gli orari
-// dell'attività dove mancano. Sostituisce quelli di prima; un addestramento
-// che vale come corso lo scrive nel libretto dei presenti (e lo toglie a chi
-// non risulta più presente).
+// Sostituisce i presenti di prima; il corso dato dall'addestramento si toglie a chi
+// non risulta più presente.
 export async function registraPresenzeAttivita(attivitaId, presenze, req) {
     const client = await pool.connect();
     try {
@@ -76,7 +57,6 @@ export async function registraPresenzeAttivita(attivitaId, presenze, req) {
             if (interni.rowCount !== ids.length) { await client.query('ROLLBACK'); return { errore: "Fra i presenti c'è chi non è un interno." }; }
         }
 
-        // Chi non c'è più: via la presenza e il corso che gli era stato scritto.
         const tolti = (await client.query(
             'DELETE FROM partecipazioni WHERE attivita_id = $1 AND NOT (user_id = ANY($2::int[])) RETURNING corso_utente_id', [attivitaId, ids])).rows;
         for (const t of tolti.filter(t => t.corso_utente_id)) await client.query('DELETE FROM user_courses WHERE id = $1', [t.corso_utente_id]);
@@ -116,11 +96,8 @@ export async function registraPresenzeAttivita(attivitaId, presenze, req) {
     }
 }
 
-// --- Le emergenze --------------------------------------------------------------
-
-// Gli intervalli di ognuno dal registro delle squadre, uniti dove si toccano.
-// [inSede]: chi è arrivato in sede dopo una chiamata conta da quando è
-// arrivato al congedo (o alla fine), anche fuori dalle squadre.
+// [inSede]: chi è arrivato dopo una chiamata conta dall'arrivo al congedo, anche fuori
+// dalle squadre.
 export function intervalliDalRegistro(righe, fineEmergenza, inSede = []) {
     const perPersona = new Map();
     const di = (username) => {
@@ -131,8 +108,8 @@ export function intervalliDalRegistro(righe, fineEmergenza, inSede = []) {
         if (!r.username) continue;
         const p = di(r.username);
         const quando = comeData(r.quando);
-        // Ogni squadra ha il suo intervallo: entrare in Bravo prima di uscire
-        // da Alfa non chiude il tempo in Alfa.
+        // Ogni squadra ha il suo intervallo: entrare in Bravo prima di uscire da Alfa non
+        // chiude il tempo in Alfa.
         const chiave = r.nome_radio || '';
         if (r.azione === 'membro_aggiunto') {
             p.squadre.add(r.nome_radio);
@@ -178,8 +155,6 @@ function dettaglioSquadre(squadre) {
     return parti.join('; ');
 }
 
-// Chi era in servizio in un'emergenza (interni soltanto), dal registro delle
-// squadre e dagli arrivi in sede: [{ id, username, inizio, fine, minuti, squadre }].
 async function presentiDelRegistro(e) {
     const registro = (await pool.query(
         `SELECT username, nome_radio, azione, quando FROM emergency_team_log
@@ -193,7 +168,6 @@ async function presentiDelRegistro(e) {
     return persone.map(p => ({ id: p.id, username: p.username, ...intervalli.get(p.username) }));
 }
 
-// Alla chiusura: le presenze degli interni che sono stati in una squadra o in sede.
 export async function registraPresenzeEmergenza(emergencyId, req = null) {
     const e = (await pool.query('SELECT id, code, name, start_time, end_time FROM emergencies WHERE id = $1', [emergencyId])).rows[0];
     if (!e) return 0;
@@ -215,9 +189,6 @@ export async function registraPresenzeEmergenza(emergencyId, req = null) {
     return scritte;
 }
 
-// Alla chiusura di una simulazione in sala: le presenze vanno all'attività
-// del calendario (che diventa conclusa), non fra le emergenze. Un
-// addestramento che vale come corso lo scrive nel libretto dei presenti.
 export async function registraPresenzeSimulazione(emergencyId, attivitaId, req) {
     const e = (await pool.query('SELECT id, code, name, start_time, end_time FROM emergencies WHERE id = $1', [emergencyId])).rows[0];
     if (!e) return 0;
@@ -231,8 +202,6 @@ export async function registraPresenzeSimulazione(emergencyId, attivitaId, req) 
     registraAudit(req, 'presenze.simulazione', { tipo: 'attivita', id: attivitaId, dettagli: { emergenza: emergencyId, presenze: esito.presenti, corsi: esito.corsi } });
     return esito.presenti;
 }
-
-// --- Rotte --------------------------------------------------------------------
 
 const SELECT_PRESENZE = `
     SELECT p.id, p.user_id, p.origine, p.attivita_id, p.emergency_id, p.titolo, p.tipo, p.inizio, p.fine, p.minuti,
@@ -262,7 +231,6 @@ async function presenzeDi(userId, anno) {
     };
 }
 
-// L'attestato in PDF: carta intestata con il nome dell'associazione.
 async function attestatoPdf(p, persona) {
     const associazione = (await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'association_name'")).rows[0]?.setting_value || 'Associazione di protezione civile';
     const stessoGiorno = dataItaliana(p.inizio) === dataItaliana(p.fine);
@@ -275,8 +243,7 @@ async function attestatoPdf(p, persona) {
     const nome = `${persona.nome || ''} ${persona.cognome || ''}`.trim() || persona.username;
     const nato = persona.codice_fiscale ? `, codice fiscale ${persona.codice_fiscale},` : ',';
     pdfmake.setFonts({ Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } });
-    // Nessuna immagine o carattere da internet né dal disco: il documento è
-    // solo testo, con i caratteri standard del PDF.
+    // Nessuna immagine o carattere da internet né dal disco.
     pdfmake.setUrlAccessPolicy(() => false);
     pdfmake.setLocalAccessPolicy((percorso) => /^Helvetica(-Bold|-Oblique|-BoldOblique)?$/.test(percorso));
     return pdfmake.createPdf({
@@ -323,7 +290,6 @@ export function registraRottePresenze(app) {
         }
     });
 
-    // Il riepilogo dell'anno, persona per persona; con ?formato=csv da aprire nel foglio di calcolo.
     app.get('/api/presenze/riepilogo', soloInterni, async (req, res) => {
         if (!vedeTutti(req)) return res.status(403).json({ message: 'Ti serve il permesso "Organizzare attività e presenze".' });
         const anno = annoDa(req);
@@ -362,7 +328,6 @@ export function registraRottePresenze(app) {
         }
     });
 
-    // Le presenze di un'emergenza, per correggerle o aggiungere chi manca.
     app.get('/api/emergencies/:id/presenze', soloInterni, correzione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Emergenza non valida.' });
@@ -376,7 +341,6 @@ export function registraRottePresenze(app) {
         }
     });
 
-    // Chi in sala non era in nessuna squadra: si aggiunge a un'emergenza chiusa.
     app.post('/api/emergencies/:id/presenze', soloInterni, correzione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const userId = parseInt(req.body?.user_id, 10);
@@ -406,13 +370,11 @@ export function registraRottePresenze(app) {
         }
     });
 
-    // Correggere orari o nota di una presenza; resta scritto chi l'ha corretta.
     app.put('/api/presenze/:id', soloInterni, correzione, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const inizio = istante(req.body?.inizio), fine = istante(req.body?.fine);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Presenza non valida.' });
         if (!inizio || !fine || fine < inizio) return res.status(400).json({ message: 'Orari non validi.' });
-        // I minuti si possono dare a parte: chi è uscito per due ore a metà emergenza.
         const minuti = req.body?.minuti === undefined || req.body?.minuti === null || req.body?.minuti === '' ? minutiTra(inizio, fine) : parseInt(req.body.minuti, 10);
         if (!Number.isInteger(minuti) || minuti < 0 || minuti > minutiTra(inizio, fine)) return res.status(400).json({ message: 'Le ore non possono superare il tempo fra inizio e fine.' });
         try {
@@ -446,7 +408,6 @@ export function registraRottePresenze(app) {
         }
     });
 
-    // L'attestato: la persona per sé, chi organizza o gestisce l'anagrafica per tutti.
     app.get('/api/presenze/:id/attestato', soloInterni, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Presenza non valida.' });

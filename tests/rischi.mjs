@@ -1,5 +1,3 @@
-// tests/rischi.mjs
-//
 // I rischi di una segnalazione dalle zone di pericolo della mappa: una
 // segnalazione creata o spostata dentro una zona di pericolo riceve la riga
 // "⚠ …" nei rischi (e una nota di sistema nel diario), uscendo la perde, e una
@@ -38,9 +36,7 @@ if (stato?.emergency || stato?.active) {
 }
 
 const suffisso = Date.now().toString().slice(-5);
-// Un quadrato attorno a (lat, lon) di lato 2·d gradi.
 const quadrato = (lat, lon, d) => ({ type: 'Polygon', coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]] });
-// Una C: il quadrato senza la fascia destra centrale.
 const ciC = (lat, lon, d) => ({ type: 'Polygon', coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat - d / 3], [lon, lat - d / 3], [lon, lat + d / 3], [lon + d, lat + d / 3], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]] });
 const LAT = 46.30, LON = 12.40;
 const zone = [];
@@ -66,31 +62,26 @@ try {
     await zona({ tipo: 'area_ammassamento', nome: `Campo ${suffisso}`, geometria: quadrato(LAT + 0.05, LON, 0.01) });
     await attendi(400);
 
-    // Creata dentro la frana.
     const a = await nuova('Dentro la frana', LAT, LON);
     await attendi(600);
     const ra = await rischi(a.id);
     verifica('creata dentro: riga ⚠ con tipo, nome e livello', ra === `⚠ Pericolo frana: Borgo ${suffisso} (livello P2)`, ra);
     verifica('creata dentro: nota di sistema nel diario', (await note(a.id)).some(t => t.startsWith('Rischi aggiornati in automatico') && t.includes(`«Borgo ${suffisso}»`)), await note(a.id));
 
-    // Creata in un'area che non è di pericolo: niente.
     const b = await nuova('Nel campo', LAT + 0.05, LON);
     await attendi(600);
     verifica('area non di pericolo: rischi vuoti', (await rischi(b.id)) === '', await rischi(b.id));
 
-    // Testo scritto a mano e poi spostata fuori: resta solo quello scritto.
     await chiama(`/api/reports/${a.id}`, { method: 'PUT', token: admin, body: { environmental_hazard: `${ra}\nCavi elettrici a terra` } });
     await chiama(`/api/reports/${a.id}/coordinates`, { method: 'PUT', token: admin, body: { latitude: LAT + 0.2, longitude: LON } });
     await attendi(600);
     verifica('spostata fuori: resta il testo scritto a mano', (await rischi(a.id)) === 'Cavi elettrici a terra', await rischi(a.id));
     verifica('spostata fuori: nota di uscita', (await note(a.id)).some(t => t.includes('non è più in una zona di pericolo')), await note(a.id));
 
-    // Rimessa dentro con la modifica della segnalazione: la riga torna sopra il testo.
     await chiama(`/api/reports/${a.id}`, { method: 'PUT', token: admin, body: { latitude: LAT + 0.001, longitude: LON + 0.001 } });
     await attendi(600);
     verifica('rimessa dentro dalla modifica: riga ⚠ in cima', (await rischi(a.id)) === `⚠ Pericolo frana: Borgo ${suffisso} (livello P2)\nCavi elettrici a terra`, await rischi(a.id));
 
-    // Una zona nuova disegnata sopra una segnalazione già aperta (a forma di C).
     const c = await nuova('Prima della zona', LAT + 0.1, LON - 0.005);
     const d = await nuova('Nella bocca della C', LAT + 0.1, LON + 0.008);
     await attendi(500);
@@ -100,17 +91,14 @@ try {
     verifica('zona nuova sopra: rischi aggiornati', (await rischi(c.id)) === `⚠ Pericolo alluvione: Golena ${suffisso}`, await rischi(c.id));
     verifica('nella bocca della C: fuori dalla zona', (await rischi(d.id)) === '', await rischi(d.id));
 
-    // Due zone sovrapposte: due righe.
     await zona({ tipo: 'pericolo_generico', nome: `Incendio ${suffisso}`, geometria: quadrato(LAT + 0.1, LON - 0.005, 0.002) });
     await attendi(800);
     verifica('due zone sovrapposte: due righe', (await rischi(c.id)).split('\n').length === 2 && (await rischi(c.id)).includes(`⚠ Zona di pericolo: Incendio ${suffisso}`), await rischi(c.id));
 
-    // Zona tolta: la riga se ne va.
     await chiama(`/api/mappa/elementi/${alluvione.corpo.id}`, { method: 'DELETE', token: admin });
     await attendi(800);
     verifica('zona tolta: resta solo l\'altra', (await rischi(c.id)) === `⚠ Zona di pericolo: Incendio ${suffisso}`, await rischi(c.id));
 
-    // Senza coordinate: niente da calcolare.
     const e = await nuova('Senza coordinate');
     await attendi(400);
     verifica('senza coordinate: rischi vuoti', (await rischi(e.id)) === '', await rischi(e.id));

@@ -1,5 +1,4 @@
 
-// GESTIONE "PASSWORD DIMENTICATA"
 const loginForm = document.getElementById('login-form');
 const forgotForm = document.getElementById('forgot-password-form');
 const showForgotBtn = document.getElementById('show-forgot-password');
@@ -18,7 +17,6 @@ async function loadLoginBranding() {
         const logoInfo = await fetch('/api/branding').then(res => res.json());
         const logoElement = document.getElementById('login-logo');
         if (logoElement && logoInfo && logoInfo.logoUrl) {
-            // Aggiunge la versione come query string per evitare problemi di cache
             logoElement.src = `${logoInfo.logoUrl}?v=${logoInfo.logoVersion}`;
             logoElement.style.display = 'block';
         } else if (logoElement) {
@@ -27,14 +25,11 @@ async function loadLoginBranding() {
 
     } catch (error) {
         console.error("Errore nel caricamento del branding per il login:", error);
-        // In caso di errore, la pagina userà i valori di default presenti nell'HTML.
     }
 }
 
 const ULTIMO_UTENTE = 'orion.ultimoUtente';
 
-// Accesso riuscito (con la password, o dopo la verifica in due passaggi):
-// si salvano i dati della persona e si va al centro operativo.
 async function entra(data, username, avviso = '') {
     const messageDiv = document.getElementById('login-message');
     if (!data || !data.userId || !data.role) {
@@ -53,8 +48,7 @@ async function entra(data, username, avviso = '') {
         localStorage.setItem('userRuoli', JSON.stringify(Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role]));
         localStorage.setItem('userPermessi', JSON.stringify(Array.isArray(data.permessi) ? data.permessi : []));
         localStorage.setItem('username', data.username || username.toLowerCase());
-        // Il nome che si propone al prossimo accesso da questo browser: "Esci"
-        // non lo toglie, "Non sei tu?" sì.
+        // "Esci" non toglie il nome proposto, "Non sei tu?" sì.
         localStorage.setItem(ULTIMO_UTENTE, data.username || username.toLowerCase());
     } catch (storageError) {
         console.error("Errore durante il salvataggio in localStorage:", storageError);
@@ -65,18 +59,13 @@ async function entra(data, username, avviso = '') {
         messageDiv.textContent = avviso || 'Accesso riuscito: apro ORION…';
         messageDiv.style.color = avviso ? 'var(--warning-color, #b45309)' : 'green';
     }
-    // Da un telefono Android, prima si propone l'app, se c'e'. Poi la prima
-    // pagina: il centro operativo, ma per chi è solo volontario, quando non
-    // c'è un'emergenza, il suo profilo (DPI, scadenze, tesserino).
     const destinazione = paginaChiesta() || await primaPagina(data);
     const vaiAlCentroOperativo = () => { window.location.href = destinazione; };
     const proposta = await proponiApp(data.token, vaiAlCentroOperativo);
     if (!proposta) setTimeout(vaiAlCentroOperativo, avviso ? 4000 : 500);
 }
 
-// Mandati qui da una pagina riservata (il QR di un'etichetta del magazzino
-// aperto con la fotocamera, un collegamento in una email): dopo l'accesso si
-// torna lì, non alla prima pagina. Solo indirizzi di questo stesso server.
+// Solo indirizzi di questo stesso server.
 function paginaChiesta() {
     const chiesta = new URLSearchParams(window.location.search).get('redirect');
     if (!chiesta || !chiesta.startsWith('/') || chiesta.startsWith('//') || chiesta.startsWith('/\\')) return null;
@@ -88,9 +77,6 @@ function paginaChiesta() {
     } catch { return null; }
 }
 
-// Con un'emergenza aperta si va tutti in sala. Senza, ognuno dove lavora:
-// l'amministratore in sala (da lì apre l'emergenza), la segreteria alla
-// segreteria, il magazziniere al magazzino, il volontario al suo profilo.
 async function primaPagina(data) {
     const ruoli = Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role];
     if (ruoli.includes('admin') || ruoli.includes('esterno')) return '/centro-operativo.html';
@@ -99,7 +85,6 @@ async function primaPagina(data) {
         const stato = await r.json();
         if (stato?.active || stato?.emergency) return '/centro-operativo.html';
     } catch { return '/centro-operativo.html'; }
-    // Solo se il modulo è acceso: spento, la sua pagina non serve.
     const moduli = await fetch('/api/branding/settings').then(r => r.json()).catch(() => ({}));
     const segreteria = (() => { try { const c = moduli.segreteria_config; return (typeof c === 'string' ? JSON.parse(c) : c)?.enabled === true; } catch { return false; } })();
     if (ruoli.includes('segreteria') && segreteria) return '/admin-segreteria.html';
@@ -113,9 +98,9 @@ function abilitaAccesso(si) {
     loginForm.querySelector('button[type=submit]').disabled = !si;
 }
 
-// Una sola vista alla volta nel riquadro d'accesso.
-const VISTE = ['login-form', 'forgot-password-form', 'mfa-form', 'mfa-attiva-form', 'mfa-codici'];
+const VISTE = ['login-form', 'forgot-password-form', 'mfa-form', 'mfa-telefono', 'mfa-attiva-form', 'mfa-codici'];
 function mostraVista(vista) {
+    if (vista?.id !== 'mfa-telefono') fermaAttesaTelefono();
     for (const id of VISTE) {
         const el = document.getElementById(id);
         if (!el) continue;
@@ -125,9 +110,9 @@ function mostraVista(vista) {
     }
 }
 
-// --- Verifica in due passaggi ---------------------------------------------------
 let sfidaMfa = null;
 let usernameMfa = '';
+let attesaTelefono = null;
 
 function messaggioMfa(id, testo, errore = true) {
     const el = document.getElementById(id);
@@ -137,6 +122,7 @@ function messaggioMfa(id, testo, errore = true) {
 
 function tornaAllAccesso(testo) {
     sfidaMfa = null;
+    fermaAttesaTelefono();
     mostraVista(loginForm);
     abilitaAccesso(true);
     document.getElementById('password').value = '';
@@ -158,12 +144,78 @@ function chiediMfa(data, username) {
         mostraVista(document.getElementById('mfa-attiva-form'));
         document.getElementById('mfa-attiva-codice').focus();
     } else {
-        document.getElementById('mfa-codice').value = '';
-        messaggioMfa('mfa-messaggio', '');
-        mostraVista(document.getElementById('mfa-form'));
-        document.getElementById('mfa-codice').focus();
+        if (data.totp === false) document.getElementById('mfa-spiega').textContent = 'Scrivi uno dei codici di riserva.';
+        document.getElementById('mfa-al-telefono').hidden = !(data.telefoni > 0);
+        if (data.telefoni > 0) return confermaSulTelefono();
+        mostraCodice();
     }
 }
+
+function mostraCodice() {
+    document.getElementById('mfa-codice').value = '';
+    messaggioMfa('mfa-messaggio', '');
+    mostraVista(document.getElementById('mfa-form'));
+    document.getElementById('mfa-codice').focus();
+}
+
+function fermaAttesaTelefono() {
+    if (attesaTelefono) clearTimeout(attesaTelefono);
+    attesaTelefono = null;
+}
+
+async function confermaSulTelefono() {
+    fermaAttesaTelefono();
+    const numero = document.getElementById('mfa-telefono-numero');
+    const diNuovo = document.getElementById('mfa-telefono-di-nuovo');
+    numero.textContent = '··';
+    diNuovo.hidden = true;
+    messaggioMfa('mfa-telefono-messaggio', '');
+    mostraVista(document.getElementById('mfa-telefono'));
+    try {
+        const r = await fetch('/api/accesso/telefono', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sfida: sfidaMfa })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            if (data.sfida_scaduta) return tornaAllAccesso(data.message);
+            return messaggioMfa('mfa-telefono-messaggio', data.message || `Errore ${r.status}`);
+        }
+        numero.textContent = String(data.numero);
+        attesaTelefono = setTimeout(controllaTelefono, 2000);
+    } catch {
+        messaggioMfa('mfa-telefono-messaggio', 'Il server non risponde. Riprova.');
+        diNuovo.hidden = false;
+    }
+}
+
+async function controllaTelefono() {
+    attesaTelefono = null;
+    if (!sfidaMfa) return;
+    try {
+        const r = await fetch('/api/accesso/telefono/stato', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sfida: sfidaMfa })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 202) {
+            attesaTelefono = setTimeout(controllaTelefono, 2000);
+            return;
+        }
+        if (r.ok) {
+            sfidaMfa = null;
+            return entra(data, usernameMfa);
+        }
+        if (data.sfida_scaduta) return tornaAllAccesso(data.message);
+        messaggioMfa('mfa-telefono-messaggio', data.message || `Errore ${r.status}`);
+        document.getElementById('mfa-telefono-numero').textContent = '··';
+        document.getElementById('mfa-telefono-di-nuovo').hidden = false;
+    } catch {
+        attesaTelefono = setTimeout(controllaTelefono, 4000);
+    }
+}
+
+document.getElementById('mfa-telefono-di-nuovo').addEventListener('click', confermaSulTelefono);
+document.getElementById('mfa-al-codice').addEventListener('click', (e) => { e.preventDefault(); mostraCodice(); });
+document.getElementById('mfa-al-telefono').addEventListener('click', (e) => { e.preventDefault(); confermaSulTelefono(); });
 
 async function inviaCodiceMfa(modulo, campo, idMessaggio) {
     const codice = document.getElementById(campo).value.trim();
@@ -247,7 +299,6 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
         if (response.ok) {
             await entra(data, username);
         } else if (data?.mfa && data?.sfida) {
-            // Password giusta: ora il codice (o l'attivazione, per un amministratore).
             passwordInput.value = '';
             chiediMfa(data, username);
         } else {
@@ -262,7 +313,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     } catch (error) {
         console.error('Errore grave durante il login:', error);
         if (messageDiv) {
-            // Senza rete il browser dice "Failed to fetch": si dice in italiano cosa fare.
+            // Senza rete il browser dice "Failed to fetch".
             messageDiv.textContent = error instanceof TypeError
                 ? 'Il server non si raggiunge: controlla la connessione a internet e riprova.'
                 : error.message;
@@ -272,7 +323,6 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     }
 });
 
-// Rimandati qui da una pagina: si dice perché.
 (function () {
     const errore = new URLSearchParams(location.search).get('error');
     const messageDiv = document.getElementById('login-message');
@@ -289,15 +339,12 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     loadLoginBranding();
-    // Appena attivato l'account: il nome utente è già scritto, manca la password.
     const utente = new URLSearchParams(window.location.search).get('utente');
     if (utente) {
         document.getElementById('username').value = utente;
         document.getElementById('password').focus();
         return;
     }
-    // Chi è entrato l'ultima volta da questo browser trova il suo nome già
-    // scritto; sui computer della sala, "Non sei tu?" lo cancella.
     let ultimo = null;
     try { ultimo = localStorage.getItem(ULTIMO_UTENTE); } catch { /* niente */ }
     if (!ultimo) return;
@@ -317,13 +364,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 if (showForgotBtn && showLoginBtn) {
-    // Cambia vista: mostra "Recupero"
     showForgotBtn.addEventListener('click', (e) => {
         e.preventDefault();
         mostraVista(forgotForm);
     });
 
-    // Cambia vista: torna al "Login"
     showLoginBtn.addEventListener('click', (e) => {
         e.preventDefault();
         mostraVista(loginForm);
@@ -366,12 +411,8 @@ if (forgotForm) {
     });
 }
 
-// Proposta dell'app Android dopo l'accesso
-// Solo dai telefoni Android (l'APK su iPhone non si installa), solo se il
-// server la mette a disposizione e la persona non e' un esterno: lo decide
-// /api/app/offerta. Chi risponde "Continua sul web" non la rivede finche'
-// non esce una versione nuova. Restituisce true se la proposta e' a schermo:
-// allora il passaggio al centro operativo lo fa lei.
+// Solo da Android (l'APK su iPhone non si installa); lo decide /api/app/offerta. Restituisce true
+// se la proposta è a schermo: il passaggio al centro operativo lo fa lei.
 async function proponiApp(token, continua) {
     if (!/Android/i.test(navigator.userAgent || '')) return false;
     let offerta;
@@ -404,16 +445,13 @@ async function proponiApp(token, continua) {
 
     const testo = document.createElement('p');
     testo.textContent = "Sul telefono c'è l'app: notifiche, tesserino e intervento della squadra, anche quando manca il campo. Si installa così:";
-    // I passi si vedono subito: chi non ha mai installato un'app fuori dal
-    // Play Store si ferma alla prima domanda di Android.
     const passi = typeof passiInstallaApp === 'function' ? passiInstallaApp('accedi') : null;
 
     const versione = document.createElement('p');
     versione.className = 'proposta-app-versione';
     versione.textContent = offerta.versione ? `Versione ${offerta.versione}` : '';
 
-    // L'impronta del certificato di firma: chi vuole, la confronta con quella
-    // pubblicata. Android poi accetta gli aggiornamenti solo con la stessa firma.
+    // Android accetta poi gli aggiornamenti solo con la stessa firma.
     const certificato = document.createElement('p');
     certificato.className = 'proposta-app-certificato';
     if (offerta.certificato_sha256) certificato.textContent = `Impronta del certificato (SHA-256): ${offerta.certificato_sha256}`;
@@ -434,7 +472,6 @@ async function proponiApp(token, continua) {
     });
 
     scarica.addEventListener('click', () => {
-        // Il download parte da se': si evidenzia il passo successivo.
         testo.textContent = 'Download avviato. Ora:';
         passi?.querySelectorAll('li').forEach((li, i) => li.classList.toggle('ora', i === 1));
         scarica.textContent = 'Scarica di nuovo';

@@ -1,6 +1,4 @@
-// Il diario di sala: le note del COC che non riguardano una segnalazione. Si
-// leggono nella colonna degli eventi del centro operativo e nel resoconto.
-// Non si modificano e non si cancellano: è il brogliaccio della sala.
+// Le note del diario di sala non si modificano e non si cancellano.
 
 const LUNGHEZZA_MASSIMA = 2000;
 

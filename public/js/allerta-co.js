@@ -1,9 +1,3 @@
-// Il bollettino di allerta nel centro operativo: una pastiglia discreta
-// accanto allo stato dell'emergenza, con il colore di oggi e di domani nella
-// zona del Comune. Si apre la finestra con i tre rischi, il PDF, la pagina
-// ufficiale della Regione e gli aggiornamenti. Spenta se nelle impostazioni
-// non c'è la Regione.
-
 (function () {
     const STILE = `
     .al-pastiglia { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 50px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-muted); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
@@ -153,7 +147,6 @@
     document.addEventListener('ws:allerta_aggiornata', carica);
     document.addEventListener('ws:emergency_status_change', carica);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && velo) chiudi(); });
-    // Il giorno cambia anche a pagina aperta: "oggi" e "domani" si rileggono ogni mezz'ora.
     setInterval(carica, 30 * 60 * 1000);
     window.Allerta = { carica, apri };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', carica);

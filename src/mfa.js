@@ -1,19 +1,5 @@
-// La verifica in due passaggi: dopo la password, un codice di sei cifre che
-// cambia ogni 30 secondi, generato da un'app sul telefono (Google
-// Authenticator, Microsoft Authenticator, FreeOTP, Aegis: lo standard è
-// TOTP, RFC 6238, e non passa da nessun servizio esterno). Chi non ha il
-// telefono usa uno dei dieci codici di riserva, ciascuno buono una volta.
-//
-// Obbligatoria per gli amministratori: al primo accesso con la password la
-// attivano prima di entrare, e una sessione d'amministratore senza la verifica
-// non vale (autenticazione.js). Facoltativa per gli altri, dal profilo. Gli
-// accessi esterni temporanei non la usano: entrano con il codice del centro
-// operativo e finiscono con l'emergenza.
-//
-// Il segreto condiviso con l'app sta nel database cifrato con la chiave dei
-// dati. Se la chiave manca (una macchina nuova prima della chiave di
-// recupero) il codice dell'app non si può controllare: valgono i codici di
-// riserva, che si tengono solo come impronta e non hanno bisogno della chiave.
+// Verifica in due passaggi: telefono collegato (telefoniChiave.js) o codici TOTP (RFC 6238),
+// con i codici di riserva. Vedi il manuale tecnico.
 
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
@@ -34,7 +20,6 @@ const DURATA_PREPARAZIONE = 10 * 60 * 1000;
 const MAX_TENTATIVI = 5;
 const MAX_SFIDE = 10000;
 
-// --- TOTP ----------------------------------------------------------------------
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 export function base32(buf) {
@@ -65,9 +50,8 @@ export function codiceTotp(segreto, passo) {
     return String(n % 10 ** CIFRE).padStart(CIFRE, '0');
 }
 
-// Il passo a cui appartiene il codice, o null. Si accetta anche il passo
-// prima e quello dopo: l'orologio del telefono può essere avanti o indietro
-// di qualche secondo.
+// Si accetta anche il passo prima e quello dopo: l'orologio del telefono può essere
+// fuori di qualche secondo.
 export function passoDelCodice(segreto, codice, ora = Date.now()) {
     if (!/^\d{6}$/.test(codice)) return null;
     const p = passoAttuale(ora);
@@ -88,8 +72,7 @@ async function uriOtp(username, segreto) {
     return `otpauth://totp/${etichetta}?secret=${base32(segreto)}&issuer=${encodeURIComponent(emittente)}&algorithm=SHA1&digits=${CIFRE}&period=${PERIODO}`;
 }
 
-// --- Codici di riserva -----------------------------------------------------------
-// Dieci caratteri senza lettere ambigue, a gruppi di cinque.
+// Senza lettere ambigue.
 function nuovoCodiceRiserva() {
     const byte = crypto.randomBytes(10);
     const c = [...byte].map(b => ALFABETO_RECUPERO[b & 31]).join('');
@@ -104,7 +87,7 @@ function normalizzaRiserva(testo) {
 
 const improntaRiserva = (userId, codice) => crypto.createHash('sha256').update(`${userId}:${codice}`).digest('hex');
 
-async function nuoviCodiciRiserva(esecutore, userId) {
+export async function nuoviCodiciRiserva(esecutore, userId) {
     const codici = Array.from({ length: NUMERO_CODICI_RISERVA }, nuovoCodiceRiserva);
     await esecutore.query('DELETE FROM mfa_codici_riserva WHERE user_id = $1', [userId]);
     await esecutore.query(
@@ -118,15 +101,13 @@ async function codiciRimasti(userId) {
     return r.rows[0].n;
 }
 
-// --- Chi la deve fare ---------------------------------------------------------------
-// L'amministratore e chi vede i dati sanitari (permessi.js). Senza i permessi
-// in più si guardano solo quelli dei ruoli.
 export const mfaObbligatoria = (ruoli, permessi = null) => mfaRichiesta(ruoli, permessi ?? [...permessiDeiRuoli(ruoli)]);
 
-async function leggiUtente(userId) {
+export async function leggiUtente(userId) {
     const r = await pool.query(
-        `SELECT u.id, u.username, u.role, u.password, COALESCE(u.is_active, true) AS is_active, u.temporaneo,
+        `SELECT u.id, u.username, u.nome, u.email, u.role, u.password, COALESCE(u.is_active, true) AS is_active, u.temporaneo,
                 u.mfa_attiva, u.mfa_segreto, u.mfa_attivata_il,
+                (SELECT count(*)::int FROM telefoni_chiave WHERE user_id = u.id) AS telefoni,
                 ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
            FROM users u WHERE u.id = $1`, [userId]);
     const u = r.rows[0];
@@ -134,10 +115,10 @@ async function leggiUtente(userId) {
     return u || null;
 }
 
-// Il codice dell'app o un codice di riserva.
 async function verificaCodice(utente, codice) {
     const pulito = String(codice || '').replace(/\s/g, '');
     if (/^\d{6}$/.test(pulito)) {
+        if (!utente.mfa_segreto) return { ok: false, message: 'Non hai un\'app di codici collegata: conferma dal telefono o usa un codice di riserva.' };
         let segreto;
         try {
             segreto = daBase32(decifraTesto(utente.mfa_segreto));
@@ -165,7 +146,6 @@ async function verificaCodice(utente, codice) {
     return { ok: true, riserva: true, rimasti: await codiciRimasti(utente.id) };
 }
 
-// Salva il segreto appena confermato e dà i codici di riserva nuovi.
 async function salvaAttivazione(userId, segreto, passo) {
     const client = await pool.connect();
     try {
@@ -188,9 +168,9 @@ async function togli(userId) {
     await pool.query(
         'UPDATE users SET mfa_attiva = false, mfa_segreto = NULL, mfa_attivata_il = NULL, mfa_ultimo_passo = NULL WHERE id = $1', [userId]);
     await pool.query('DELETE FROM mfa_codici_riserva WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM telefoni_chiave WHERE user_id = $1', [userId]);
 }
 
-// --- Le sfide: fra la password e il codice ---------------------------------------------
 // In memoria: un riavvio del server le perde, e si rifà l'accesso.
 const sfide = new Map();
 const inPreparazione = new Map();
@@ -198,6 +178,24 @@ const inPreparazione = new Map();
 function pulisci(mappa) {
     const ora = Date.now();
     for (const [k, v] of mappa) if (v.scade < ora) mappa.delete(k);
+}
+
+export function sfidaValida(id) {
+    const sfida = typeof id === 'string' ? sfide.get(id) : null;
+    if (!sfida || sfida.scade < Date.now()) {
+        if (sfida) sfide.delete(id);
+        return null;
+    }
+    return sfida;
+}
+
+export const chiudiSfida = (id) => sfide.delete(id);
+
+// Conta ogni tentativo, con qualunque secondo fattore.
+export function troppiTentativi(id, sfida) {
+    if (++sfida.tentativi <= MAX_TENTATIVI) return false;
+    sfide.delete(id);
+    return true;
 }
 
 function nuovaSfida(dati) {
@@ -208,18 +206,19 @@ function nuovaSfida(dati) {
     return id;
 }
 
-// Dopo la password giusta. Null: si entra subito. Altrimenti la risposta da
-// dare: 401 con la sfida, così un'app vecchia che non conosce il passo mostra
-// almeno il messaggio.
-// [extra]: dati da tenere con la sfida (rinnovo: l'impronta del token dell'app
-// da promuovere quando il codice arriva).
+// 401 con la sfida: un'app vecchia che non conosce il passo mostra almeno il messaggio.
 export async function passoDopoLaPassword(utente, extra = {}) {
     if (utente.temporaneo === true) return null;
     if (utente.mfa_attiva) {
+        const r = await pool.query(
+            `SELECT (SELECT count(*)::int FROM telefoni_chiave WHERE user_id = $1) AS telefoni,
+                    (SELECT mfa_segreto IS NOT NULL FROM users WHERE id = $1) AS totp`, [utente.id]);
         return {
             mfa: 'codice',
             sfida: nuovaSfida({ userId: utente.id, tipo: 'codice', ...extra }),
-            message: "Serve il codice della verifica in due passaggi. Se l'app non te lo chiede, aggiornala."
+            telefoni: r.rows[0].telefoni,
+            totp: r.rows[0].totp === true,
+            message: "Serve la verifica in due passaggi. Se l'app non te la chiede, aggiornala."
         };
     }
     if (mfaObbligatoria(utente.ruoli, await permessiDellaPersona(utente.id, utente.ruoli))) {
@@ -229,7 +228,7 @@ export async function passoDopoLaPassword(utente, extra = {}) {
             sfida: nuovaSfida({ userId: utente.id, tipo: 'attivazione', segreto, ...extra }),
             segreto: base32(segreto),
             uri: await uriOtp(utente.username, segreto),
-            message: "Per il tuo ruolo serve la verifica in due passaggi: attivala dal browser, poi rientra nell'app."
+            message: "Per il tuo ruolo serve la verifica in due passaggi: collega il telefono dall'app o attivala dal browser."
         };
     }
     return null;
@@ -240,25 +239,24 @@ const rispostaAccesso = async (utente, { token, principale, ruoliUtente }, extra
     role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(utente.id, ruoliUtente), token, ...extra
 });
 
-// L'impronta dell'app nata prima della verifica in due passaggi: dato il codice
-// una volta, il suo token vale da secondo fattore come quelli nati con la verifica.
 async function promuoviRinnovo(req, sfida, utente) {
     if (!sfida.rinnovo) return;
     const r = await pool.query('UPDATE token_rinnovo SET mfa = true WHERE impronta = $1 AND user_id = $2', [sfida.rinnovo, utente.id]);
     if (r.rowCount) registraAudit(req, 'sessione.rinnovo_verificato', { tipo: 'utente', id: utente.id });
 }
 
+export async function accessoVerificato(req, res, sfida, utente, extra = {}) {
+    await promuoviRinnovo(req, sfida, utente);
+    const sessione = emettiSessione(res, utente, utente.ruoli, { mfa: true });
+    return res.json(await rispostaAccesso(utente, sessione, extra));
+}
+
 export function registraRotteMfaPubbliche(app) {
-    // Il secondo passo dell'accesso.
     app.post('/api/accesso/mfa', passwordLimiter, async (req, res) => {
         const id = typeof req.body?.sfida === 'string' ? req.body.sfida : '';
-        const sfida = sfide.get(id);
-        if (!sfida || sfida.scade < Date.now()) {
-            sfide.delete(id);
-            return res.status(401).json({ message: "Tempo scaduto: rifai l'accesso con la password.", sfida_scaduta: true });
-        }
-        if (++sfida.tentativi > MAX_TENTATIVI) {
-            sfide.delete(id);
+        const sfida = sfidaValida(id);
+        if (!sfida) return res.status(401).json({ message: "Tempo scaduto: rifai l'accesso con la password.", sfida_scaduta: true });
+        if (troppiTentativi(id, sfida)) {
             return res.status(401).json({ message: "Troppi codici sbagliati: rifai l'accesso con la password.", sfida_scaduta: true });
         }
         try {
@@ -279,10 +277,8 @@ export function registraRotteMfaPubbliche(app) {
                 const codici = await salvaAttivazione(utente.id, sfida.segreto, passo);
                 await chiudiSessioni(utente.id);
                 registraAudit(req, 'mfa.attivata', { tipo: 'utente', id: utente.id, dettagli: { al_primo_accesso: true } });
-                await promuoviRinnovo(req, sfida, utente);
                 logger.info(`[MFA] ${utente.username} ha attivato la verifica in due passaggi.`);
-                const sessione = emettiSessione(res, utente, utente.ruoli, { mfa: true });
-                return res.json(await rispostaAccesso(utente, sessione, { codici_riserva: codici }));
+                return accessoVerificato(req, res, sfida, utente, { codici_riserva: codici });
             }
 
             if (!utente.mfa_attiva) {
@@ -295,9 +291,7 @@ export function registraRotteMfaPubbliche(app) {
             if (esito.riserva) {
                 registraAudit(req, 'mfa.codice_riserva', { tipo: 'utente', id: utente.id, dettagli: { rimasti: esito.rimasti } });
             }
-            await promuoviRinnovo(req, sfida, utente);
-            const sessione = emettiSessione(res, utente, utente.ruoli, { mfa: true });
-            return res.json(await rispostaAccesso(utente, sessione, esito.riserva ? { codici_riserva_rimasti: esito.rimasti } : {}));
+            return accessoVerificato(req, res, sfida, utente, esito.riserva ? { codici_riserva_rimasti: esito.rimasti } : {});
         } catch (e) {
             logger.error('[MFA] Errore nel secondo passo dell\'accesso:', e);
             return res.status(500).json({ message: 'Errore interno del server' });
@@ -310,7 +304,6 @@ async function passwordGiusta(utente, password) {
 }
 
 export function registraRotteMfa(app) {
-    // Lo stato, per il profilo.
     app.get('/api/mfa', async (req, res) => {
         try {
             const u = await leggiUtente(req.user.id);
@@ -319,6 +312,8 @@ export function registraRotteMfa(app) {
                 obbligatoria: mfaObbligatoria(ruoliDi(req.user), req.user.permessi),
                 disponibile: req.user.temporaneo !== true,
                 attivata_il: u.mfa_attivata_il,
+                totp: !!u.mfa_segreto,
+                telefoni: u.telefoni,
                 codici_rimasti: u.mfa_attiva ? await codiciRimasti(u.id) : 0
             });
         } catch (e) {
@@ -327,8 +322,7 @@ export function registraRotteMfa(app) {
         }
     });
 
-    // Un segreto nuovo da inquadrare: per attivarla, o per passare a un
-    // telefono nuovo. Vale solo dopo la conferma con un codice.
+    // Vale solo dopo la conferma con un codice.
     app.post('/api/mfa/prepara', passwordLimiter, async (req, res) => {
         if (req.user.temporaneo) return res.status(403).json({ message: 'Gli accessi temporanei non usano la verifica in due passaggi.' });
         try {
@@ -352,10 +346,16 @@ export function registraRotteMfa(app) {
         const passo = passoDelCodice(preparata.segreto, String(req.body?.codice || '').replace(/\s/g, ''));
         if (passo == null) return res.status(400).json({ message: "Il codice non corrisponde. Controlla di aver inquadrato il QR di questa pagina e che l'ora del telefono sia automatica." });
         try {
-            const giaAttiva = (await leggiUtente(req.user.id)).mfa_attiva === true;
+            const prima = await leggiUtente(req.user.id);
             inPreparazione.delete(req.user.id);
+            if (prima.mfa_attiva && !prima.mfa_segreto) {
+                await pool.query('UPDATE users SET mfa_segreto = $2, mfa_ultimo_passo = $3 WHERE id = $1',
+                    [req.user.id, cifraTesto(base32(preparata.segreto)), passo]);
+                registraAudit(req, 'mfa.app_codici_aggiunta', { tipo: 'utente', id: req.user.id });
+                return res.json({ message: 'App dei codici collegata.' });
+            }
+            const giaAttiva = prima.mfa_attiva === true;
             const codici = await salvaAttivazione(req.user.id, preparata.segreto, passo);
-            // Gli altri accessi (e l'impronta degli altri telefoni) si rifanno con il codice.
             await chiudiSessioni(req.user.id);
             const { token } = emettiSessione(res, req.user, req.user.ruoli, { mfa: true });
             registraAudit(req, giaAttiva ? 'mfa.telefono_cambiato' : 'mfa.attivata', { tipo: 'utente', id: req.user.id });
@@ -400,13 +400,11 @@ export function registraRotteMfa(app) {
         }
     });
 
-    // Telefono perso e codici di riserva finiti: l'amministratore la toglie,
-    // e la persona la riattiva (un amministratore, al prossimo accesso).
     app.post('/api/admin/users/:id/mfa/azzera', checkAdminRole, async (req, res) => {
         const id = Number.parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID utente non valido.' });
         if (id === req.user.id) {
-            return res.status(409).json({ message: "La tua la cambi dal profilo («Cambia telefono»); azzerarla la può solo un altro amministratore." });
+            return res.status(409).json({ message: "La tua la cambi dal profilo («Cambia app dei codici» o i telefoni collegati); azzerarla la può solo un altro amministratore." });
         }
         try {
             const u = await leggiUtente(id);
@@ -428,5 +426,4 @@ export function registraRotteMfa(app) {
     });
 }
 
-// Per lo script da console (scripts/mfa-azzera.mjs) e per i test.
 export { togli as togliMfa };

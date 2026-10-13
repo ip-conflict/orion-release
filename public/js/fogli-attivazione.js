@@ -1,14 +1,6 @@
-// I fogli di attivazione da stampare: uno per volontario, con nome, username,
-// il QR del suo link e tre righe di istruzioni. Per i gruppi senza posta
-// configurata, o per chi non ha un'email: si consegnano in mano alla prima
-// riunione, e chi riceve il foglio inquadra il QR e sceglie la password.
-// Il link vale 7 giorni: scaduto, dalla pagina Utenti "Reset password" ne fa
-// uno nuovo, da ristampare.
-
 (function () {
     const testo = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    // Il QR come immagine: la libreria lo disegna in un elemento nascosto.
     function qrImmagine(link) {
         const scatola = document.createElement('div');
         scatola.style.cssText = 'position:absolute;left:-9999px;top:0';

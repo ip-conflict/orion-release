@@ -1,9 +1,5 @@
-// Pagina Sistema: backup, ripristino e stato dell'installazione.
-//
-// Il ripristino è l'unica cosa nell'applicazione che cancella i dati di tutti
-// di proposito. Da qui l'interfaccia: il pulsante rosso sta dentro una finestra
-// che prima spiega cosa si perde, chiede la password e fa scrivere una parola
-// per esteso. Una conferma che si clicca per abitudine non è una conferma.
+// Il ripristino è l'unica cosa che cancella i dati di tutti di proposito: password e una parola
+// scritta per esteso. Una conferma che si clicca per abitudine non è una conferma.
 
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
@@ -13,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let dataCopiaFile = null;
     let sondaOperazione = null;
 
-    // Utilità
     function dimensioneLeggibile(byte) {
         if (byte >= 1024 * 1024 * 1024) return `${(byte / 1024 / 1024 / 1024).toFixed(1)} GB`;
         if (byte >= 1024 * 1024) return `${(byte / 1024 / 1024).toFixed(1)} MB`;
@@ -36,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return giorni === 1 ? 'ieri' : `${giorni} giorni fa`;
     }
 
-    // Stato e elenco
     async function caricaTutto() {
         try {
             const dati = await fetchApi('/api/sistema/backup');
@@ -144,8 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
             scarica.textContent = 'Scarica';
             gruppo.appendChild(scarica);
 
-            // Controllare un archivio prima di averne bisogno: un backup
-            // troncato si scopre adesso, non il giorno del ripristino.
             const verifica = document.createElement('button');
             verifica.type = 'button';
             verifica.className = 'button-style button-small button-secondary';
@@ -175,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Azioni sui backup
     $('btn-backup-adesso').addEventListener('click', async (evento) => {
         const pulsante = evento.currentTarget;
         pulsante.disabled = true;
@@ -238,7 +229,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Ripristino
     function apriRipristino(backup) {
         sceltoPerRipristino = backup;
         $('backup-scelto').textContent =
@@ -288,7 +278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Versione e aggiornamenti
     let versione = null;
 
     async function caricaVersione() {
@@ -324,14 +313,13 @@ document.addEventListener('DOMContentLoaded', () => {
             contenitore.appendChild(voceStato('Aggiornamento', 'sei alla versione più recente'));
         }
 
+
         $('aggiornamenti-attivo').checked = !!versione.aggiornamenti.attivo;
         $('aggiornamenti-origine').value = versione.aggiornamenti.origine || 'github';
         $('aggiornamenti-repo').value = versione.aggiornamenti.repo || '';
         $('aggiornamenti-manifesto').value = versione.aggiornamenti.manifesto || '';
         mostraCampiOrigine();
 
-        // I motivi per cui non si può aggiornare si dicono prima, non a metà
-        // strada: a metà strada l'installazione è già stata toccata.
         const requisiti = $('requisiti-aggiornamento');
         requisiti.innerHTML = '';
         (versione.requisiti?.problemi || []).forEach(testo => {
@@ -381,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('btn-salva-aggiornamenti').addEventListener('click', () => salvaConfigAggiornamenti('Origine salvata.'));
-    // La casella vale da sola: niente Salva da ricordarsi.
     $('aggiornamenti-attivo').addEventListener('change', (e) => salvaConfigAggiornamenti(e.target.checked
         ? 'Controllo giornaliero acceso.'
         : 'Controllo giornaliero spento.'));
@@ -438,7 +425,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Versioni precedenti ---------------------------------------------------
     let ritornoScelto = null;
 
     async function caricaVersioniPrecedenti() {
@@ -540,9 +526,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Come sta andando
-    // Mentre il ripristino lavora, l'applicazione risponde "in manutenzione" a
-    // tutto il resto: questa pagina continua a chiedere solo a che punto è.
     function seguiOperazione() {
         $('riquadro-operazione').hidden = false;
         $('btn-chiudi-operazione').hidden = true;
@@ -556,8 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             operazione = await fetchApi('/api/sistema/operazione');
         } catch {
-            // Durante il riavvio il server non risponde: è previsto, si
-            // continua a chiedere finché non torna.
+            // Durante il riavvio il server non risponde: è previsto.
             return;
         }
         if (!operazione) {
@@ -594,14 +576,11 @@ document.addEventListener('DOMContentLoaded', () => {
         esito.className = `esito${operazione.esito ? ' ' + operazione.esito : ''}`;
     }
 
-    // Si chiude anche sul server: ricaricando la pagina non torna.
     $('btn-chiudi-operazione').addEventListener('click', async () => {
         $('riquadro-operazione').hidden = true;
         try { await fetchApi('/api/sistema/operazione', { method: 'DELETE' }); } catch { /* resta solo per questa volta */ }
     });
 
-    // All'apertura della pagina: se c'è un'operazione in corso o appena
-    // conclusa (tipicamente si è appena riavviato tutto), si mostra subito.
     (async () => {
         try {
             const operazione = await fetchApi('/api/sistema/operazione');
@@ -619,7 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
         caricaFirebase();
     })();
 
-    // --- Notifiche Firebase --------------------------------------------------
     function esitoFirebase(testo, tipo = '') {
         const esito = $('esito-firebase');
         esito.textContent = testo;
@@ -700,7 +678,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Cifratura ---------------------------------------------------------
     let modoRecupero = null; // 'mostra' | 'inserisci'
     async function caricaCifratura() {
         try {
@@ -799,7 +776,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { notifica(e.message, 'errore'); }
     });
 
-    // --- Integrità dello storico -------------------------------------------
     const NOMI_TABELLE = {
         report_updates: 'note delle segnalazioni', diario_sala: 'diario di sala', audit_log: 'registro delle operazioni',
         movimenti: 'movimenti del magazzino', emergency_team_log: 'registro delle squadre'

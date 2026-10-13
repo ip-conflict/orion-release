@@ -1,6 +1,3 @@
-// La rubrica d'emergenza su carta (rubrica.html): intestazione, data e una
-// tabella per gruppo. I contatti si aggiungono dal centro operativo.
-
 (async function () {
     const foglio = document.getElementById('st-foglio');
     document.getElementById('st-stampa').addEventListener('click', () => window.print());

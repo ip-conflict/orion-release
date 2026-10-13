@@ -1,16 +1,7 @@
-// La configurazione iniziale: il primo amministratore si crea dalla pagina di
-// accesso, non da setup.sh. Finché nel database non c'è un amministratore, la
-// pagina di accesso mostra il modulo "Configurazione iniziale".
-//
-// Il modulo chiede un codice monouso. Senza, chiunque arrivasse per primo
-// all'indirizzo appena pubblicato (fra la fine dell'installazione e il primo
-// accesso di chi l'ha fatta) diventerebbe amministratore. Il codice lo genera
-// ORION all'avvio e lo scrive in PRIMO-ACCESSO.txt nella cartella
-// dell'applicazione, leggibile solo dal suo utente e da root: setup.sh lo
-// mostra alla fine, e chi ha installato lo ritrova con
-//   sudo cat <cartella dell'app>/PRIMO-ACCESSO.txt
-// Creato l'amministratore, il file sparisce e le rotte rispondono 409.
+// Il primo amministratore si crea dalla pagina di accesso con un codice monouso, scritto in
+// PRIMO-ACCESSO.txt: senza, l'indirizzo appena pubblicato sarebbe di chi arriva per primo.
 
+import { controllaPassword } from './password.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -25,8 +16,7 @@ import { passwordLimiter } from './middleware/rateLimiters.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const FILE_CODICE = path.join(__dirname, '..', 'PRIMO-ACCESSO.txt');
 
-// Le stesse regole del cambio password.
-export const REGOLA_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|\\;:'",.<>\/?~]).{12,}$/;
+export { REGOLA_PASSWORD } from './password.js';
 const USERNAME = /^[a-z0-9._-]{3,50}$/;
 
 let codiceAttivo = null;
@@ -36,7 +26,7 @@ async function esisteAmministratore(esecutore = pool) {
     return r.rowCount > 0;
 }
 
-// Senza lettere che si confondono (0/O, 1/I/L): si copia da un terminale.
+// Senza lettere che si confondono: si copia da un terminale.
 function nuovoCodice() {
     const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     const byte = crypto.randomBytes(16);
@@ -44,8 +34,6 @@ function nuovoCodice() {
     return `${caratteri.slice(0, 4)}-${caratteri.slice(4, 8)}-${caratteri.slice(8, 12)}-${caratteri.slice(12, 16)}`;
 }
 
-// All'avvio: se manca un amministratore, il codice c'è (quello già scritto, se
-// il server si riavvia prima del primo accesso, altrimenti uno nuovo).
 export async function preparaPrimoAccesso() {
     try {
         if (await esisteAmministratore()) {
@@ -84,7 +72,6 @@ function codiceGiusto(dato) {
 }
 
 export function registraRottePrimoAccesso(app) {
-    // La pagina di accesso chiede se mostrare il modulo.
     app.get('/api/primo-accesso', async (req, res) => {
         try {
             res.json({ necessario: !!codiceAttivo && !(await esisteAmministratore()) });
@@ -111,9 +98,8 @@ export function registraRottePrimoAccesso(app) {
         if (!nome || !cognome) return res.status(400).json({ message: 'Servono nome e cognome.' });
         if (!USERNAME.test(username)) return res.status(400).json({ message: 'Lo username va da 3 a 50 caratteri: lettere minuscole, cifre, punto, trattino o trattino basso.' });
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ message: "L'indirizzo email non è valido." });
-        if (!REGOLA_PASSWORD.test(password)) {
-            return res.status(400).json({ message: 'La password deve avere almeno 12 caratteri, con maiuscole, minuscole, un numero e un simbolo.' });
-        }
+        const problemaPassword = controllaPassword(password, { username, nome, cognome, email });
+        if (problemaPassword) return res.status(400).json({ message: problemaPassword });
 
         const client = await pool.connect();
         try {

@@ -1,5 +1,3 @@
-// tests/integrita.mjs
-//
 // Lo storico inalterabile, provato da chi ha in mano il database: quello che
 // il blocco ferma, quello che la verifica scopre, e la riscrittura di tutta la
 // catena che solo un sigillo conservato smaschera.
@@ -43,7 +41,6 @@ const api = async (percorso, opzioni = {}) => {
 const rifiuta = async (sql, parametri) => {
     try { await pool.query(sql, parametri); return false; } catch (e) { return /storico|registro di integrità/i.test(e.message); }
 };
-// Chi ha l'accesso del proprietario delle tabelle può spegnere i trigger.
 const daAttaccante = async (tabella, sql, parametri) => {
     const c = await pool.connect();
     try {
@@ -63,7 +60,6 @@ const daAttaccante = async (tabella, sql, parametri) => {
 
 console.log('\nStorico inalterabile');
 
-// Un po' di storico: emergenza, segnalazione, nota, diario.
 if (!(await api('/api/emergencies/status')).corpo?.active) {
     await api('/api/emergencies/open', { method: 'POST', body: { external_code: `INT-${Date.now().toString().slice(-5)}`, name: 'Prova integrità' } });
 }
@@ -75,19 +71,16 @@ await api('/api/emergencies/diario-sala', { method: 'POST', body: { testo: 'Voce
 let stato = (await api('/api/sistema/integrita')).corpo;
 verifica('all\'inizio lo storico è integro e tutto sigillato', stato?.integro === true && stato.non_sigillate === 0, stato);
 
-// 1. Il blocco, per chi passa dal database senza spegnere i trigger.
 verifica('una nota non si modifica', await rifiuta('UPDATE report_updates SET update_text = $2 WHERE id = $1', [nota.id, 'ritoccata']));
 verifica('una nota non si cancella', await rifiuta('DELETE FROM report_updates WHERE id = $1', [nota.id]));
 verifica('il registro delle operazioni non si svuota', await rifiuta('TRUNCATE audit_log'));
 verifica('il registro di integrità non si tocca', await rifiuta('UPDATE registro_integrita SET impronta = impronta WHERE id = (SELECT min(id) FROM registro_integrita)'));
 
-// 2. Chi spegne i trigger: la verifica lo scopre, e torna integro rimettendo a posto.
 await daAttaccante('report_updates', 'UPDATE report_updates SET update_text = $2 WHERE id = $1', [nota.id, 'Testo cambiato di nascosto']);
 stato = (await api('/api/sistema/integrita')).corpo;
 verifica('una nota cambiata di nascosto: la verifica la trova',
     stato?.integro === false && stato.alterate === 1 && stato.esempi_alterate?.[0]?.righe?.includes(nota.id), stato);
 await daAttaccante('report_updates', 'UPDATE report_updates SET update_text = $2 WHERE id = $1', [nota.id, 'Testo originale della nota']);
-// La data come testo: un Date di JavaScript perderebbe i microsecondi, e la riga rimessa non sarebbe più quella.
 const copia = (await pool.query('SELECT *, update_timestamp::text AS quando_testo FROM report_updates WHERE id = $1', [nota.id])).rows[0];
 await daAttaccante('report_updates', 'DELETE FROM report_updates WHERE id = $1', [nota.id]);
 stato = (await api('/api/sistema/integrita')).corpo;
@@ -98,25 +91,20 @@ await daAttaccante('report_updates',
 stato = (await api('/api/sistema/integrita')).corpo;
 verifica('rimessa com\'era, lo storico torna integro', stato?.integro === true, stato);
 
-// 3. Il sigillo: preso adesso, confrontato dopo una riscrittura completa.
 const sigillo = stato.sigillo;
 let confronto = (await api('/api/sistema/integrita/confronta', { method: 'POST', body: { sigillo } })).corpo;
 verifica('il sigillo appena preso corrisponde', confronto?.ok === true, confronto);
-// L'attaccante cambia la nota e ricostruisce da capo tutta la catena:
-// per la verifica interna è tutto in ordine...
 await daAttaccante('report_updates', 'UPDATE report_updates SET update_text = $2 WHERE id = $1', [nota.id, 'Riscritta, catena compresa']);
 await daAttaccante('registro_integrita', 'DELETE FROM registro_integrita');
 await pool.query('SELECT orion_sigilla()');
 stato = (await api('/api/sistema/integrita')).corpo;
 verifica('dopo la riscrittura completa la verifica interna non vede niente (lo sa fare solo il sigillo)', stato?.integro === true, stato);
-// ...ma il sigillo conservato no.
 confronto = (await api('/api/sistema/integrita/confronta', { method: 'POST', body: { sigillo } })).corpo;
 verifica('il sigillo conservato smaschera la riscrittura', confronto?.ok === false, confronto);
 await daAttaccante('report_updates', 'UPDATE report_updates SET update_text = $2 WHERE id = $1', [nota.id, 'Testo originale della nota']);
 await daAttaccante('registro_integrita', 'DELETE FROM registro_integrita');
 await pool.query('SELECT orion_sigilla()');
 
-// 4. Cancellare un'emergenza archiviata: si può, e resta scritto.
 const emergenza = (await api('/api/emergencies/status')).corpo?.emergency;
 await api('/api/emergencies/close', { method: 'POST', body: {} });
 const tolta = await api(`/api/admin/emergencies/${emergenza.id}`, { method: 'DELETE' });

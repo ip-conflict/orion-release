@@ -1,19 +1,14 @@
-/* /public/css/login.css */
-
-/* Stile Body: Centra il contenuto e usa sfondo variabile */
 body {
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh; 
-    /* Usa uno sfondo leggermente diverso per distinguerla? O lo stesso */
     background-color: var(--secondary-bg-color, #f0f0f0); 
     padding: 1rem; 
     box-sizing: border-box;
     font-family: sans-serif; /* Assicurati sia lo stesso delle altre pagine */
 }
 
-/* Contenitore principale (potrebbe non servire con body flex) */
 .login-container {
     width: 100%;
     display: flex;
@@ -21,7 +16,6 @@ body {
     align-items: center;
 }
 
-/* Box effettivo del login */
 .login-box {
     background-color: var(--bg-color, #ffffff); 
     color: var(--text-color, #212529); 
@@ -35,15 +29,12 @@ body {
     transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
 }
 
-/* Stile specifico dark mode per ombra (aggiunto qui per specificità) */
 @media (prefers-color-scheme: dark) {
   .login-box {
-     /* Ombra leggermente più visibile in dark mode */
      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.4); 
   }
 }
 
-/* Titolo H2 */
 #login-form h2 {
     color: var(--text-color, #212529); 
     margin-top: 0;
@@ -52,7 +43,6 @@ body {
     font-weight: 600;
 }
 
-/* Stile inputs */
 #login-form input[type="text"],
 #login-form input[type="password"] {
     width: 100%;
@@ -67,7 +57,6 @@ body {
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-/* Stile focus input */
 #login-form input[type="text"]:focus,
 #login-form input[type="password"]:focus {
     outline: none;
@@ -75,10 +64,7 @@ body {
     box-shadow: 0 0 0 3px var(--form-input-focus-shadow, rgba(0, 123, 255, 0.25));
 }
 
-/* Stile Placeholder */
 #login-form input::placeholder {
-   /* Usa un grigio leggermente più chiaro del testo normale */
-   /* Potrebbe essere necessario un colore specifico per dark mode */
    color: #999; 
    opacity: 0.8;
 }
@@ -88,7 +74,6 @@ body {
     }
 }
 
-/* Stile bottone */
 #login-form button {
     width: 100%;
     padding: 0.9rem 1.5rem;
@@ -107,12 +92,10 @@ body {
     background-color: var(--button-hover-bg, #0056b3);
 }
 
-/* Stile messaggio di login (feedback/errori) */
 #login-message {
     margin-top: 1.5rem; 
     min-height: 1.2em; /* Mantiene lo spazio anche se vuoto */
     font-weight: bold;
-    /* Colore verrà impostato da JS, ma definiamo un colore base e per errori */
     color: var(--text-color); 
     transition: color 0.3s ease;
 }
@@ -123,21 +106,17 @@ body {
      color: var(--status-success-color, #28a745);
 }
 
-/* Fix per Autofill di Chrome/WebKit in Dark Mode */
-/* Questo blocco è importante copiarlo da centro-operativo.css se non linki quel file */
 @media (prefers-color-scheme: dark) {
     #login-form input:-webkit-autofill,
     #login-form input:-webkit-autofill:hover, 
     #login-form input:-webkit-autofill:focus, 
     #login-form input:-webkit-autofill:active {
-        /* Usa le variabili definite nella media query del file principale */
         -webkit-box-shadow: 0 0 0 30px var(--form-input-bg) inset !important; 
         -webkit-text-fill-color: var(--text-color) !important; 
         caret-color: var(--text-color); /* Colore cursore (lametta) */
     }
 }
 
-/* Proposta dell'app Android dopo l'accesso da telefono */
 .proposta-app {
     position: fixed;
     inset: 0;
@@ -208,7 +187,6 @@ body {
     cursor: pointer;
 }
 
-/* Configurazione iniziale: il primo amministratore */
 .primo-accesso { text-align: left; }
 .primo-accesso h2 { text-align: center; margin: 0 0 0.75rem; font-size: 1.6em; font-weight: 600; }
 .primo-accesso .pa-spiega { font-size: 0.9em; color: var(--text-muted, #6c757d); margin: 0 0 1.25rem; line-height: 1.45; }
@@ -228,12 +206,10 @@ body {
 .primo-accesso #pa-messaggio { margin: 0.9rem 0 0; font-size: 0.9em; text-align: center; }
 .primo-accesso #pa-messaggio.errore { color: var(--danger-color, #dc3545); }
 @media (max-width: 420px) { .primo-accesso .pa-coppia { grid-template-columns: 1fr; gap: 0; } }
-/* Un riquadro più alto dello schermo (la configurazione iniziale sul
-   telefono) parte dall'alto invece di uscire sopra il bordo. */
+/* safe: un riquadro più alto dello schermo parte dall'alto invece di uscire dal bordo. */
 body { align-items: safe center; }
 @media (max-width: 480px) { .login-box { padding: 1.75rem 1.25rem; } }
 
-/* Le etichette sopra i campi: restano visibili mentre si scrive. */
 .etichetta-accesso {
     display: block;
     text-align: left;
@@ -246,7 +222,6 @@ body { align-items: safe center; }
 #forgot-password-form .etichetta-accesso { margin-top: 0; }
 #forgot-password-form input[type="text"] { width: 100%; box-sizing: border-box; }
 
-/* "Non sei tu?" sotto il nome ricordato dall'ultimo accesso. */
 .non-sei-tu {
     margin: -0.55rem 0 0.9rem;
     text-align: left;

@@ -1,10 +1,3 @@
-/* public/css/calendario.css
- *
- * Il calendario del gruppo. Sul computer il mese in griglia, sul telefono un
- * elenco di giorni. Colori da theme.css: le attività in blu, le emergenze in
- * rosso, le scadenze in ambra; chi deve ancora rispondere ha il bordo
- * tratteggiato, chi ha risposto il segno. */
-
 .sottotitolo { margin: 4px 0 0; opacity: 0.75; font-size: 0.9rem; }
 .nota { color: var(--text-muted); font-size: 0.88rem; margin: 4px 0; }
 
@@ -47,7 +40,6 @@
 .filtro.acceso.filtro-reperibili { border-color: var(--success-text); background: var(--success-soft-bg); }
 .filtro.acceso.filtro-assenti { border-color: var(--text-muted); background: var(--secondary-bg-color); }
 
-/* --- Il mese --- */
 .griglia-mese {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -105,7 +97,6 @@
 .voce-turni.cat-reperibili { background: var(--success-soft-bg); color: var(--success-text); }
 .voce-turni.cat-assenti { background: var(--secondary-bg-color); color: var(--text-muted); border: 1px dashed var(--border-color); }
 
-/* --- L'elenco per il telefono --- */
 .agenda { display: none; }
 .giorno-agenda {
     background: var(--surface-color);
@@ -131,7 +122,6 @@
     .navigazione-mese h2 { min-width: 0; font-size: 1.1rem; }
 }
 
-/* --- Modali --- */
 .modale {
     position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
     display: flex; align-items: flex-start; justify-content: center;
@@ -232,7 +222,6 @@
     .dati-attivita dt { margin-top: 6px; }
 }
 
-/* --- La simulazione --- */
 .voce-simulazione { background: repeating-linear-gradient(45deg, #ede9fe, #ede9fe 6px, #ddd6fe 6px, #ddd6fe 12px); color: #5b21b6; font-weight: 600; }
 .pastiglia.simulazione { background: #6d28d9; color: #fff; }
 .riquadro-simulazione { border-color: #a78bfa; }
@@ -251,7 +240,6 @@
     .voce-simulazione { background: repeating-linear-gradient(45deg, rgba(167, 139, 250, .25), rgba(167, 139, 250, .25) 6px, rgba(167, 139, 250, .15) 6px, rgba(167, 139, 250, .15) 12px); color: #ddd6fe; }
 }
 
-/* La regia: le persone scelte, una per etichetta. */
 #aggiungi-regia { width: 100%; margin-top: 6px; }
 .chip-regia { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-regia li { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 12px; border-radius: 999px; background: rgba(109, 40, 217, .1); color: var(--text-color); font-size: .9rem; }
@@ -259,7 +247,6 @@
 .chip-regia li.vuota { background: none; padding-left: 0; color: var(--text-muted, #6b7280); font-style: italic; }
 .nota-conduci { padding: 8px 12px; border-left: 3px solid var(--primary-color, #1e4f8c); background: rgba(30, 79, 140, .06); border-radius: 4px; }
 
-/* Gli allegati di un'attività: nella scheda si aprono, nel modulo si aggiungono e si tolgono. */
 .allegati-attivita h3 { font-size: 0.95rem; margin: 14px 0 6px; }
 .elenco-allegati { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .elenco-allegati:empty { display: none; }
@@ -274,7 +261,6 @@
 .campo-allegati .etichetta-campo .nota { font-weight: 400; }
 .griglia-campi .campo-allegati label.pulsante-allegato { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; width: auto; cursor: pointer; }
 
-/* Un giorno del mese si tocca per una nuova attività in quel giorno. */
 .giorno.cliccabile { cursor: pointer; }
 .giorno.cliccabile:hover { background: var(--list-item-hover-bg); }
 .giorno.cliccabile .numero-giorno::after { content: '+'; margin-left: 6px; opacity: 0; color: var(--primary-color); font-weight: 700; transition: opacity .15s; }

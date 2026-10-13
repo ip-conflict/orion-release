@@ -1,5 +1,5 @@
-// Il WebSocket: dal server ai client, mai il contrario. Il web riceve tutto,
-// l'app solo quello che riguarda la persona e la sua squadra.
+// Il WebSocket va solo dal server ai client. Il web riceve tutto, l'app solo quello
+// che riguarda la persona e la sua squadra.
 
 import cookie from 'cookie';
 import cookieParser from 'cookie-parser';
@@ -15,19 +15,14 @@ import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { WebSocketServer } from 'ws';
 
-// Il canale va solo dal server ai client: messaggi in arrivo piccoli e ignorati.
 export const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 });
 
-// Le connessioni dell'app (X-Orion-Client: app) ricevono solo quello che
-// riguarda la persona: le posizioni di tutte le squadre e il diario di ogni
-// segnalazione consumano batteria e su un telefono perso non devono esserci.
-// Gli avvisi delle funzioni e della mappa portano solo "rileggi": i dati li
-// chiede poi l'app, e le rotte decidono cosa può vedere.
+// Posizioni di tutte le squadre e diari consumano batteria e su un telefono perso non
+// devono esserci. Gli avvisi di funzioni e mappa portano solo "rileggi".
 const AZIONI_APP_SEMPRE = new Set(['notifica', 'emergency_status_change', 'emergency_deleted', 'reload_squadre', 'branding_updated',
     'reload_incarichi', 'reload_funzioni', 'reload_mappa']);
 const AZIONI_APP_INTERVENTO = new Set(['reload_reports', 'new_report_update']);
 
-// Le segnalazioni assegnate adesso alla squadra di questa persona.
 async function interventiDellaPersona(userId, reportId = null) {
     const r = await pool.query(
         `SELECT DISTINCT rta.report_id
@@ -45,9 +40,8 @@ async function inSquadra(userId) {
 }
 
 async function interessaAllApp(ws, messaggio, visti) {
-    // L'apertura di un'emergenza arriva solo a chi è già in una squadra: gli
-    // altri non la vedono nell'app finché non entrano in squadra (e allora
-    // arriva la notifica in_squadra). La chiusura arriva a tutti.
+    // L'apertura arriva solo a chi è già in squadra (gli altri ricevono in_squadra quando
+    // ci entrano); la chiusura a tutti.
     if (messaggio.action === 'emergency_status_change' && messaggio.status?.active) {
         return ruoliDi(ws.user).includes('esterno') || await inSquadra(ws.user.id);
     }
@@ -64,8 +58,7 @@ async function interessaAllApp(ws, messaggio, visti) {
     return false;
 }
 
-// Il filtro sta qui, davanti all'invio: il resto del server manda a tutti. Gli
-// invii passano uno alla volta, così l'ordine resta quello di partenza.
+// Gli invii passano uno alla volta, così l'ordine resta quello di partenza.
 function filtraPerApp(ws) {
     const inviaDavvero = ws.send.bind(ws);
     const visti = new Set();
@@ -86,11 +79,8 @@ function filtraPerApp(ws) {
     };
 }
 
-// Il telefono in ascolto per gli avvisi riceve solo le sue notifiche (e
-// l'invito a rileggere la configurazione, quando Firebase cambia). Il
-// server gli manda un ping ogni INTERVALLO_PING_AVVISI: tiene aperta la strada
-// attraverso la rete mobile (che chiude i collegamenti muti) e fa cadere quelli
-// morti. Più spesso costerebbe batteria al telefono.
+// Il ping tiene aperta la strada nella rete mobile (che chiude i collegamenti muti) e
+// fa cadere quelli morti. Più spesso costerebbe batteria.
 const INTERVALLO_PING_AVVISI = 2 * 60 * 1000;
 const AZIONI_AVVISI = new Set(['notifica', 'avvisi_configurazione']);
 
@@ -107,7 +97,6 @@ function soloAvvisi(ws) {
     telefonoCollegato(ws.avvisi);
     ws.vivo = true;
     ws.on('pong', () => { ws.vivo = true; });
-    // Anche il ping del telefono dice che è vivo.
     ws.on('ping', () => { ws.vivo = true; });
     ws.on('close', () => telefonoScollegato(ws.avvisi));
 }
@@ -127,8 +116,8 @@ wss.on('connection', (ws, request) => {
     if (ws.avvisi) soloAvvisi(ws);
     else if (ws.app) filtraPerApp(ws);
 
-    // Quello che manda un client non si inoltra a nessuno: chiunque potrebbe
-    // spedire a tutte le postazioni eventi falsi.
+    // Quello che manda un client non si inoltra: chiunque potrebbe spedire eventi falsi
+    // a tutte le postazioni.
     ws.on('message', (message) => {
         try {
             const preview = (Buffer.isBuffer(message) ? message.toString('utf8') : String(message)).substring(0, 100);
@@ -145,7 +134,6 @@ wss.on('connection', (ws, request) => {
      ws.on('error', (error) => logger.error(`Errore WebSocket per utente ${ws.user?.username || 'sconosciuto'}:`, error));
 });
 
-// Avvisa tutte le postazioni collegate che qualcosa è cambiato.
 export function avvisaClienti(azione, dati = {}) {
     wss.clients.forEach(client => {
         if (client.readyState === 1) {
@@ -158,9 +146,7 @@ export function avvisaClienti(azione, dati = {}) {
     });
 }
 
-// Come avvisaClienti, ma solo alle connessioni di una persona: il web aperto
-// su un computer e l'app sul telefono ricevono entrambi. Chi non è collegato
-// troverà la stessa cosa nella coda di notifiche.
+// Chi non è collegato troverà la stessa cosa nella coda di notifiche.
 function avvisaUtente(userId, azione, dati = {}) {
     wss.clients.forEach(client => {
         if (client.readyState === 1 && client.user?.id === userId) {
@@ -173,11 +159,8 @@ function avvisaUtente(userId, azione, dati = {}) {
     });
 }
 
-// La coda di notifiche per persona, letta dall'app.
 export const notifiche = creaNotifiche({ pool, logger, avvisaUtente, svegliaTelefoni, inSimulazione: () => activeEmergency?.simulazione === true });
 
-// Ai telefoni in ascolto col token degli avvisi: la configurazione è cambiata
-// (Firebase acceso o spento), la rileggono subito.
 export function avvisaTelefoniInAscolto(azione = 'avvisi_configurazione') {
     wss.clients.forEach(client => {
         if (client.readyState === 1 && client.avvisi) {
@@ -191,9 +174,7 @@ export function avvisaTelefoniInAscolto(azione = 'avvisi_configurazione') {
 }
 
 export function avviaTempoReale(server) {
-    // Il WebSocket si apre solo con una sessione valida.
     server.on('upgrade', async (request, socket, head) => {
-        // Il telefono in ascolto col token degli avvisi: riceve solo le sue notifiche.
         const tokenAvvisi = tokenAvvisiDa(request.headers['authorization']);
         if (tokenAvvisi) {
             try {
@@ -217,7 +198,6 @@ export function avviaTempoReale(server) {
             return;
         }
         let token = null;
-        // Dal cookie (web) o dall'intestazione Authorization (app).
         try {
             const rawCookies = request.headers.cookie;
             if (rawCookies) {
@@ -252,7 +232,6 @@ export function avviaTempoReale(server) {
 
         try {
             const decodedUser = await verifyJwtToken(token);
-            // Gli stessi controlli di authenticateToken: token revocato, account sospeso.
 
             const stato = await pool.query(
                 `SELECT EXISTS (SELECT 1 FROM revoked_tokens WHERE token = $1) AS revocato,
@@ -262,7 +241,6 @@ export function avviaTempoReale(server) {
                     ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = $2) AS permessi_in_piu`,
                 [token, decodedUser.id]);
             const { revocato, attivo, valide_dal, ruoli, permessi_in_piu } = stato.rows[0];
-            // E, come lì, chi deve fare la verifica in due passaggi senza averla fatta non entra.
             const verificaMancante = mfaRichiesta(ruoli, permessiDi(ruoli, permessi_in_piu)) && decodedUser.mfa !== true;
             if (revocato || attivo !== true || tokenSuperato(decodedUser, valide_dal) || verificaMancante) {
                 logger.warn(`WS Upgrade: sessione non più valida per ${decodedUser.username} (${revocato ? 'token revocato' : 'account non attivo'}).`);

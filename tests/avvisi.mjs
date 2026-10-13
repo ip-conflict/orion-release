@@ -1,5 +1,3 @@
-// tests/avvisi.mjs
-//
 // Il token degli avvisi: il telefono lo chiede con la sessione e poi, anche
 // a sessione finita, legge le sue notifiche e resta in ascolto. Non apre
 // nient'altro, dal collegamento passano solo le sue notifiche, e smette di
@@ -85,7 +83,6 @@ try {
     verifica('la prova parte con un ritardo', prova.stato === 202 && prova.corpo?.ritardo === 1, prova);
     const doppia = await chiama('/api/notifiche/prova', { method: 'POST', token: sessione, body: {} });
     verifica('una seconda prova mentre la prima è in arrivo -> 409', doppia.stato === 409, doppia);
-    // Qualcosa che va a tutti: al telefono non deve arrivare.
     const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
     for (const nome_radio of ['Zulu', 'Yankee', 'X-ray', 'Whiskey', 'Victor', 'Uniform', 'Tango'].filter(x => !usati.has(x))) {
         const r = await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio, nome: 'Prova avvisi', membri: [] } });
@@ -96,12 +93,10 @@ try {
     verifica('la prova arriva dal collegamento degli avvisi', !!arrivata && arrivata.notifica.categoria === 'personale', telefono.ricevuti);
     verifica('dal collegamento passano solo le notifiche', telefono.ricevuti.every(m => m.action === 'notifica'), telefono.ricevuti.map(m => m.action));
 
-    // La sessione finisce (qui con l'uscita): gli avvisi no.
     await chiama('/logout', { method: 'POST', token: sessione });
     const dopoUscita = await chiama('/api/avvisi/notifiche', { avvisi });
     verifica('finita la sessione, il token degli avvisi vale ancora', dopoUscita.stato === 200 && dopoUscita.corpo.notifiche.some(x => x.tipo === 'prova'), dopoUscita.stato);
 
-    // Restituito, non vale più.
     const sessione2 = (await accediConFetch(BASE, n.username, password)).token;
     const secondo = (await chiama('/api/app/avvisi', { method: 'POST', token: sessione2, body: { precedente: avvisi } })).corpo?.avvisi;
     verifica('chiedendone uno nuovo, il precedente smette di valere',
@@ -109,7 +104,6 @@ try {
     await chiama('/api/app/avvisi', { method: 'DELETE', token: sessione2, body: { avvisi: secondo } });
     verifica('restituito, non vale più', (await chiama('/api/avvisi/notifiche', { avvisi: secondo })).stato === 401);
 
-    // Sospesa la persona, nemmeno.
     const terzo = (await chiama('/api/app/avvisi', { method: 'POST', token: sessione2, body: {} })).corpo?.avvisi;
     await chiama(`/api/admin/users/${persona}/toggle-status`, { method: 'PATCH', token: admin });
     verifica('sospesa la persona, non vale più', (await chiama('/api/avvisi/notifiche', { avvisi: terzo })).stato === 401);

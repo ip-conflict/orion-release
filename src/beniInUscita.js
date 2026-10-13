@@ -1,8 +1,5 @@
-// Il materiale in carico a una squadra o a un volontario che sta per sparire.
-// Non può sparire con lui: l'operazione si ferma e chiede riga per riga se è
-// rientrato, perso o da recuperare, e ogni scelta diventa un movimento con il
-// nome di chi ha deciso. "da_recuperare" non muove niente: il bene resta fra
-// le cose da riprendere, con il nome del detentore nell'ultimo movimento.
+// Il materiale di chi sparisce non può sparire con lui: si decide riga per riga.
+// "da_recuperare" non muove niente.
 
 import { erroreRichiesta } from './costanti.js';
 import { magazzino } from './istanze.js';

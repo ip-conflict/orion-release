@@ -1,5 +1,3 @@
-// tests/documenti.mjs
-//
 // L'archivio dei documenti del gruppo (src/documenti.js). Lo consultano tutti
 // gli interni; caricare, cambiare e togliere è di chi ha gruppo.documenti, che
 // si concede anche da solo. Un documento riservato a un ruolo non lo vede chi
@@ -28,7 +26,6 @@ const chiama = async (percorso, { method = 'GET', body, token } = {}) => {
     });
     return { stato: r.status, corpo: await r.json().catch(() => null) };
 };
-// Un caricamento col modulo, come dalla pagina.
 const carica = async (percorso, token, { nome, contenuto, campi = {} }) => {
     const modulo = new FormData();
     for (const [k, v] of Object.entries(campi)) modulo.append(k, Array.isArray(v) ? v.join(',') : String(v));
@@ -75,7 +72,6 @@ try {
     await chiama(`/api/admin/users/${tenutario.id}/permessi`, { method: 'PUT', token: admin, body: { in_piu: ['gruppo.documenti'] } });
     verifica('col permesso in più, l\'archivio è suo', (await elenco(tenutario.token))?.gestisce === true);
 
-    // Caricare.
     const primo = await carica('/api/documenti', tenutario.token, {
         nome: 'Procedura motosega.pdf', contenuto: pdf('versione uno'),
         campi: { titolo: `Procedura motosega ${suffisso}`, cartella_id: procedure.id, descrizione: 'Uso in sicurezza', sempre_con_me: true }
@@ -96,7 +92,6 @@ try {
     });
     verifica('oltre il tetto -> 413', grande.stato === 413, grande.stato);
 
-    // Lo vede ogni interno, e lo apre.
     const visto = await elenco(vol.token);
     verifica("l'app di un volontario ha i documenti", (await chiama('/api/app/contesto', { token: vol.token })).corpo?.capacita?.includes('documenti'));
     verifica('un volontario lo vede, senza poter gestire', visto?.documenti?.some(d => d.id === id) && visto.gestisce === false && visto.byte_totali === undefined, visto?.gestisce);
@@ -106,7 +101,6 @@ try {
         && contenuto.toString().includes('versione uno'), file.status);
     verifica('un volontario non lo cambia -> 403', (await chiama(`/api/documenti/${id}`, { method: 'PUT', token: vol.token, body: { titolo: 'X' } })).stato === 403);
 
-    // Una versione nuova conserva la vecchia.
     const seconda = await carica(`/api/documenti/${id}/versioni`, tenutario.token, { nome: 'Procedura motosega rev2.pdf', contenuto: pdf('versione due'), campi: { nota: 'Aggiornata la catena' } });
     verifica('versione nuova', seconda.stato === 201 && seconda.corpo?.versione === 2 && seconda.corpo.versioni === 2 && seconda.corpo.impronta !== primo.corpo.impronta, seconda.corpo);
     const dettaglio = (await chiama(`/api/documenti/${id}`, { token: vol.token })).corpo;
@@ -114,7 +108,6 @@ try {
     const vecchia = await fetch(`${BASE}/api/documenti/${id}/file?versione=1`, { headers: { Authorization: `Bearer ${vol.token}` } });
     verifica('la vecchia si apre ancora', (await vecchia.text()).includes('versione uno'));
 
-    // Riservato a un ruolo.
     const riservato = await chiama(`/api/documenti/${id}`, { method: 'PUT', token: tenutario.token, body: {
         titolo: `Procedura motosega ${suffisso}`, cartella_id: procedure.id, visibilita: 'ruoli', ruoli: ['magazziniere'], sempre_con_me: true
     } });
@@ -126,7 +119,6 @@ try {
     const senzaRuoli = await chiama(`/api/documenti/${id}`, { method: 'PUT', token: tenutario.token, body: { titolo: `Procedura motosega ${suffisso}`, visibilita: 'ruoli', ruoli: ['inventato'] } });
     verifica('riservato a nessun ruolo valido torna a tutti gli interni', senzaRuoli.corpo?.visibilita === 'interni', senzaRuoli.corpo);
 
-    // Gli esterni: solo i documenti per l'emergenza, a emergenza aperta.
     const piano = await carica('/api/documenti', tenutario.token, {
         nome: 'Piano.pdf', contenuto: pdf('piano'), campi: { titolo: `Piano comunale ${suffisso}`, in_emergenza: true }
     });
@@ -153,7 +145,6 @@ try {
             !(await chiama('/api/app/contesto', { token: est.token })).corpo?.capacita?.includes('documenti'));
     }
 
-    // Il collegamento ai beni del magazzino.
     const b = await chiama('/api/magazzino/beni', { method: 'POST', token: admin, body: { tipo: 'attrezzatura', denominazione: `Motosega ${suffisso}` } });
     if (b.stato === 201) {
         bene = b.corpo.id;
@@ -166,7 +157,6 @@ try {
         const scollegato = await chiama(`/api/documenti/${id}/beni/${bene}`, { method: 'DELETE', token: tenutario.token });
         verifica('e lo scollega chi tiene l\'archivio', scollegato.stato === 200 && scollegato.corpo?.beni?.length === 0, scollegato.corpo);
 
-        // Dalla scheda del bene: il libretto caricato da lì, anche per i beni uguali.
         const b2 = await chiama('/api/magazzino/beni', { method: 'POST', token: admin, body: { tipo: 'attrezzatura', denominazione: `motosega ${suffisso}` } });
         bene2 = b2.corpo?.id;
         verifica('un volontario non carica il libretto -> 403',
@@ -182,7 +172,6 @@ try {
         const tutti = await chiama(`/api/documenti/${id}/beni`, { method: 'POST', token: mag.token, body: { bene_id: bene2, simili: true } });
         verifica("un documento dell'archivio si collega a tutti i beni uguali", tutti.stato === 201 && tutti.corpo?.collegati === 2, tutti.corpo);
 
-        // Il libretto di quello che si ha in carico: l'app lo tiene sul telefono finché lo si ha.
         const segnato = async () => ((await elenco(vol.token))?.documenti || []).find(d => d.id === libretto.corpo?.id)?.in_carico;
         verifica('senza averla in carico il libretto non è segnato', (await segnato()) === false);
         const consegna = await chiama('/api/magazzino/movimenti', { method: 'POST', token: admin, body: { bene_id: bene, tipo: 'consegna', quantita: 1, destinatario: { tipo: 'persona', id: vol.id } } });
@@ -194,14 +183,12 @@ try {
         console.log(`  (magazzino non disponibile: HTTP ${b.stato}, il collegamento ai beni non si prova)`);
     }
 
-    // Le cartelle.
     const cartella = await chiama('/api/documenti-cartelle', { method: 'POST', token: tenutario.token, body: { nome: `Prove ${suffisso}` } });
     verifica('cartella nuova', cartella.stato === 201, cartella);
     verifica('stesso nome -> 409', (await chiama('/api/documenti-cartelle', { method: 'POST', token: tenutario.token, body: { nome: `Prove ${suffisso}` } })).stato === 409);
     await chiama(`/api/documenti/${id}`, { method: 'PUT', token: tenutario.token, body: { titolo: `Procedura motosega ${suffisso}`, cartella_id: cartella.corpo.id } });
     verifica('con dentro un documento non si toglie -> 409', (await chiama(`/api/documenti-cartelle/${cartella.corpo.id}`, { method: 'DELETE', token: tenutario.token })).stato === 409);
 
-    // Via.
     const tolto = await chiama(`/api/documenti/${id}`, { method: 'DELETE', token: tenutario.token });
     verifica('documento tolto con le sue versioni', tolto.stato === 200 && (await chiama(`/api/documenti/${id}`, { token: tenutario.token })).stato === 404);
     documenti.splice(documenti.indexOf(id), 1);

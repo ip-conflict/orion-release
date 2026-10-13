@@ -1,5 +1,4 @@
-// Prima di "npm run migrate" (setup.sh, update.sh): allinea un database nato
-// prima della 1.0. Legge DATABASE_URL, come node-pg-migrate.
+// Prima di "npm run migrate": allinea un database nato prima della 1.0. Legge DATABASE_URL.
 import { allineaMigrazioni } from '../src/allineaMigrazioni.js';
 
 if (!process.env.DATABASE_URL) {

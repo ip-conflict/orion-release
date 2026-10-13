@@ -1,19 +1,11 @@
-// Con la rete che va e viene una richiesta può arrivare al server e la
-// risposta perdersi per strada: chi la rimanda non deve creare due volte la
-// stessa segnalazione o la stessa nota. Chi scrive manda un'intestazione
-// Idempotency-Key, sempre la stessa per lo stesso invio: la prima volta la
-// richiesta si esegue e la risposta si tiene da parte, le volte dopo si
-// restituisce quella senza rifare niente.
-//
-// Vale per tutte le scritture che portano la chiave, tranne il magazzino che
-// la gestisce dentro le sue transazioni (stessa tabella, stesse regole, e
-// la sua pulizia settimanale vale anche per queste chiavi).
+// Con la rete che va e viene la risposta può perdersi: la stessa Idempotency-Key non
+// scrive due volte. Il magazzino la gestisce dentro le sue transazioni.
 
 import crypto from 'crypto';
 
 const FORMATO_CHIAVE = /^[A-Za-z0-9_-]{8,100}$/;
 const METODI = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-// Una richiesta rimasta "in corso" più di così è morta con il server: si rifà.
+// Una richiesta "in corso" da più di così è morta con il server: si rifà.
 const ABBANDONATA_DOPO_SECONDI = 120;
 
 export function creaIdempotenza({ pool, logger, escluse = [] }) {
@@ -27,7 +19,6 @@ export function creaIdempotenza({ pool, logger, escluse = [] }) {
         const rotta = `${req.method} ${req.baseUrl}${req.path}`.slice(0, 60);
         const impronta = crypto.createHash('sha256').update(JSON.stringify(req.body || {})).digest('hex');
         try {
-            // Una richiesta in corso da troppo tempo non finirà più: via la chiave.
             await pool.query(
                 `DELETE FROM richieste_idempotenti WHERE user_id = $1 AND chiave = $2
                  AND stato_risposta IS NULL AND creata_il < NOW() - make_interval(secs => $3)`,
@@ -56,9 +47,8 @@ export function creaIdempotenza({ pool, logger, escluse = [] }) {
             return res.status(500).json({ message: 'Errore interno.' });
         }
 
-        // La risposta si tiene da parte appena il gestore la scrive, anche se
-        // chi l'ha chiesta nel frattempo ha perso la rete: rimandando la
-        // ritrova. Un errore del server libera la chiave: si riprova davvero.
+        // La risposta si tiene appena il gestore la scrive, anche se chi l'ha chiesta ha perso la
+        // rete. Un errore del server libera la chiave.
         let registrata = false;
         const registra = async (stato, corpo) => {
             if (registrata) return;
@@ -78,9 +68,6 @@ export function creaIdempotenza({ pool, logger, escluse = [] }) {
         };
         const json = res.json.bind(res);
         res.json = (dati) => { registra(res.statusCode, dati); return json(dati); };
-        // Risposte senza corpo JSON; se la connessione cade prima che il
-        // gestore risponda, la chiave resta "in corso" finché non risponde
-        // o non scade.
         res.on('finish', () => registra(res.statusCode, {}));
         next();
     }

@@ -1,5 +1,3 @@
-// tests/letture.mjs
-//
 // Le letture delle segnalazioni tenute dal server: fin dove una persona ha
 // letto, quante voci di altri sono arrivate dopo e quante sono "forti" (note
 // scritte da una persona, foto). Le proprie voci non contano; segnare la

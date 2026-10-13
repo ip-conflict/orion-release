@@ -47,7 +47,6 @@ let brandingSettings = {
 };
 let segreteriaConfig = { enabled: false, block_on_medical: false, block_on_course: false };
 
-// NOMI RADIO DELLE SQUADRE (alfabeto fonetico)
 const NOMI_RADIO = [
     'Alfa', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 
     'India', 'Juliett', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa', 
@@ -76,7 +75,6 @@ async function loadAndApplyBranding() {
 
             const puoAmministrare = haRuolo('admin');
             
-            // Svela i link base dell'Admin
             if (puoAmministrare) {
                 const sidebarSettings = document.getElementById('sidebar-settings');
                 const sidebarUsers = document.getElementById('sidebar-users');
@@ -89,7 +87,6 @@ async function loadAndApplyBranding() {
                 if (sidebarSistema) sidebarSistema.style.display = 'block';
             }
 
-            // Svela il link Segreteria (Solo se Modulo Attivo + Ruolo Corretto)
             if (settings.segreteria_config) {
                 const sConf = typeof settings.segreteria_config === 'string' ? JSON.parse(settings.segreteria_config) : settings.segreteria_config;
                 
@@ -98,7 +95,6 @@ async function loadAndApplyBranding() {
                 }
 
                 const sidebarSegreteria = document.getElementById('sidebar-segreteria');
-                // Il magazzino a chi lo usa, se il modulo è acceso.
             const vociMagazzino = document.getElementById('sidebar-magazzino');
             if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haPermesso('magazzino.gestione', 'magazzino.consegne')) {
                 vociMagazzino.style.display = 'block';
@@ -130,7 +126,6 @@ function populateSelectList(selectElement, usersArray) {
         option.value = user.username || '';
 
         const userText = `${user.nome || ''} ${user.cognome || ''} (${user.username || ''})`;
-        // Fine definizione corretta
 
         option.textContent = userText;
 
@@ -149,32 +144,26 @@ function populatePrefixDropdown(selectElement, usedPrefixesSet, currentPrefixFor
     } 
     let firstAvailable = null;
     let shouldAddCurrentPrefixOption = false;
-    // Aggiungi i nomi radio disponibili
     NOMI_RADIO.forEach(prefix => {
         const isUsed = usedPrefixesSet.has(prefix);
         const isCurrentPrefix = (prefix === currentPrefixForEdit);
 
-        // NASCONDI (non aggiungere) se è usato E NON è quello attualmente modificato
         if (!isUsed || isCurrentPrefix) { 
             const option = document.createElement('option');
             option.value = prefix;
             option.textContent = prefix + (isCurrentPrefix ? ' (attuale)' : '');
             selectElement.appendChild(option);
 
-            // Se non è usato, potrebbe essere il primo disponibile
             if (!isUsed && firstAvailable === null) {
                 firstAvailable = prefix;
             }
         } 
     });
-// Logica di Pre-selezione
     let valueToSelect = "";
 
     if (currentPrefixForEdit) {
-        // Siamo in MODIFICA: seleziona il nome radio attuale della squadra
         valueToSelect = currentPrefixForEdit;
     } else if (firstAvailable) {
-        // Siamo in CREAZIONE e abbiamo trovato un nome radio libero: suggeriscilo
         valueToSelect = firstAvailable; 
         console.log(`Suggerito primo nome radio disponibile: ${firstAvailable}`);
     }
@@ -190,7 +179,6 @@ function populateUserSelectList(selectElement, usersArray) {
     usersArray.forEach(user => {
         const option = document.createElement('option');
         option.value = user.username || ''; 
-        // Chi è arrivato in sede dopo la chiamata viene per primo.
         option.textContent = `${user.in_sede ? '● In sede · ' : ''}${user.nome || ''} ${user.cognome || ''} (${user.username || ''})`;
         option.dataset.userId = user.id || '';
         option.dataset.nome = user.nome || '';
@@ -198,19 +186,14 @@ function populateUserSelectList(selectElement, usersArray) {
         selectElement.appendChild(option);
     });
 }
-// Fine Funzioni Helper
 
-// L'ultimo elenco caricato: serve ad aprire una squadra dall'indirizzo.
 let ultimeSquadre = [];
 
-// Arrivo dal Centro Operativo (?da=centro): chiusa la finestra di creazione o
-// di modifica si torna là, dove si stava lavorando.
 const parametriPagina = new URLSearchParams(window.location.search);
 function tornaAlCentroSeRichiesto() {
     if (parametriPagina.get('da') === 'centro') window.location.href = '/centro-operativo.html';
 }
 
-// Il caposquadra scelto nei due moduli (facoltativo): lo username, o null.
 const caposquadraScelto = { create: null, edit: null };
 
 async function loadSquadreAdmin() {
@@ -241,13 +224,11 @@ async function loadSquadreAdmin() {
             return;
         }
 
-        // Itera su ogni squadra ricevuta
         squadre.forEach(squadra => {
             const tr = document.createElement('tr');
             tr.dataset.teamId = squadra.id;
             tr.style.cursor = 'pointer';
             
-            // Cliccando la riga si apre direttamente il modale di modifica
             tr.addEventListener('click', () => {
                 openEditModalAdmin(squadra);
             });
@@ -255,7 +236,6 @@ async function loadSquadreAdmin() {
             const memberCount = squadra.membri ? squadra.membri.length : 0;
             const prefixChar = squadra.nome_radio ? squadra.nome_radio.charAt(0).toUpperCase() : '?';
 
-            // HTML della riga in stile Moderno
             tr.innerHTML = `
                 <td>
                     <div style="display: flex; align-items: center; gap: 12px;">
@@ -280,7 +260,6 @@ async function loadSquadreAdmin() {
                 </td>
             `;
 
-            // Agganciamo solo l'evento per eliminare, la modifica scatta cliccando la riga intera
             const deleteBtn = tr.querySelector('.delete-btn');
             if (deleteBtn) {
                 const currentTeamId = squadra.id;
@@ -307,7 +286,6 @@ async function deleteSquadraAdmin(teamId, teamPrefix) {
         try { 
             await fetchApi(`/api/squadre/${teamId}`, { method: 'DELETE' });
             loadSquadreAdmin();
-             // Chiudi pannello dettagli se era aperta questa squadra
             if(currentlyShownTeamIdAdmin === teamId) {
                 closeTeamDetailsPanel();
             }
@@ -320,7 +298,6 @@ async function deleteSquadraAdmin(teamId, teamPrefix) {
     }
 }
 
-// Apre il modale di creazione e carica gli utenti
 async function openCreateModalAdmin() {
     if (!adminCreateModal || !adminCreateForm) return;
     adminCreateForm.reset(); 
@@ -337,7 +314,6 @@ async function openCreateModalAdmin() {
     renderUserList(adminSelectedList, window.currentSelectedMembersCreate, false, 'create');
 }
 
-// Chiude il modale di creazione
 function closeCreateModalAdmin() {
     if (!adminCreateModal) return;
     adminCreateModal.style.display = 'none';
@@ -353,7 +329,6 @@ async function loadAvailableUsersForCreateModal() {
         currentAvailableMembersCreate = await fetchApi('/api/users/unassigned') || [];
         console.log(`Caricati ${currentAvailableMembersCreate.length} utenti non assegnati.`);
         populateUserSelectList(adminAvailableList, currentAvailableMembersCreate);
-        // Filtra subito se c'è già del testo nel campo ricerca
         filterAvailableMembersCreate(); 
     } catch (error) {
         console.error("Errore caricamento utenti non assegnati:", error);
@@ -362,7 +337,6 @@ async function loadAvailableUsersForCreateModal() {
     }
 }
 
-// Filtra utenti disponibili nel modale CREAZIONE
 function filterAvailableMembersCreate() {
     const searchTerm = adminCreateSearchInput.value.toLowerCase();
     const filteredAvailable = currentAvailableMembersCreate.filter(user => 
@@ -380,9 +354,7 @@ function populateAvailableMembersList(listElementId, selectedMemberUsernames = [
 
     allUsersAdmin
         .filter(user => {
-            // Filtra per termine di ricerca (su nome, cognome, username)
             const nameMatch = `${user.nome} ${user.cognome} ${user.username}`.toLowerCase().includes(lowerSearchTerm);
-            // Filtra per escludere quelli già nell'altra lista (CONFRONTA USERNAME TESTUALE)
             const isNotSelected = !selectedMemberUsernames.includes(user.username);
             return nameMatch && isNotSelected;
         })
@@ -411,7 +383,6 @@ function removeSelectedMembers() {
     selectedOptions.forEach(option => {
         option.remove();
     });
-    // Ripopola/Filtra la lista disponibili basata sulla ricerca corrente e i membri rimasti selezionati
     filterAvailableMembersCreate(); 
 }
 
@@ -449,11 +420,9 @@ async function handleCreateSquadraSubmit(event) {
     }
 }
 
-// Apre il modale di modifica e popola con dati squadra e membri disponibili/attuali
 async function openEditModalAdmin(squadraDallaLista) {
     let newData;
     try {
-        // Questa chiamata finalmente eseguirà la tua API /api/squadre/:id !
         newData = await fetchApi(`/api/squadre/${squadraDallaLista.id}`);
     } catch (error) {
         console.error("Errore recupero dettagli squadra:", error);
@@ -474,7 +443,6 @@ async function openEditModalAdmin(squadraDallaLista) {
     caposquadraScelto.edit = membriAttuali.find(m => m.caposquadra)?.username || null;
 
     populatePrefixDropdown(adminEditPrefixSelect, usedPrefixes, squadra.nome_radio); 
-    // La squadra COC tiene nome e sigla: si cambiano solo i membri.
     if (squadra.coc) {
         adminEditPrefixSelect.appendChild(new Option('COC (sala operativa)', 'COC', true, true));
         adminEditPrefixSelect.value = 'COC';
@@ -490,7 +458,6 @@ async function openEditModalAdmin(squadraDallaLista) {
     filterAvailableMembersEdit(); 
 }
 
-// Aggiungi funzione per chiudere Modale Modifica
 function closeEditModalAdmin() {
     if (!adminEditModal) return;
     adminEditModal.style.display = 'none';
@@ -499,7 +466,6 @@ function closeEditModalAdmin() {
     tornaAlCentroSeRichiesto();
 }
 
-// Filtra utenti disponibili nel modale MODIFICA
 function filterAvailableMembersEdit() {
     const searchTerm = adminEditSearchInput.value.toLowerCase();
     const filteredAvailable = currentAvailableMembersEdit.filter(user => 
@@ -522,9 +488,7 @@ function removeSelectedMembersEdit() {
     selectedOptions.forEach(option => {
         adminEditAvailableList.appendChild(option);
     });
-     // Ripopola/Filtra la lista disponibili basata sulla ricerca corrente
     filterAvailableMembersEdit(); 
-    // Ordina alfabeticamente la lista disponibili dopo lo spostamento
     sortSelectOptions(adminEditAvailableList); 
 }
 
@@ -563,7 +527,6 @@ async function handleEditSquadraSubmit(event) {
         closeEditModalAdmin(); 
         loadSquadreAdmin();
         if(currentlyShownTeamIdAdmin === teamId) {
-            // Ricrea oggetto squadra aggiornato per il pannello
             const updatedSquadraForPanel = { ...currentEditingTeamData, ...body }; 
             showTeamDetailsPanel(updatedSquadraForPanel);
         }
@@ -575,7 +538,6 @@ async function handleEditSquadraSubmit(event) {
     }
 }
 
-// Evidenzia la riga della tabella admin corrispondente all'ID
 function highlightAdminTableRow(teamId) {
     if (!squadreTableBody) return;
     const rows = squadreTableBody.querySelectorAll('tr');
@@ -615,7 +577,6 @@ function showTeamDetailsPanel(squadra) {
     adminTeamDetailPanel.style.display = 'flex'; 
 }
 
-// Chiude il pannello dettagli inferiore
 function closeTeamDetailsPanel() {
     if (!adminTeamDetailPanel) return;
     adminTeamDetailPanel.style.display = 'none';
@@ -628,11 +589,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log("Pagina Admin Squadre caricata.");
     await loadAndApplyBranding();
     
-    // Setup Pulsante Nuova Squadra
     if (newTeamBtn) newTeamBtn.addEventListener('click', openCreateModalAdmin);
     else console.error("Pulsante 'Nuova squadra' non trovato.");
 
-    // Setup Modale Creazione
     if (closeAdminCreateBtn) closeAdminCreateBtn.addEventListener('click', closeCreateModalAdmin);
     if (cancelAdminCreateBtn) cancelAdminCreateBtn.addEventListener('click', closeCreateModalAdmin);
     if (adminCreateForm) adminCreateForm.addEventListener('submit', handleCreateSquadraSubmit);
@@ -640,7 +599,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (adminAddBtn) adminAddBtn.addEventListener('click', addSelectedMembers);
     if (adminRemoveBtn) adminRemoveBtn.addEventListener('click', removeSelectedMembers);
 
-    // Setup Modale Modifica
     if (closeAdminEditBtn) closeAdminEditBtn.addEventListener('click', closeEditModalAdmin);
     if (cancelAdminEditBtn) cancelAdminEditBtn.addEventListener('click', closeEditModalAdmin);
     if (adminEditForm) adminEditForm.addEventListener('submit', handleEditSquadraSubmit);
@@ -648,18 +606,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (adminEditAddBtn) adminEditAddBtn.addEventListener('click', addSelectedMembersEdit);
     if (adminEditRemoveBtn) adminEditRemoveBtn.addEventListener('click', removeSelectedMembersEdit);
 
-    // Setup Pannello Dettagli Inferiore
     if (closeTeamDetailBtn) closeTeamDetailBtn.addEventListener('click', closeTeamDetailsPanel);
     else console.error("Pulsante chiusura pannello dettagli squadra non trovato!");
 
-    // Setup WebSocket Listener (se necessario in questa pagina)
     document.addEventListener('ws:reload_squadre', (event) => {
         console.log('Evento WS ricevuto: reload_squadre', event.detail);
         loadSquadreAdmin();
         const updatedTeamId = event.detail?.updatedTeamId;
         const deletedTeamId = event.detail?.deletedTeamId;
         if (currentlyShownTeamIdAdmin && (currentlyShownTeamIdAdmin === updatedTeamId || currentlyShownTeamIdAdmin === deletedTeamId)) {
-            // Se eliminata chiudi, se modificata ricarica (ma loadSquadreAdmin già lo fa implicitamente)
             if(deletedTeamId === currentlyShownTeamIdAdmin) {
                  closeTeamDetailsPanel();
             }
@@ -669,8 +624,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadSquadreAdmin();
 
-    // Scorciatoie dal Centro Operativo: ?nuova=1 apre la creazione,
-    // ?squadra=ID la modifica di quella squadra.
     if (parametriPagina.get('nuova') === '1') {
         openCreateModalAdmin();
     } else if (parametriPagina.get('squadra')) {
@@ -717,21 +670,15 @@ function renderUserList(ulElement, usersArray, isAvailableList, listType) {
             }
         }
 
-        // Se bloccante E siamo nella lista di sinistra (Aggiungi), disabilita il tasto e ingrigisci la riga
         const applyBlock = isBlocking && isAvailableList;
         
         li.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); ${applyBlock ? 'opacity: 0.5; background: #f8717110;' : ''}`;
 
-        // Bottone. Le classi vengono da componenti.css: aggiungere è l'azione
-        // normale (pieno), rimuovere è quella che toglie qualcosa (contorno
-        // rosso). Niente icone: una parola sola dice già tutto.
         const buttonText = applyBlock ? 'Bloccato' : (isAvailableList ? 'Aggiungi' : 'Rimuovi');
         const buttonClass = applyBlock
             ? 'button-style button-small'
             : (isAvailableList ? 'button-style button-small' : 'button-style button-small btn-pericolo');
 
-        // Fra i membri scelti, la stella nomina il caposquadra (uno solo,
-        // facoltativo): toccata di nuovo lo toglie.
         const capo = !isAvailableList && caposquadraScelto[listType] === user.username;
         const stella = isAvailableList ? '' : `<button type="button" class="stella-caposquadra${capo ? ' scelto' : ''}" aria-pressed="${capo}"
                 title="${capo ? 'Caposquadra: tocca per toglierlo' : 'Nomina caposquadra'}"><i class="${capo ? 'fas' : 'far'} fa-star" aria-hidden="true"></i></button>`;

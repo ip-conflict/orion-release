@@ -1,40 +1,7 @@
 #!/bin/bash
-# ==============================================================================
-# Backup automatico di ORION
-# ==============================================================================
-#
-# Esegue ogni giorno:
-#   1. un dump compresso del database PostgreSQL (con rotazione)
-#   2. una copia speculare dei file caricati (foto, certificati, documenti)
-#
-# Viene installato da setup.sh (e da update.sh sulle installazioni esistenti)
-# in /etc/cron.d/orion-backup ed eseguito come root.
-#
-# USO MANUALE:
+# Backup giornaliero di ORION (cron, come root): dump del database e copia dei file
+# caricati. Il ripristino si fa dalla pagina Sistema; a mano, vedi il manuale tecnico.
 #   sudo /var/www/<dominio>/scripts/backup.sh <dominio>
-#
-# RIPRISTINO DALL'APPLICAZIONE (strada consigliata):
-#   Pagina "Sistema" -> elenco dei backup -> Ripristina. Fa da sola il backup di
-#   sicurezza, lavora in una transazione unica e riavvia l'applicazione.
-#
-# RIPRISTINO A MANO (se l'applicazione non parte più):
-#   1. Database:
-#        gunzip -c /var/backups/orion/db/db_<data>.sql.gz | sudo -u postgres psql <nome_db>
-#        (un dump cifrato si decifra prima: node scripts/decifra-backup.mjs <dump> <uscita.sql.gz>)
-#      Se il database va ricreato da zero:
-#        sudo -u postgres dropdb <nome_db> && sudo -u postgres createdb -O <utente_db> <nome_db>
-#        gunzip -c /var/backups/orion/db/db_<data>.sql.gz | sudo -u postgres psql <nome_db>
-#        (un dump cifrato si decifra prima: node scripts/decifra-backup.mjs <dump> <uscita.sql.gz>)
-#   2. File caricati:
-#        rsync -a /var/backups/orion/files/ /var/www/<dominio>/
-#        chown -R orion_app:orion_app /var/www/<dominio>
-#   3. Riavvio: sudo -u orion_app pm2 start Orion
-#
-# ATTENZIONE: questi backup stanno sulla STESSA macchina dell'applicazione.
-# Proteggono da errori applicativi e cancellazioni accidentali, NON dalla rottura
-# del server o del disco. Copiare periodicamente /var/backups/orion su un altro
-# supporto o su un'altra macchina (es. rsync verso un NAS del Comune).
-# ==============================================================================
 
 set -u
 set -o pipefail
@@ -58,7 +25,6 @@ if [ ! -f "$APP_DIR/.env" ]; then
     exit 1
 fi
 
-# Legge le credenziali del database dall'installazione live
 DB_USER=$(grep -E '^DB_USER=' "$APP_DIR/.env" | cut -d= -f2-)
 DB_DATABASE=$(grep -E '^DB_DATABASE=' "$APP_DIR/.env" | cut -d= -f2-)
 if [ -z "${DB_DATABASE:-}" ]; then
@@ -66,10 +32,7 @@ if [ -z "${DB_DATABASE:-}" ]; then
     exit 1
 fi
 
-# I dump contengono tutto il database (password cifrate, dati sanitari) e la
-# copia dei file i certificati medici: li legge root e, in sola lettura,
-# l'utente dell'applicazione, che li elenca e li ripristina dalla pagina
-# Sistema. Nessun altro utente della macchina.
+# Li legge root e, in sola lettura, l'utente dell'applicazione. Nessun altro.
 umask 027
 GRUPPO_APP=$(stat -c %G "$APP_DIR" 2>/dev/null || echo orion_app)
 mkdir -p "$BACKUP_ROOT/db" "$BACKUP_ROOT/files"
@@ -78,9 +41,6 @@ chmod 750 "$BACKUP_ROOT/db" "$BACKUP_ROOT/files"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 DUMP_FILE="$BACKUP_ROOT/db/db_${TIMESTAMP}.sql.gz"
 
-# ------------------------------------------------------------------------------
-# 1. Dump del database
-# ------------------------------------------------------------------------------
 log "Avvio dump del database '$DB_DATABASE'..."
 if ! sudo -u postgres pg_dump "$DB_DATABASE" | gzip > "$DUMP_FILE"; then
     errore "pg_dump fallito per il database '$DB_DATABASE'."
@@ -88,7 +48,7 @@ if ! sudo -u postgres pg_dump "$DB_DATABASE" | gzip > "$DUMP_FILE"; then
     exit 1
 fi
 
-# Un dump vuoto o troncato è peggio di nessun backup: meglio accorgersene subito.
+# Un dump vuoto o troncato è peggio di nessun backup.
 DIMENSIONE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || echo 0)
 if [ "$DIMENSIONE" -lt 1000 ]; then
     errore "Il dump risulta sospettosamente piccolo ($DIMENSIONE byte): lo elimino, il backup NON è valido."
@@ -100,9 +60,6 @@ if ! gzip -t "$DUMP_FILE" 2>/dev/null; then
     rm -f "$DUMP_FILE"
     exit 1
 fi
-# Cifrato con la chiave dei dati di ORION (se c'è): un dump copiato altrove
-# non si legge senza la chiave. Si ripristina dalla pagina Sistema, o a mano
-# con scripts/decifra-backup.mjs.
 if command -v node >/dev/null 2>&1 && [ -f "$APP_DIR/scripts/cifra-backup.mjs" ]; then
     CHIAVE_DATI=$(grep -E '^ORION_CHIAVE_FILE=' "$APP_DIR/.env" | cut -d= -f2-)
     if ! node "$APP_DIR/scripts/cifra-backup.mjs" "$DUMP_FILE" ${CHIAVE_DATI:+"$CHIAVE_DATI"} >>"$LOG_FILE" 2>&1; then
@@ -111,16 +68,12 @@ if command -v node >/dev/null 2>&1 && [ -f "$APP_DIR/scripts/cifra-backup.mjs" ]
 fi
 chown root:"$GRUPPO_APP" "$DUMP_FILE" 2>/dev/null || true
 chmod 640 "$DUMP_FILE"
-# I dump delle versioni precedenti erano leggibili da tutti: si sistemano.
+# I dump delle versioni precedenti erano leggibili da tutti.
 find "$BACKUP_ROOT/db" -type f -name 'db_*.sql.gz' -exec chown root:"$GRUPPO_APP" {} + -exec chmod 640 {} + 2>/dev/null || true
 log "Dump completato: $DUMP_FILE ($(du -h "$DUMP_FILE" | cut -f1))"
 
-# ------------------------------------------------------------------------------
-# 2. Copia dei file caricati
-# ------------------------------------------------------------------------------
-# I documenti, i certificati e le foto NON sono nel database: senza questa copia
-# un ripristino restituirebbe un archivio con i riferimenti ma senza i file.
-# Copia speculare (non versionata) per non moltiplicare lo spazio occupato.
+# I file caricati non sono nel database: senza questa copia un ripristino avrebbe i
+# riferimenti ma non i file.
 log "Copia dei file caricati..."
 for CARTELLA in protected_uploads uploads public/logo.png public/logo2.png; do
     ORIGINE="$APP_DIR/$CARTELLA"
@@ -133,9 +86,6 @@ for CARTELLA in protected_uploads uploads public/logo.png public/logo2.png; do
 done
 log "Copia file completata."
 
-# ------------------------------------------------------------------------------
-# 3. Rotazione
-# ------------------------------------------------------------------------------
 ELIMINATI=$(find "$BACKUP_ROOT/db" -name 'db_*.sql.gz' -type f -mtime +"$GIORNI_CONSERVAZIONE" -print -delete | wc -l)
 if [ "$ELIMINATI" -gt 0 ]; then
     log "Rotazione: rimossi $ELIMINATI dump più vecchi di $GIORNI_CONSERVAZIONE giorni."

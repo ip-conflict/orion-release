@@ -1,5 +1,3 @@
-// tests/emergenza-app.mjs
-//
 // Nell'app l'emergenza la vede solo chi è in una squadra. All'apertura non
 // parte nessun avviso a tutti: chi non è in squadra non riceve né la notifica
 // né, sull'app, l'apertura dal WebSocket (il web sì). Entrato in squadra
@@ -63,7 +61,6 @@ try {
 
     const stato = (await chiama('/api/emergencies/status', { token: admin })).corpo;
     if (!stato?.active) {
-        // Una squadra preparata prima: all'apertura entra nell'emergenza.
         pronto = await nuovoVolontario('Pronto');
         for (const nome_radio of await nomiLiberi()) {
             const r = await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio, nome: 'Pronta', membri: [{ username: pronto.username }] } });

@@ -24,7 +24,6 @@ async function loadAndApplyBranding() {
 
             const puoAmministrare = haRuolo('admin');
             
-            // Svela i link base dell'Admin
             if (puoAmministrare) {
                 const sidebarSettings = document.getElementById('sidebar-settings');
                 const sidebarUsers = document.getElementById('sidebar-users');
@@ -37,12 +36,10 @@ async function loadAndApplyBranding() {
                 if (sidebarSistema) sidebarSistema.style.display = 'block';
             }
 
-            // Svela il link Segreteria (Solo se Modulo Attivo + Ruolo Corretto)
             if (settings.segreteria_config) {
                 const sConf = typeof settings.segreteria_config === 'string' ? JSON.parse(settings.segreteria_config) : settings.segreteria_config;
 
                 const sidebarSegreteria = document.getElementById('sidebar-segreteria');
-                // Il magazzino a chi lo usa, se il modulo è acceso.
             const vociMagazzino = document.getElementById('sidebar-magazzino');
             if (vociMagazzino && String(settings.magazzino_enabled) === 'true' && haPermesso('magazzino.gestione', 'magazzino.consegne')) {
                 vociMagazzino.style.display = 'block';
@@ -100,7 +97,6 @@ let brandingSettings = {
         return;
     }
 
-    // "Dal 3 ott 2026, 08:10 al 4 ott 2026, 19:40 · 35 ore"
     function descriviPeriodo(inizio, fine) {
         if (!inizio) return '';
         const f = (d) => new Date(d).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -128,7 +124,6 @@ let brandingSettings = {
         }
     }
 
-    // L'elenco secondo il filtro: le simulazioni stanno a parte, con il loro segno.
     function riempiScelta() {
         const elenco = tutteLeChiuse.filter(e => filtro === 'tutte' || (filtro === 'simulazioni') === !!e.simulazione);
         const nome = filtro === 'simulazioni' ? 'una simulazione' : "un'emergenza";
@@ -162,7 +157,6 @@ let brandingSettings = {
         riempiScelta();
     }));
 
-    // NUOVA Funzione per caricare i documenti
     async function loadArchivedDocuments(emergencyId) {
         if (!docsListContainer || !docsSection) return;
 
@@ -184,7 +178,6 @@ let brandingSettings = {
         }
     }
 
-    // MODIFICATA: Funzione per renderizzare i documenti (senza pulsante elimina)
     function renderArchivedDocuments(documents) {
         if (!docsListContainer) return;
         docsListContainer.innerHTML = '';
@@ -214,8 +207,6 @@ let brandingSettings = {
         });
     }
 
-// Etichette italiane dei codici interni: nell'archivio le schede vengono
-    // rilette a distanza di mesi, spesso da chi non ha mai visto il codice.
     const ETICHETTA_STATO = { New: 'Nuova', Open: 'Aperta', InProgress: 'In corso', Closed: 'Chiusa', Resolved: 'Risolta' };
     const ETICHETTA_PRIORITA = { High: 'Alta', Medium: 'Media', Low: 'Bassa' };
 
@@ -266,7 +257,6 @@ let brandingSettings = {
                      tr.dataset.reportId = report.id;
                      
                      tr.addEventListener('click', (e) => {
-                        // Impedisci al click del bottone "Stampa" di aprire anche il modale
                         if (e.target.closest('a.button-style')) return;
                         openArchivedDetailModal(e.currentTarget.dataset.reportId);
                      });
@@ -320,8 +310,7 @@ let brandingSettings = {
             console.log("[Select Change] Emergenza selezionata:", selectedArchivedEmergency);
             loadArchivedReports(selectedArchivedEmergency.id);
             loadArchivedDocuments(selectedArchivedEmergency.id);
-            // Il resoconto è un semplice file di testo servito dal backend:
-            // basta un link, il cookie di sessione viaggia da solo.
+            // Basta un link: il cookie di sessione viaggia da solo.
             if (downloadResocontoLink) {
                 downloadResocontoLink.href = `/api/admin/emergencies/${selectedArchivedEmergency.id}/resoconto`;
                 downloadResocontoLink.title = `Il resoconto di ${selectedArchivedEmergency.code} come file di testo, da allegare`;
@@ -330,7 +319,6 @@ let brandingSettings = {
             if (printTuttoLink) printTuttoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}&completo=1`;
             if (azioniEmergenza) azioniEmergenza.hidden = false;
         } else {
-            // Se l'utente ha selezionato "-- Seleziona --"
             selectedArchivedEmergency = null;
             loadArchivedReports(null);
             loadArchivedDocuments(null);
@@ -349,7 +337,6 @@ let brandingSettings = {
              const emergencyIdToDelete = selectedArchivedEmergency.id;
              const emergencyCodeToDelete = selectedArchivedEmergency.code;
 
-             // Una conferma sola, che dice tutto: è irreversibile.
              if (!window.confirm(
                  `Eliminare per sempre l'emergenza ${emergencyCodeToDelete}?\n\n` +
                  `Segnalazioni, diari, immagini e documenti collegati vengono cancellati e non si recuperano.`
@@ -370,11 +357,9 @@ let brandingSettings = {
              } catch (error) {
                   console.error(`Errore durante l'eliminazione dell'emergenza ${emergencyIdToDelete}:`, error);
                   notifica(`Errore eliminazione: ${error.message}`, 'errore');
-                   // Riabilita il bottone in caso di errore
                    deleteSelectedEmergencyBtn.disabled = false;
                    deleteSelectedEmergencyBtn.innerHTML = '<i class="fas fa-trash-can"></i> Elimina Selezionata';
              }
-             // Non serve riabilitare il bottone in caso di successo, perché loadClosedEmergencies() lo nasconderà
          });
          console.log("Listener aggiunto a 'Elimina Emergenza Selezionata' button.");
     } else {
@@ -388,7 +373,6 @@ let brandingSettings = {
 
          if (deletedId) {
               console.log(`Emergenza ID ${deletedId} eliminata (notifica WS), aggiorno lista emergenze chiuse.`);
-              // Se l'emergenza eliminata era quella attualmente selezionata, resetta la vista
               if (selectedArchivedEmergency && selectedArchivedEmergency.id == deletedId) {
                    loadArchivedReports(null);
                    emergencyDetailsDisplay.textContent = '';
@@ -407,7 +391,6 @@ let brandingSettings = {
     const formatArchivedDate = (dt) => dt ? new Date(dt).toLocaleString('it-IT', {dateStyle: 'medium', timeStyle: 'short'}) : 'N/D';
     const formatArchivedCoord = (c) => c !== null && c !== undefined ? parseFloat(c).toFixed(5) : 'N/D';
 
-    // NUOVA Funzione per aprire e popolare il modale dettaglio
     async function openArchivedDetailModal(reportId) {
         if (!archivedDetailModal || !reportId) return;
         console.log(`Apertura dettagli per report archiviato ID: ${reportId}`);
@@ -436,7 +419,6 @@ let brandingSettings = {
             populateArchivedElement('archived-detail-location', report.location_address);
             populateArchivedElement('archived-detail-coords', `Lat: ${formatArchivedCoord(report.latitude)} / Lon: ${formatArchivedCoord(report.longitude)}`);
             populateArchivedElement('archived-detail-description', report.description, 'Nessuna');
-            // Il riquadro rosso solo se un pericolo c'è davvero.
             populateArchivedElement('archived-detail-env-hazard', report.environmental_hazard, '');
             const riquadroPericolo = document.getElementById('archived-detail-env-hazard-box');
             if (riquadroPericolo) riquadroPericolo.hidden = !String(report.environmental_hazard || '').trim();
@@ -487,7 +469,6 @@ let brandingSettings = {
                                 p.style.marginBottom = '2px';
                                 p.textContent = update.update_text || ''; 
 
-                                // FIX: Aggiunte variabili mancanti
                                 const updaterName = update.updater_fullname || 'Sistema/Sconosciuto';
                                 const updateDate = new Date(update.update_timestamp).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -497,7 +478,6 @@ let brandingSettings = {
                                 li.appendChild(p);
                                 li.appendChild(small);
                                 
-                                // FIX: Inserimento materiale nella lista
                                 logList.appendChild(li);
                            } catch (logErr) {
                                  console.error('Errore creazione elemento log:', update, logErr);
@@ -516,12 +496,10 @@ let brandingSettings = {
         }
     }
 
-    // NUOVA Funzione per chiudere il modale dettaglio
     function closeArchivedDetailModal() {
          if (archivedDetailModal) archivedDetailModal.style.display = 'none';
     }
 
-    // Aggiungi listener ai pulsanti chiusura modale
     if(closeArchivedDetailModalBtn) closeArchivedDetailModalBtn.addEventListener('click', closeArchivedDetailModal);
     if(cancelArchivedDetailModalBtn) cancelArchivedDetailModalBtn.addEventListener('click', closeArchivedDetailModal);
 

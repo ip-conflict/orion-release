@@ -1,15 +1,6 @@
-// Come si installa Orion Mobile: un APK dal sito dell'associazione, non dal
-// Play Store, quindi Android fa qualche domanda in più. I passi dicono le
-// scritte esatte che compaiono sul telefono (Android 8 e successivi, Chrome).
-//
-// La usano la proposta dopo l'accesso (login.js) e la pagina degli accessi
-// temporanei (accesso.js).
+// I passi dicono le scritte esatte che compaiono sul telefono (Android 8 e successivi, Chrome).
 
 (function () {
-    /**
-     * L'elenco numerato dei passi.
-     * @param ultimo l'ultimo passo, che cambia: "accedi" o "torna qui e apri nell'app".
-     */
     function passiInstallaApp(ultimo) {
         const server = window.location.host;
         const passi = [
@@ -19,7 +10,9 @@
             "Tocca «Installa». Se Play Protect dice che non conosce l'app, tocca «Installa comunque» (oppure «Altri dettagli» e poi «Installa comunque»).",
             ultimo === 'codice'
                 ? "Torna in questa pagina e tocca «Apri nell'app»: entri senza password."
-                : `Apri Orion Mobile, scrivi l'indirizzo del server, ${server}, e accedi con il tuo nome utente e la tua password.`
+                : ultimo === 'attiva'
+                    ? "Torna in questa pagina e tocca «Continua nell'app»."
+                    : `Apri Orion Mobile, scrivi l'indirizzo del server, ${server}, e accedi con il tuo nome utente e la tua password.`
         ];
         const ol = document.createElement('ol');
         ol.className = 'passi-installa-app';

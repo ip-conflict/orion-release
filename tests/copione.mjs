@@ -1,5 +1,3 @@
-// tests/copione.mjs
-//
 // Il copione e la regia (src/copione.js): chi lo vede e lo scrive, gli
 // eventi e i loro controlli, il modello Excel e il caricamento (tutto o
 // niente), la copia da un'altra attività; in sala l'orologio, l'uscita a
@@ -97,7 +95,6 @@ try {
     const mod = await chiama(`/api/copione/eventi/${anziana.id}`, { method: 'PUT', token: reg.token, body: { ...anziana, testo: 'Non riesce a uscire, ha 85 anni' } });
     verifica('un evento si corregge', mod.stato === 200 && /85 anni/.test(mod.corpo?.testo || ''), mod);
 
-    // Excel: il modello, il caricamento con un errore (niente), poi giusto.
     const modello = await chiama('/api/copione/modello.xlsx', { token: reg.token });
     verifica('il modello Excel si scarica', modello.stato === 200 && /spreadsheetml/.test(modello.tipo) && modello.corpo.length > 3000);
     const libro = new ExcelJS.Workbook();
@@ -133,7 +130,6 @@ try {
     const copiato = await chiama(`/api/attivita/${altra.id}/copione/copia`, { method: 'POST', token: admin, body: { da: add.id } });
     verifica("il copione si copia in un'altra attività", copiato.stato === 201 && copiato.corpo?.copiati === copione.eventi.length, copiato.corpo);
 
-    // In sala.
     const sq = await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: radio, nome: 'Pompe', membri: [{ username: b.username }] } });
     if (sq.corpo?.squadraId) squadre.push(sq.corpo.squadraId);
     verifica('senza sala la regia non c\'è -> 409', (await chiama('/api/regia', { token: reg.token })).stato === 409);
@@ -189,7 +185,6 @@ try {
     verifica("un'osservazione della regia", oss.stato === 201 && oss.corpo?.evento_id === cantina.id, oss);
     verifica('un volontario non scrive osservazioni -> 403', (await chiama(`/api/attivita/${add.id}/osservazioni`, { method: 'POST', token: a.token, body: { testo: 'x' } })).stato === 403);
 
-    // La sala assegna una squadra alla cantina e la chiude.
     await chiama(`/api/reports/${uscita?.report?.id}/teams`, { method: 'POST', token: admin, body: { teamId: sq.corpo?.squadraId } });
     await chiama(`/api/reports/${uscita?.report?.id}`, { method: 'PUT', token: admin, body: { status: 'Closed' } });
     await chiama('/api/emergencies/close', { method: 'POST', token: dir.token, body: {} });

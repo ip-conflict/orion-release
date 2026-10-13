@@ -1,8 +1,7 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-// Di chi è una richiesta, per i limiti: una persona collegata si conta per sé
-// (una sala operativa esce da un solo indirizzo), chi non lo è per indirizzo,
-// e un indirizzo IPv6 per la sua rete /64.
+// Una persona collegata si conta per sé (una sala esce da un solo indirizzo), le altre
+// richieste per indirizzo, IPv6 per la rete /64.
 export const chiaveIndirizzo = (ip) => ipKeyGenerator(String(ip || ''), 64);
 
 export const chiaveRichiesta = (req) =>
@@ -10,18 +9,14 @@ export const chiaveRichiesta = (req) =>
 
 const userKeyGenerator = chiaveRichiesta;
 
-// Le posizioni delle squadre (ogni 15 secondi da ogni telefono) non si contano.
 // Il limitatore è montato su '/api/': il percorso intero sta in baseUrl + path.
 const ePosizione = (req) => req.method === 'POST' && `${req.baseUrl || ''}${req.path}` === '/api/location';
-// Nemmeno i tasselli della cartografia del territorio: una mappa a tutto
-// schermo ne chiede decine a ogni spostamento.
+// Una mappa a tutto schermo chiede decine di tasselli a ogni spostamento.
 const eTassello = (req) => req.method === 'GET' && /^\/api\/mappa\/cartografia\/\d+\/\d+\/\d+$/.test(`${req.baseUrl || ''}${req.path}`);
 const nonContare = (req) => ePosizione(req) || eTassello(req);
 
-// Un tetto contro un client impazzito, non contro chi lavora: in emergenza il
-// centro operativo ricarica le segnalazioni a ogni evento, e le rotte
-// pubbliche (logo, impostazioni) si contano per indirizzo, cioè per tutta la
-// sala. Accesso, rinnovo e codici degli esterni hanno limiti propri, stretti.
+// Un tetto contro un client impazzito, non contro chi lavora: in emergenza il centro
+// operativo ricarica le segnalazioni a ogni evento.
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1500,
@@ -32,8 +27,6 @@ export const apiLimiter = rateLimit({
     skip: nonContare
 });
 
-// Prima di sapere chi è: un tetto alto per indirizzo, contro chi martella il
-// server anche con token inventati.
 export const limitePerRete = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5000,
@@ -47,11 +40,9 @@ export const limitePerRete = rateLimit({
 export const passwordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  // Per indirizzo: chi tenta una password non è ancora nessuno. Contano solo
-  // i tentativi sbagliati: una sala che entra tutta insieme non si blocca.
+  // Contano solo i tentativi sbagliati: una sala che entra tutta insieme non si blocca.
   keyGenerator: (req) => `indirizzo:${ipKeyGenerator(req.ip || '', 64)}`,
   skipSuccessfulRequests: true,
-  // In JSON, come le altre risposte: la pagina d'accesso e l'app mostrano il motivo.
   message: { message: 'Troppi tentativi sbagliati da questa rete: aspetta un quarto d\'ora e riprova.' },
   standardHeaders: true,
   legacyHeaders: false

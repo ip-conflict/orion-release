@@ -1,14 +1,8 @@
-// Il codice a barre Code 128 (set B) di un testo: lettere, cifre e
-// punteggiatura ASCII. Serve al retro del tesserino, per il codice fiscale:
-// 16 caratteri in 211 moduli, che ogni lettore di codici a barre legge.
-// Nessuna libreria esterna: la tabella è quella della norma (ISO/IEC 15417).
-//
-// window.codice128(testo) -> [{ x, w }] le barre, in moduli dall'inizio
-// (zona di rispetto esclusa), e il totale dei moduli in .moduli.
+// Code 128 (set B), dalla tabella della norma ISO/IEC 15417.
+// window.codice128(testo) -> [{ x, w }] in moduli (zona di rispetto esclusa), totale in .moduli.
 
 (function () {
-    // Le larghezze di barra, spazio, barra, spazio, barra, spazio di ogni
-    // simbolo, da 0 a 105; 106 è lo stop (con la barra finale in più).
+    // Barra, spazio, barra, spazio, barra, spazio di ogni simbolo da 0 a 105; 106 è lo stop.
     const SIMBOLI = [
         '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
         '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
@@ -30,7 +24,7 @@
             if (v < 0 || v > 94) throw new Error(`Carattere non codificabile: ${c}`);
             return v;
         });
-        // Il carattere di controllo: inizio + somma pesata, modulo 103.
+        // Inizio + somma pesata, modulo 103.
         const controllo = valori.reduce((t, v, i) => t + v * (i + 1), INIZIO_B) % 103;
         const sequenza = [INIZIO_B, ...valori, controllo, STOP];
         const barre = [];

@@ -1,5 +1,3 @@
-// tests/smoke.mjs
-//
 // Batteria di controlli rapidi sulle API di ORION: verifica che le funzioni
 // principali rispondano e che i permessi siano applicati.
 //
@@ -35,7 +33,6 @@ if (!ADMIN_PASSWORD) {
     process.exit(2);
 }
 
-// I certificati self-signed degli ambienti di collaudo non devono bloccare i test
 if (process.env.ORION_IGNORA_CERTIFICATO === '1') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
@@ -55,7 +52,6 @@ function verifica(descrizione, condizione, dettaglio = '') {
     }
 }
 
-// Client HTTP che conserva i cookie di sessione, come farebbe un browser
 function creaClient() {
     const cookies = new Map();
     return {
@@ -83,8 +79,6 @@ function creaClient() {
             let corpo = null;
             const testo = await risposta.text();
             try { corpo = JSON.parse(testo); } catch { corpo = testo; }
-            // Alla prima entrata si prende visione dell'informativa, come
-            // farebbe la persona, e si ripete la richiesta.
             if (risposta.status === 428 && corpo?.informativa_da_vedere && !opzioni.vistaPresa) {
                 const auth = opzioni.headers?.Authorization ? { Authorization: opzioni.headers.Authorization } : {};
                 await this.chiamata('/api/informativa/presa-visione', { method: 'POST', headers: auth, body: { versione: corpo.versione }, vistaPresa: true });
@@ -105,9 +99,7 @@ let passwordDiProva = null;
 async function eseguiTest() {
     console.log(`ORION smoke test -> ${BASE}\n`);
 
-    // ------------------------------------------------------------------
     console.log('[1] Accesso e sessione');
-    // Con la verifica in due passaggi, obbligatoria per gli amministratori.
     const login = await accediConVerifica(admin.chiamata, BASE, ADMIN_USER, ADMIN_PASSWORD);
     verifica('login amministratore riuscito', login.stato === 200, `HTTP ${login.stato}`);
     if (login.stato !== 200) {
@@ -122,7 +114,6 @@ async function eseguiTest() {
     const senzaSessione = await anonimo.chiamata('/api/users/me');
     verifica('endpoint protetto senza sessione -> 401', senzaSessione.stato === 401, `HTTP ${senzaSessione.stato}`);
 
-    // ------------------------------------------------------------------
     console.log('\n[2] Recupero password (deve essere raggiungibile SENZA sessione)');
     const recuperoEsistente = await anonimo.chiamata('/api/auth/forgot-password', { method: 'POST', body: { identificativo: ADMIN_USER } });
     verifica('recupero password raggiungibile da utente non autenticato', recuperoEsistente.stato === 200, `HTTP ${recuperoEsistente.stato}`);
@@ -132,7 +123,6 @@ async function eseguiTest() {
         recuperoInesistente.stato === recuperoEsistente.stato &&
         JSON.stringify(recuperoInesistente.corpo) === JSON.stringify(recuperoEsistente.corpo));
 
-    // ------------------------------------------------------------------
     console.log('\n[3] Dati riservati sugli endpoint pubblici');
     const brandingPubblico = await anonimo.chiamata('/api/branding/settings');
     const chiaviPubbliche = Object.keys(brandingPubblico.corpo || {});
@@ -143,7 +133,6 @@ async function eseguiTest() {
     const brandingCompleto = await anonimo.chiamata('/api/branding/settings/full');
     verifica('impostazioni complete negate senza privilegi admin', [401, 403].includes(brandingCompleto.stato), `HTTP ${brandingCompleto.stato}`);
 
-    // ------------------------------------------------------------------
     console.log('\n[4] Creazione utente di prova e attivazione');
     const suffisso = Date.now().toString().slice(-6);
     const nuovo = await admin.chiamata('/api/users', {
@@ -160,9 +149,6 @@ async function eseguiTest() {
         const passwordProva = `Collaudo!${suffisso}Aa1`;
         passwordDiProva = passwordProva;
 
-        // Un utente appena creato non ha ancora una password: il tentativo di
-        // accesso deve essere respinto in modo pulito, non generare un errore
-        // interno (bcrypt confrontato con un hash nullo).
         const accessoPrimaAttivazione = await creaClient().chiamata('/login', {
             method: 'POST',
             body: { username: nuovo.corpo.username, password: 'qualsiasi-cosa-123' }
@@ -179,7 +165,6 @@ async function eseguiTest() {
         const loginVolontario = await volontario.chiamata('/login', { method: 'POST', body: { username: nuovo.corpo.username, password: passwordProva } });
         verifica('il nuovo utente riesce ad accedere', loginVolontario.stato === 200, `HTTP ${loginVolontario.stato}`);
 
-        // ------------------------------------------------------------------
         console.log('\n[5] Permessi del ruolo volontario');
         const prove = [
             ['/api/users', 'elenco utenti'],
@@ -197,9 +182,6 @@ async function eseguiTest() {
         const librettoAltrui = await volontario.chiamata('/api/users/1/libretto');
         verifica('volontario: libretto di un altro utente negato', librettoAltrui.stato === 403, `HTTP ${librettoAltrui.stato}`);
 
-        // Il proprietario si legge dal database: un file che nessuna riga
-        // richiama non esiste per chi chiede (404), uno di un altro è negato
-        // (403). In nessun caso il numero scritto nel nome autorizza.
         const certificatoAltrui = await volontario.chiamata('/api/documents/certificates/cert-1-aaaaaaaa.pdf');
         verifica('volontario: certificato di un altro utente negato', [403, 404].includes(certificatoAltrui.stato), `HTTP ${certificatoAltrui.stato}`);
         const certificatoFinto = await volontario.chiamata(`/api/documents/certificates/cert-${idVolontario}-aaaaaaaa.pdf`);
@@ -209,10 +191,6 @@ async function eseguiTest() {
         verifica('volontario: il proprio libretto è accessibile', proprioLibretto.stato === 200, `HTTP ${proprioLibretto.stato}`);
     }
 
-    // ------------------------------------------------------------------
-    // L'elenco dei membri di una squadra e' quello che il coordinatore legge
-    // alla radio e che finisce nel resoconto: non deve poter contenere
-    // nominativi inventati ne' la stessa persona in due squadre.
     console.log('\n[5-quinquies] Composizione delle squadre');
     const squadre = await admin.chiamata('/api/squadre');
     verifica('elenco squadre consultabile', squadre.stato === 200, `HTTP ${squadre.stato}`);
@@ -236,8 +214,6 @@ async function eseguiTest() {
         const eliminaInesistente = await admin.chiamata('/api/squadre/99999999', { method: 'DELETE' });
         verifica('eliminazione di squadra inesistente -> 404', eliminaInesistente.stato === 404, `HTTP ${eliminaInesistente.stato}`);
 
-        // Il registro delle squadre dell'emergenza: esiste solo mentre
-        // un'emergenza e' aperta, e il resoconto lo riporta.
         const statoEmergenza = await admin.chiamata('/api/emergencies/status');
         if (statoEmergenza.corpo?.active && statoEmergenza.corpo?.emergency?.id) {
             const eventi = await admin.chiamata(`/api/emergencies/${statoEmergenza.corpo.emergency.id}/eventi`);
@@ -253,11 +229,6 @@ async function eseguiTest() {
             modificaInesistente.corpo?.message);
     }
 
-    // ------------------------------------------------------------------
-    // Sospendere un utente deve togliergli l'accesso davvero: sia impedendo un
-    // nuovo ingresso, sia interrompendo la sessione che ha gia' aperto. Prima
-    // non faceva ne' l'una ne' l'altra cosa, e chi sospendeva un volontario lo
-    // credeva fuori mentre continuava a lavorare.
     if (idVolontario && utenteDiProva) {
         console.log('\n[5-quater] Sospensione di un utente');
         const sospendi = await admin.chiamata(`/api/admin/users/${idVolontario}/toggle-status`, { method: 'PATCH' });
@@ -282,10 +253,6 @@ async function eseguiTest() {
         verifica('dopo la riattivazione si rientra', rientroOk.stato === 200, `HTTP ${rientroOk.stato}`);
     }
 
-    // ------------------------------------------------------------------
-    // Una persona puo' avere piu' ruoli: segretaria e magazziniera insieme, per
-    // dire. I permessi sono l'unione dei ruoli, e un cambio di ruolo deve
-    // valere subito, non alla scadenza del token (un giorno intero).
     console.log('\n[5-sexies] Ruoli multipli');
     const suffissoRuoli = Date.now().toString().slice(-6);
     const doppioRuolo = await admin.chiamata('/api/users', {
@@ -319,10 +286,6 @@ async function eseguiTest() {
         verifica('un amministratore non puo\' togliersi il ruolo da solo -> 403',
             autoDeclassamento.stato === 403, `HTTP ${autoDeclassamento.stato}`);
 
-        // Il volontario di prova ha la sessione aperta: gli si aggiunge il
-        // ruolo di coordinatore e l'archivio delle emergenze deve aprirsi
-        // senza rifare il login. (La segreteria no: vede dati sanitari e
-        // chiede la verifica in due passaggi, che il volontario non ha.)
         const primaDelCambio = await volontario.chiamata('/api/admin/emergencies/closed');
         verifica('il volontario non vede l\'archivio delle emergenze', primaDelCambio.stato === 403, `HTTP ${primaDelCambio.stato}`);
 
@@ -344,13 +307,7 @@ async function eseguiTest() {
         await admin.chiamata(`/api/users/${doppioRuolo.corpo.id}`, { method: 'DELETE' });
     }
 
-    // ------------------------------------------------------------------
-    // Il catalogo di corsi e visite non deve riempirsi di doppioni: la
-    // segretaria sceglie da un elenco, e tre righe identiche rendono
-    // impossibile sapere quale sia quella giusta.
     console.log('\n[5-ter] Segreteria: cataloghi e scadenze');
-    // Su un'installazione nuova il modulo e' spento: lo si accende per le
-    // prove e alla fine si rimette com'era.
     const segreteriaOriginale = (await admin.chiamata('/api/branding/settings')).corpo?.segreteria_config;
     await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { segreteria_config: JSON.stringify({ enabled: true }) } });
     const catalogo = await admin.chiamata('/api/admin/courses-catalog');
@@ -362,8 +319,6 @@ async function eseguiTest() {
         });
         verifica('corso con nome già in catalogo rifiutato', doppione.stato === 400, `HTTP ${doppione.stato}`);
     }
-    // Il volontario apre i suoi corsi dall'app: nome, codice, validità e
-    // l'attestato, che scarica con la sua sessione.
     if (primoCorso?.id && idVolontario) {
         const modulo = new FormData();
         modulo.append('course_id', String(primoCorso.id));
@@ -387,9 +342,6 @@ async function eseguiTest() {
     });
     verifica('modifica catalogo negata al volontario', [401, 403].includes(catalogoVolontario.stato), `HTTP ${catalogoVolontario.stato}`);
 
-    // Il modulo Segreteria si accende dalle impostazioni: se è spento, le sue
-    // rotte rispondono 403 a chiunque ed è giusto così. I controlli sul
-    // cruscotto hanno senso solo quando è acceso.
     const impostazioni = await admin.chiamata('/api/branding/settings');
     let segreteriaAccesa = false;
     try {
@@ -413,7 +365,6 @@ async function eseguiTest() {
         body: { segreteria_config: typeof segreteriaOriginale === 'string' ? segreteriaOriginale : JSON.stringify(segreteriaOriginale ?? { enabled: false }) }
     });
 
-    // ------------------------------------------------------------------
     console.log('\n[5-bis] Registro operazioni');
     const registro = await admin.chiamata('/api/admin/audit-log?limit=50');
     verifica('registro operazioni consultabile dall\'amministratore', registro.stato === 200, `HTTP ${registro.stato}`);
@@ -423,9 +374,6 @@ async function eseguiTest() {
     const registroVolontario = await volontario.chiamata('/api/admin/audit-log');
     verifica('registro operazioni negato al volontario', [401, 403].includes(registroVolontario.stato), `HTTP ${registroVolontario.stato}`);
 
-    // ------------------------------------------------------------------
-    // L'email di prova: solo all'amministratore, con l'errore detto in parole.
-    // Una porta chiusa sulla macchina stessa fallisce subito e sempre.
     console.log('\n[5-bis-2] Email di prova');
     const provaVolontario = await volontario.chiamata('/api/admin/email-prova', { method: 'POST', body: {} });
     verifica('email di prova negata al volontario', [401, 403].includes(provaVolontario.stato), `HTTP ${provaVolontario.stato}`);
@@ -439,18 +387,9 @@ async function eseguiTest() {
         provaChiusa.stato === 422 && /connettersi/.test(provaChiusa.corpo?.message || '') && /ECONNREFUSED/.test(provaChiusa.corpo?.dettaglio || ''),
         `HTTP ${provaChiusa.stato} ${JSON.stringify(provaChiusa.corpo)}`);
 
-    // ------------------------------------------------------------------
-    // Il magazzino tiene DPI, attrezzature e veicoli con un registro dei
-    // movimenti: la giacenza e il detentore si CALCOLANO dal registro, non si
-    // scrivono. Questi controlli servono a verificare che il calcolo torni e
-    // che non si possano registrare movimenti impossibili.
     console.log('\n[5-septies] Magazzino');
     const etichetta = Date.now().toString().slice(-6);
 
-    // Il modulo si accende e si spegne dalle impostazioni, come la segreteria.
-    // A modulo spento tutte le rotte devono rifiutare: una sola lasciata aperta
-    // vorrebbe dire che si può ancora scrivere in un magazzino che
-    // l'associazione crede chiuso.
     const impostazioniPrima = await admin.chiamata('/api/branding/settings/full');
     const impostazioniBase = {};
     // Senza la posta e senza le configurazioni dei moduli (magazzino_config,
@@ -477,8 +416,6 @@ async function eseguiTest() {
         method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'true' }
     });
     verifica('il modulo si accende dalle impostazioni', accensione.stato === 200, `HTTP ${accensione.stato}`);
-    // Il verbale di consegna è un'opzione (dalla 3.35): le prove che seguono
-    // lo usano, e alla fine si rimette com'era.
     const verbaleConsegnaPrima = !!(await admin.chiamata('/api/magazzino/config')).corpo?.verbale_consegna;
     await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { verbale_consegna: true } });
     const dopoAccensione = await admin.chiamata('/api/magazzino/beni');
@@ -494,8 +431,6 @@ async function eseguiTest() {
     });
     verifica('categoria doppia (maiuscole e spazi diversi) rifiutata -> 409', doppione.stato === 409, `HTTP ${doppione.stato}`);
 
-    // Categorie e ubicazioni si gestiscono dalle impostazioni del magazzino:
-    // rinominare, eliminare se vuote, mettere a riposo un'ubicazione.
     if (categoria.stato === 201) {
         const rinominata = await admin.chiamata(`/api/magazzino/categorie/${categoria.corpo.id}`, {
             method: 'PUT', body: { nome: `Rinominata${etichetta}` }
@@ -539,7 +474,6 @@ async function eseguiTest() {
         verifica('vuota, si elimina', svuotata.stato === 200, `HTTP ${svuotata.stato} ${svuotata.corpo?.message}`);
     }
 
-    // DPI a taglie: un modello con le sue taglie, ciascuna un bene a quantità.
     const modelliStandard = await admin.chiamata('/api/magazzino/modelli');
     verifica('ci sono i DPI standard proposti da ORION',
         modelliStandard.stato === 200 && (modelliStandard.corpo || []).some(m => m.standard && m.nome === 'Guanti da lavoro'),
@@ -584,7 +518,6 @@ async function eseguiTest() {
         }
         const piena = await admin.chiamata(`/api/magazzino/modelli/${idDivisa}`, { method: 'DELETE' });
         verifica('un DPI con dei pezzi non si elimina -> 409', piena.stato === 409, `HTTP ${piena.stato}`);
-        // Buttare qualche pezzo non fa sparire la taglia con quelli che restano.
         const tagliaL = beniDivisa.find(b => b.taglia === 'L');
         if (tagliaL) {
             await admin.chiamata('/api/magazzino/movimenti', {
@@ -628,7 +561,6 @@ async function eseguiTest() {
         verifica('non si consegna piu\' di quanto c\'e\' -> 400', troppo.stato === 400 && /disponibil|ci sono|restano|solo/i.test(troppo.corpo?.message || ''),
             `HTTP ${troppo.stato} ${troppo.corpo?.message}`);
 
-        // I sacchi si contano interi: mezzo sacco non si consegna né si rettifica.
         const mezzo = await admin.chiamata('/api/magazzino/consegna', {
             method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idSfuso, quantita: 1.5 }] }
         });
@@ -653,7 +585,6 @@ async function eseguiTest() {
             verifica('e se ne consegnano 2,5 litri', litri.stato === 201, `HTTP ${litri.stato} ${litri.corpo?.message}`);
         }
 
-        // Il materiale si consegna a una persona: non a una squadra né a un mezzo.
         for (const tipo of ['squadra', 'veicolo']) {
             const aUnGruppo = await admin.chiamata('/api/magazzino/consegna', {
                 method: 'POST', body: { destinatario: { tipo, id: 1 }, righe: [{ bene_id: idSfuso, quantita: 1 }] }
@@ -687,7 +618,6 @@ async function eseguiTest() {
         verifica('uno smarrimento senza nota e\' rifiutato -> 400', smarrimentoMuto.stato === 400, `HTTP ${smarrimentoMuto.stato}`);
     }
 
-    // Un pezzo unico ha un solo detentore: consegnato due volte deve rifiutare.
     const unico = await admin.chiamata('/api/magazzino/beni', {
         method: 'POST', body: { tipo: 'attrezzatura', gestione: 'singolo', denominazione: `Motosega${etichetta}`, matricola: `MS-${etichetta}` }
     });
@@ -707,22 +637,16 @@ async function eseguiTest() {
             Array.isArray(inCarico.corpo) && inCarico.corpo.some(b => b.bene_id === unico.corpo.id),
             `${inCarico.stato}`);
 
-        // Eliminare chi ha roba in carico deve fermarsi e chiedere cosa farne.
         const cancellazione = await admin.chiamata(`/api/users/${idVolontario}`, { method: 'DELETE' });
         verifica('non si elimina un volontario che ha materiale in carico -> 409',
             cancellazione.stato === 409 && Array.isArray(cancellazione.corpo?.beni_in_carico),
             `HTTP ${cancellazione.stato}`);
 
-        // Rimettiamo a posto: il pezzo rientra, cosi' la pulizia finale funziona.
         await admin.chiamata('/api/magazzino/rientro', {
             method: 'POST', body: { righe: [{ bene_id: unico.corpo.id }] }
         });
     }
 
-    // Un DPI in dotazione a un volontario attivo non e' "materiale non
-    // rientrato": e' la sua condizione normale. In quella lista ci finirebbero
-    // decine di righe che non sono un problema, e allora non la guarda piu'
-    // nessuno - insieme alle due che invece contano.
     const dpiInDotazione = await admin.chiamata('/api/magazzino/beni', {
         method: 'POST', body: { tipo: 'dpi', gestione: 'singolo', denominazione: `Elmetto${etichetta}`, taglia: 'M' }
     });
@@ -743,8 +667,6 @@ async function eseguiTest() {
         verifica('"chi ha cosa" porta categoria e modello, per filtrare',
             (chiHaCosa.corpo || []).every(b => 'categoria_id' in b && 'modello_id' in b), JSON.stringify((chiHaCosa.corpo || [])[0]));
 
-        // Un DPI scade dove si trova e li' si butta: obbligare a farlo prima
-        // rientrare vorrebbe dire far scrivere una cosa che non e' successa.
         const dismissioneMuta = await admin.chiamata('/api/magazzino/movimenti', {
             method: 'POST', body: { bene_id: dpiInDotazione.corpo.id, tipo: 'dismissione' }
         });
@@ -766,7 +688,6 @@ async function eseguiTest() {
             dopoDismissione.corpo.storia.some(m => m.tipo === 'dismissione'), '');
     }
 
-    // Etichette QR: ogni bene nasce col suo codice, e dal codice si torna al bene.
     if (unico.stato === 201) {
         const scheda = await admin.chiamata(`/api/magazzino/beni/${unico.corpo.id}`);
         verifica('ogni bene nasce con un codice etichetta',
@@ -780,7 +701,6 @@ async function eseguiTest() {
         const etichettaFinta = await admin.chiamata('/api/magazzino/etichetta/ZZZZZZ');
         verifica('un codice inesistente -> 404', etichettaFinta.stato === 404, `HTTP ${etichettaFinta.stato}`);
 
-        // Manutenzioni periodiche: la prossima data si calcola da sola.
         const intervento = await admin.chiamata(`/api/magazzino/beni/${unico.corpo.id}/interventi`, {
             method: 'POST',
             body: { tipo: 'manutenzione', eseguito_il: '2026-03-10', periodicita_mesi: 6, descrizione: 'Collaudo di prova' }
@@ -801,9 +721,6 @@ async function eseguiTest() {
             interventoAlVolontario.stato === 403, `HTTP ${interventoAlVolontario.stato}`);
     }
 
-    // Il fascicolo del volontario mostra i DPI in dotazione, e dice alla pagina
-    // se il magazzino è acceso: senza quel modulo la sezione non deve
-    // comparire, perché sarebbe un riquadro vuoto per sempre.
     if (idVolontario) {
         const librettoConMagazzino = await admin.chiamata(`/api/users/${idVolontario}/libretto`);
         verifica('il fascicolo dice che il magazzino è acceso',
@@ -813,7 +730,6 @@ async function eseguiTest() {
         verifica('il volontario vede i propri DPI dal suo fascicolo',
             Array.isArray(suoi.corpo?.equipment), `${suoi.stato}`);
 
-        // A modulo spento la sezione sparisce insieme ai dati.
         await admin.chiamata('/api/branding/settings', {
             method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'false' }
         });
@@ -833,10 +749,6 @@ async function eseguiTest() {
     });
     verifica('un volontario non crea beni -> 403', magazzinoAlVolontario.stato === 403, `HTTP ${magazzinoAlVolontario.stato}`);
 
-    // Avvisi di scadenza: sono una scelta personale di chi li riceve. Si
-    // provano sull'utente di prova, che non li ha mai toccati: l'amministratore
-    // potrebbe averli accesi davvero, e un controllo che dipende da com'è
-    // configurata l'istanza non verifica niente.
     const avvisiAlVolontario = await volontario.chiamata('/api/magazzino/avvisi');
     verifica('un volontario non configura gli avvisi del magazzino -> 403',
         avvisiAlVolontario.stato === 403, `HTTP ${avvisiAlVolontario.stato}`);
@@ -863,8 +775,6 @@ async function eseguiTest() {
         verifica('un preavviso oltre l\'anno viene rifiutato -> 400',
             preavvisoAssurdo.stato === 400, `HTTP ${preavvisoAssurdo.stato}`);
 
-        // L'utente di prova non ha un indirizzo email: accendere gli avvisi
-        // deve dirlo subito, non far credere per un mese che partano.
         const senzaEmail = await volontario.chiamata('/api/magazzino/avvisi', {
             method: 'PUT', body: { attivo: true, frequenza: 'settimanale', giorni_preavviso: 20 }
         });
@@ -888,11 +798,6 @@ async function eseguiTest() {
             dopoIlRuoloTolto.stato === 403, `HTTP ${dopoIlRuoloTolto.stato}`);
     }
 
-    // ------------------------------------------------------------------
-    // Il materiale a quantità (DPI per taglia, guanti, sacchi) si tiene per
-    // detentore: chi ha cosa è la somma di quello che gli è arrivato meno
-    // quello che gli è uscito. Un rientro deve scalare chi lo ha reso, e solo
-    // lui: prima scalava solo il totale, e il "mancante" lo calcolava su tutti.
     console.log('\n[5-octies] Magazzino: il materiale a quantità si tiene per persona');
     if (idVolontario) {
         const io = await admin.chiamata('/api/users/me');
@@ -913,8 +818,6 @@ async function eseguiTest() {
                 const r = await volontario.chiamata(`/api/magazzino/beni/${idGuanti}`);
                 return { magazzino: Number(r.corpo?.in_magazzino), fuori: Number(r.corpo?.fuori) };
             };
-            // Consegne e rientri li fa il magazziniere o chi ne ha il permesso:
-            // al volontario di prova lo si dà, e vale subito.
             const senzaPermesso = await volontario.chiamata('/api/magazzino/consegna', {
                 method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 1 }] }
             });
@@ -931,8 +834,6 @@ async function eseguiTest() {
             const [primaV, primaA] = [await quantiNe('persona', idVolontario), await quantiNe('persona', idAdmin)];
             verifica('dopo le consegne ciascuno ha i suoi: 3 e 2', primaV === 3 && primaA === 2, `${primaV} e ${primaA}`);
 
-            // Il volontario ne rende 2 su 3. Del terzo il server non indovina
-            // niente: chi registra deve dire se resta a lui, è usato o è perso.
             const ambiguo = await volontario.chiamata('/api/magazzino/rientro', {
                 method: 'POST',
                 body: { da: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 2 }] }
@@ -963,8 +864,6 @@ async function eseguiTest() {
                 righeGuanti.length === 1 && righeGuanti[0].destinatario_user_id === idAdmin && Number(righeGuanti[0].quantita) === 2,
                 JSON.stringify(righeGuanti));
 
-            // Con due detentori, un rientro che non dice da chi non si può
-            // attribuire: il server lo chiede invece di indovinare.
             await volontario.chiamata('/api/magazzino/consegna', {
                 method: 'POST', body: { destinatario: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 1 }] }
             });
@@ -974,13 +873,11 @@ async function eseguiTest() {
             verifica('rientro senza detentore con più detentori -> 400', senzaDetentore.stato === 400,
                 `HTTP ${senzaDetentore.stato} ${JSON.stringify(senzaDetentore.corpo)}`);
 
-            // Il fascicolo del volontario mostra anche i DPI a quantità.
             const fascicolo = await volontario.chiamata(`/api/users/${idVolontario}/libretto`);
             const nelFascicolo = (fascicolo.corpo?.equipment || []).find(e => e.id === idGuanti);
             verifica('il fascicolo mostra i DPI a quantità in carico', !!nelFascicolo && Number(nelFascicolo.quantita) === 1,
                 JSON.stringify(nelFascicolo));
 
-            // Pulizia: tutto torna, da ciascuno.
             await volontario.chiamata('/api/magazzino/rientro', {
                 method: 'POST', body: { da: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idGuanti, quantita: 1 }] }
             });
@@ -993,10 +890,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // L'app manda le consegne con una chiave e, se non sa com'e' andata, le
-    // rimanda con la stessa chiave: devono contare una volta sola. E il
-    // volontario vede l'elenco dei propri verbali, e solo quelli.
     console.log('\n[5-novies] Consegne idempotenti e verbali propri');
     if (idVolontario) {
         const scarpe = await admin.chiamata('/api/magazzino/beni', {
@@ -1025,7 +918,6 @@ async function eseguiTest() {
             const malformata = await conChiave(admin, 'x');
             verifica('una chiave malformata -> 400', malformata.stato === 400, `HTTP ${malformata.stato}`);
 
-            // Due invii nello stesso istante: uno aspetta l'altro, e ne riceve la risposta.
             const insieme = `insieme-${Date.now()}`;
             const [a, b] = await Promise.all([conChiave(admin, insieme), conChiave(admin, insieme)]);
             const g2 = await giacenza();
@@ -1033,7 +925,6 @@ async function eseguiTest() {
                 a.stato === 201 && b.stato === 201 && a.corpo?.verbale_id === b.corpo?.verbale_id && g2 === 4,
                 `${a.stato}/${b.stato} verbali ${a.corpo?.verbale_id}/${b.corpo?.verbale_id} giacenza ${g2}`);
 
-            // La chiave e' di chi la usa: la stessa per un'altra persona e' una richiesta nuova.
             const altraPersona = await conChiave(volontario, chiave);
             verifica("la stessa chiave usata da un'altra persona e' una consegna nuova",
                 altraPersona.stato === 201 && altraPersona.corpo?.verbale_id !== prima.corpo?.verbale_id && (await giacenza()) === 3,
@@ -1052,20 +943,16 @@ async function eseguiTest() {
             verifica('ogni verbale porta le sue righe',
                 unVerbale?.righe?.length === 1 && unVerbale.righe[0].bene_id === idScarpe && unVerbale.righe[0].taglia === '42',
                 JSON.stringify(unVerbale));
-            // Da qui il volontario torna senza il permesso delle consegne.
             const tolto = await admin.chiamata(`/api/admin/users/${idVolontario}/permessi`, { method: 'PUT', body: { in_piu: [] } });
             verifica('tolto il permesso, il volontario non consegna più', tolto.stato === 200
                 && (await volontario.chiamata('/api/magazzino/consegna', { method: 'POST', body: corpo })).stato === 403, `HTTP ${tolto.stato}`);
             const daConfermare = await volontario.chiamata('/api/magazzino/verbali/miei?stato=da_confermare');
             verifica('si filtrano per stato', daConfermare.stato === 200 && daConfermare.corpo.every(v => v.stato === 'da_confermare'));
-            // Il verbale da stampare: il proprio lo apre il volontario, quelli
-            // degli altri solo il magazzino; la conferma vale una volta.
             const suo = await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}`);
             verifica('il volontario apre il suo verbale da stampare',
                 suo.stato === 200 && suo.corpo?.righe?.length === 1, `HTTP ${suo.stato}`);
             const confermato = await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}/conferma`, { method: 'POST' });
             verifica('e lo conferma dal profilo', confermato.stato === 200, `HTTP ${confermato.stato}`);
-            // La conferma compila il verbale: nome, data, da dove e impronta.
             const compilato = (await volontario.chiamata(`/api/magazzino/verbali/${prima.corpo?.verbale_id}`)).corpo;
             verifica('la conferma compila il verbale: nome, data, dal profilo, impronta',
                 !!compilato?.confermato_da && !!compilato?.confermato_il && compilato?.conferma_canale === 'web'
@@ -1094,8 +981,6 @@ async function eseguiTest() {
                 });
             }
 
-            // DPI e attrezzature: con la conferma dei DPI il verbale c'è per i
-            // DPI, ma attrezzature e mezzi ci entrano solo se previsto e chiesto.
             const configPrima = (await admin.chiamata('/api/magazzino/config')).corpo || {};
             const attrezzo = await admin.chiamata('/api/magazzino/beni', {
                 method: 'POST', body: { tipo: 'attrezzatura', denominazione: `Motosega verbale ${Date.now().toString().slice(-6)}` }
@@ -1132,7 +1017,6 @@ async function eseguiTest() {
                     chiesto.stato === 201 && righeChiesto.length === 1 && righeChiesto[0] === idAttrezzo, JSON.stringify(chiesto.corpo));
                 const nonChiesto = await rientra([{ bene_id: idAttrezzo }], false);
                 verifica('non chiesto, no', nonChiesto.stato === 201 && nonChiesto.corpo?.verbale_id === null, JSON.stringify(nonChiesto.corpo));
-                // Dall'app la conferma lo dice.
                 if (chiesto.corpo?.verbale_id) {
                     const dallApp = await volontario.chiamata(`/api/magazzino/verbali/${chiesto.corpo.verbale_id}/conferma`, {
                         method: 'POST', headers: { 'X-Orion-Client': 'app' } });
@@ -1154,10 +1038,6 @@ async function eseguiTest() {
             const anonimi = await anonimo.chiamata('/api/magazzino/verbali/miei');
             verifica('senza sessione -> 401', anonimi.stato === 401, `HTTP ${anonimi.stato}`);
 
-            // Il verbale di rientro e il foglio firmato fotografato. Ne tornano
-            // 3 su 4: il quarto paio resta al volontario, e il verbale lo dice.
-            // Il verbale di rientro è un'opzione del magazzino (dalla 3.33):
-            // qui si accende, e alla fine si rimette com'era.
             const verbaleRientroPrima = !!(await admin.chiamata('/api/magazzino/config')).corpo?.verbale_rientro;
             await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { verbale_rientro: true } });
             const ctxConVerbale = await admin.chiamata('/api/app/contesto');
@@ -1207,8 +1087,6 @@ async function eseguiTest() {
                 verifica("nell'elenco il verbale ha il foglio, non il nome del file",
                     riga?.scansione_url === `/api/magazzino/verbali/${idRientro}/scansione` && !('scansione_file' in (riga || {})),
                     JSON.stringify(riga));
-                // Una consegna già confermata dall'app resta confermata: il
-                // foglio si aggiunge.
                 const suConfermato = await allega(admin, prima.corpo?.verbale_id, jpeg, 'image/jpeg');
                 verifica('il foglio su un verbale già confermato non ne cambia lo stato',
                     suConfermato.stato === 201 && suConfermato.corpo?.stato === 'confermato',
@@ -1218,9 +1096,6 @@ async function eseguiTest() {
                     method: 'POST', body: { da: { tipo: 'persona', id: idVolontario }, righe: [{ bene_id: idScarpe, quantita: 0, resto: 'boh' }] }
                 });
                 verifica('un destino inventato per il resto -> 400', restoInventato.stato === 400, `HTTP ${restoInventato.stato}`);
-                // L'ultimo paio non torna più: si dichiara perso, con zero
-                // rientrati. Con il verbale di rientro spento, chi lo chiede
-                // lo stesso non lo ottiene e il rientro si registra.
                 await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { verbale_rientro: false } });
                 const ctxSenza = await admin.chiamata('/api/app/contesto');
                 verifica('il contesto dice che il verbale di rientro è spento', ctxSenza.corpo?.magazzino?.verbale_rientro === false,
@@ -1239,7 +1114,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
     console.log('\n[6] Percorsi dei file');
     const traversalUploads = await admin.chiamata('/uploads/..%2F..%2Fpackage.json');
     verifica('path traversal su /uploads bloccato', traversalUploads.stato === 403, `HTTP ${traversalUploads.stato}`);
@@ -1247,7 +1121,6 @@ async function eseguiTest() {
     const traversalCertificati = await admin.chiamata('/api/documents/certificates/cert-1-..%2F..%2F..%2Fetc%2Fpasswd');
     verifica('path traversal sui certificati bloccato', [400, 403, 404].includes(traversalCertificati.stato), `HTTP ${traversalCertificati.stato}`);
 
-    // ------------------------------------------------------------------
     console.log('\n[7] Funzioni operative');
     const endpointLetturaAdmin = [
         ['/api/squadre', 'elenco squadre'],
@@ -1264,9 +1137,6 @@ async function eseguiTest() {
         verifica(`${nome} risponde`, r.stato === 200, `HTTP ${r.stato}`);
     }
 
-    // ------------------------------------------------------------------
-    // Una richiesta con dati sbagliati deve tornare 400 con la spiegazione:
-    // un 500 manda l'operatore a cercare un guasto che non c'è.
     console.log('\n[7-quater] Dati non validi nelle modifiche');
     const sogliaAssurda = await admin.chiamata('/api/branding/settings', {
         method: 'PUT', body: { minuti_attesa_critica: 'non-un-numero' }
@@ -1282,8 +1152,6 @@ async function eseguiTest() {
     });
     verifica('modifica di segnalazione inesistente -> 404', segnalazioneInesistente.stato === 404, `HTTP ${segnalazioneInesistente.stato}`);
 
-    // Nomi, email e anagrafica: un valore troppo lungo o sbagliato è un 400
-    // che dice cosa non va, non un 500 dal database.
     const nomeLungo = await admin.chiamata('/api/users', { method: 'POST', body: { nome: 'N'.repeat(51), cognome: 'Lungo', ruoli: ['volontario'] } });
     verifica('nome oltre i 50 caratteri -> 400', nomeLungo.stato === 400, `HTTP ${nomeLungo.stato} ${JSON.stringify(nomeLungo.corpo)}`);
     const emailStorta = await admin.chiamata('/api/users', { method: 'POST', body: { nome: 'Email', cognome: 'Storta', email: 'non-una-email', ruoli: ['volontario'] } });
@@ -1300,17 +1168,12 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // L'importazione legge un file caricato da fuori: i formati che non sa
-    // leggere devono produrre un errore comprensibile, non un 500 generico né
-    // un utente creato a metà.
     console.log('\n[7-ter] Importazione utenti da foglio');
     const inviaFoglio = async (nomeFile, contenuto, tipo) => {
         const modulo = new FormData();
         modulo.append('file', new Blob([contenuto], { type: tipo }), nomeFile);
         return admin.chiamata('/api/admin/import-users', { method: 'POST', body: modulo });
     };
-    // Intestazione CFB: è così che comincia un vero .xls di Excel 2003.
     const intestazioneXls = new Uint8Array(512);
     intestazioneXls.set([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
     const vecchioXls = await inviaFoglio('elenco.xls', intestazioneXls, 'application/vnd.ms-excel');
@@ -1322,8 +1185,6 @@ async function eseguiTest() {
     const nonFoglio = await inviaFoglio('elenco.xlsx', '%PDF-1.4 non sono un foglio', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     verifica('file che non è un foglio rifiutato con 400', nonFoglio.stato === 400, `HTTP ${nonFoglio.stato}`);
 
-    // Un import vero, con il CSV come lo salva l'Excel italiano: punto e
-    // virgola, BOM, accenti. Ricaricato, non crea doppioni.
     {
         const s = Date.now().toString().slice(-6);
         const csv = `\uFEFFNome;Cognome;E-mail;Cellulare\r\nNicolò${s};D'Angelo${s};nicolo.${s}@esempio.it;3330000000\r\n;SenzaNome${s};;\r\n`;
@@ -1348,22 +1209,16 @@ async function eseguiTest() {
     const importVolontario = await volontario.chiamata('/api/admin/import-users', { method: 'POST' });
     verifica('importazione negata al volontario', [401, 403].includes(importVolontario.stato), `HTTP ${importVolontario.stato}`);
 
-    // ------------------------------------------------------------------
     console.log('\n[7-bis] Resoconto testuale delle emergenze');
     const archivio = await admin.chiamata('/api/admin/emergencies/closed');
     verifica('elenco emergenze archiviate consultabile', archivio.stato === 200, `HTTP ${archivio.stato}`);
-    // Un'emergenza vera: il resoconto di una simulazione ha la sua intestazione.
     const emergenzaArchiviata = Array.isArray(archivio.corpo) ? (archivio.corpo.find(e => !e.simulazione) || archivio.corpo[0]) : null;
     if (emergenzaArchiviata) {
         const resoconto = await admin.chiamata(`/api/admin/emergencies/${emergenzaArchiviata.id}/resoconto`);
         verifica('resoconto scaricabile dall\'amministratore', resoconto.stato === 200, `HTTP ${resoconto.stato}`);
-        // Il resoconto viene rigenerato se il file manca: deve arrivare comunque
-        // testo leggibile, non un errore o un oggetto JSON.
         verifica('il resoconto contiene le sezioni attese',
             typeof resoconto.corpo === 'string'
             && resoconto.corpo.includes('RESOCONTO EMERGENZA')
-            // I resoconti scritti prima della 3.34 non hanno il diario di sala
-            // e numerano le sezioni da 1: si controllano i titoli, non i numeri.
             && /\d\. SEGNALAZIONI/.test(resoconto.corpo)
             && /\d\. REGISTRO DELLE SQUADRE/.test(resoconto.corpo)
             && /\d\. MEZZI E MATERIALI IMPIEGATI/.test(resoconto.corpo)
@@ -1371,7 +1226,6 @@ async function eseguiTest() {
         const resocontoVolontario = await volontario.chiamata(`/api/admin/emergencies/${emergenzaArchiviata.id}/resoconto`);
         verifica('resoconto negato al volontario', [401, 403].includes(resocontoVolontario.stato), `HTTP ${resocontoVolontario.stato}`);
 
-        // Un'emergenza chiusa e' archivio: solo l'amministratore la riapre.
         const idArchiviata = emergenzaArchiviata.id;
         const documentiAdmin = await admin.chiamata(`/api/emergencies/${idArchiviata}/documents`);
         const documentiVolontario = await volontario.chiamata(`/api/emergencies/${idArchiviata}/documents`);
@@ -1395,12 +1249,6 @@ async function eseguiTest() {
     const resocontoIdNonValido = await admin.chiamata('/api/admin/emergencies/non-un-numero/resoconto');
     verifica('resoconto con ID non valido -> 400', resocontoIdNonValido.stato === 400, `HTTP ${resocontoIdNonValido.stato}`);
 
-    // ------------------------------------------------------------------
-    // La posizione delle squadre arriva dall'app sul telefono dei caposquadra.
-    // Il centro operativo decide se una squadra è "viva" confrontando l'ora
-    // dell'ultimo invio con l'ora attuale: un orario nel futuro spegnerebbe per
-    // sempre quel controllo, e una squadra con l'app spenta continuerebbe a
-    // sembrare in servizio.
     console.log('\n[7-quinquies] Posizioni delle squadre');
     const posizioni = await admin.chiamata('/api/location');
     verifica('elenco posizioni consultabile', posizioni.stato === 200, `HTTP ${posizioni.stato}`);
@@ -1418,12 +1266,6 @@ async function eseguiTest() {
     const posizioneSenzaDati = await admin.chiamata('/api/location', { method: 'POST', body: { squadra_id: 1 } });
     verifica('posizione senza coordinate rifiutata', posizioneSenzaDati.stato === 400, `HTTP ${posizioneSenzaDati.stato}`);
 
-    // ------------------------------------------------------------------
-    // Uscire deve invalidare il token davvero. La revoca lo cercava solo nel
-    // cookie, quindi per l'app Android - che si autentica con l'intestazione
-    // Authorization e cookie non ne ha - non revocava niente: il volontario
-    // vedeva la schermata di accesso, ma il suo token restava buono fino alla
-    // scadenza naturale, cioe' per un giorno intero.
     console.log('\n[7-septies] Il logout revoca il token');
     if (utenteDiProva && passwordDiProva) {
         const conBearer = creaClient();
@@ -1434,7 +1276,6 @@ async function eseguiTest() {
         if (!gettone) {
             console.log('  --   nessun token restituito dal login: controllo saltato');
         } else {
-            // Un client senza cookie, come l'app: solo l'intestazione.
             const intestazione = { Authorization: `Bearer ${gettone}` };
             const primaDelLogout = await anonimo.chiamata('/api/users/me', { headers: intestazione });
             verifica('il token appena emesso funziona', primaDelLogout.stato === 200, `HTTP ${primaDelLogout.stato}`);
@@ -1451,12 +1292,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Le risposte che chiudono la sessione vanno distinte da quelle che negano
-    // una singola operazione: un client che le confonde o lascia l'utente
-    // bloccato su un errore che non si sblocca, o lo butta fuori mentre lavora.
-    // Attenzione: un token SCADUTO o non valido da' 403, non 401 (il 401 e'
-    // riservato al token assente), quindi il codice da solo non basta.
     console.log('\n[7-octies] Le risposte che chiudono la sessione sono riconoscibili');
     const tokenRotto = await anonimo.chiamata('/api/users/me', { headers: { Authorization: 'Bearer non.un.token' } });
     verifica('token non valido contrassegnato come fine sessione',
@@ -1470,17 +1305,6 @@ async function eseguiTest() {
     verifica("una password sbagliata NON e' una sessione finita",
         credenzialiSbagliate.corpo?.sessione_terminata !== true, JSON.stringify(credenzialiSbagliate.corpo));
 
-    // ------------------------------------------------------------------
-    // Una squadra sta su una segnalazione sola. E' la regola su cui si regge
-    // tutto il resto: il centro operativo offre come "disponibili" solo le
-    // squadre libere, e la app delle squadre chiede la propria assegnazione con
-    // limit=1 perche' ne esiste una.
-    //
-    // Il controllo che la fa rispettare guardava pero' solo la riga della
-    // segnalazione: due operatori che assegnavano la STESSA squadra a DUE
-    // segnalazioni diverse nello stesso momento bloccavano righe diverse, non si
-    // vedevano, e passavano entrambi. Lanciando due richieste insieme la
-    // violazione si otteneva ogni volta, non una ogni tanto.
     console.log('\n[7-sexies] Una squadra, una sola segnalazione');
     const emergenzaPerSquadre = await admin.chiamata('/api/emergencies/status');
     if (!emergenzaPerSquadre.corpo?.active) {
@@ -1513,7 +1337,6 @@ async function eseguiTest() {
             if (!primaSegnalazione || !secondaSegnalazione) {
                 console.log('  --   impossibile creare le segnalazioni di prova: controllo saltato');
             } else {
-                // Le due richieste partono insieme, come da due postazioni diverse.
                 const assegna = (idSegnalazione) => admin.chiamata(`/api/reports/${idSegnalazione}/teams`, {
                     method: 'POST', body: { teamId: squadraProva }
                 });
@@ -1530,15 +1353,11 @@ async function eseguiTest() {
                 verifica('la squadra risulta su una sola segnalazione attiva', suQuante <= 1,
                     `risulta su ${suQuante}`);
 
-                // Le squadre offerte come disponibili devono essere quelle che il
-                // server accetterebbe davvero: se le due definizioni divergono, il
-                // centro operativo propone squadre che poi vengono rifiutate.
                 const disponibili = await admin.chiamata('/api/squadre/disponibili');
                 const elencoDisponibili = Array.isArray(disponibili.corpo) ? disponibili.corpo : [];
                 verifica('una squadra impegnata non compare fra le disponibili',
                     suQuante === 0 || !elencoDisponibili.some(s => s.id === squadraProva));
 
-                // Un rifiuto legittimo non deve presentarsi come un guasto.
                 const chiusura = await admin.chiamata(`/api/reports/${secondaSegnalazione}`, {
                     method: 'PUT', body: { status: 'Closed' }
                 });
@@ -1555,8 +1374,6 @@ async function eseguiTest() {
                 verifica('assegnare una squadra inesistente -> 404 (non 500)',
                     squadraInesistente.stato === 404, `HTTP ${squadraInesistente.stato}`);
 
-                // Pulizia: le segnalazioni non si cancellano una per una, ma
-                // chiuderle le toglie dalla coda operativa.
                 await admin.chiamata(`/api/reports/${primaSegnalazione}`, { method: 'PUT', body: { status: 'Closed' } });
             }
             const eliminaSquadra = await admin.chiamata(`/api/squadre/${squadraProva}`, { method: 'DELETE' });
@@ -1564,11 +1381,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // L'app Android chiede al server, in una chiamata sola, chi è e cosa può
-    // fare, e legge una coda di notifiche che è solo sua. Qui si controlla che
-    // la coda sia davvero personale, che arrivi anche dal WebSocket a chi è
-    // collegato, e che un token revocato non possa restare in ascolto.
     console.log('\n[7-nonies] App Android: contesto e notifiche');
     if (idVolontario && utenteDiProva && passwordDiProva) {
         const contesto = await volontario.chiamata('/api/app/contesto');
@@ -1597,7 +1409,6 @@ async function eseguiTest() {
         const primaDellaConsegna = await volontario.chiamata('/api/notifiche');
         let ultimoVisto = (primaDellaConsegna.corpo?.notifiche || []).reduce((m, n) => Math.max(m, n.id), 0);
 
-        // Il volontario collegato col solo token, come l'app.
         const accessoApp = await creaClient().chiamata('/login', {
             method: 'POST', body: { username: utenteDiProva, password: passwordDiProva }
         });
@@ -1630,8 +1441,6 @@ async function eseguiTest() {
         verifica('un DPI a quantità con taglia si carica', scarpe.stato === 201, `HTTP ${scarpe.stato}`);
 
         if (scarpe.stato === 201) {
-            // Verbale di consegna spento e conferma spenta: la consegna è solo
-            // la consegna, anche se qualcuno chiede il verbale.
             await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { conferma_dpi: false, verbale_consegna: false } });
             const ctxBase = await admin.chiamata('/api/app/contesto');
             verifica('il contesto dice che il verbale di consegna è spento', ctxBase.corpo?.magazzino?.verbale_consegna === false,
@@ -1642,8 +1451,6 @@ async function eseguiTest() {
             });
             verifica('verbale di consegna spento: niente verbale anche se richiesto', base.stato === 201 && base.corpo?.verbale_id === null,
                 `HTTP ${base.stato} ${JSON.stringify(base.corpo)}`);
-            // Con la conferma dei DPI accesa il verbale c'è sempre: la conferma
-            // si fa su di lui.
             await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { conferma_dpi: true, verbale_consegna: false } });
             const soloConferma = await admin.chiamata('/api/magazzino/consegna', {
                 method: 'POST',
@@ -1656,8 +1463,6 @@ async function eseguiTest() {
             }
             ultimoVisto = Math.max(ultimoVisto, ...(((await volontario.chiamata(`/api/notifiche?dopo=${ultimoVisto}`)).corpo?.notifiche || []).map(n => n.id)));
 
-            // Conferma dall'app spenta: la consegna non deve chiedere niente a
-            // nessuno, perché nessuno gli ha spiegato cosa fare.
             await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { conferma_dpi: false, verbale_consegna: true } });
             const senzaConferma = await admin.chiamata('/api/magazzino/consegna', {
                 method: 'POST',
@@ -1702,8 +1507,6 @@ async function eseguiTest() {
             verifica('segnate come lette fino all\'ultima, non ne resta nessuna',
                 lette.stato === 200 && lette.corpo?.non_lette === 0, JSON.stringify(lette.corpo));
 
-            // Confermati i DPI, la richiesta di conferma sparisce dalla coda:
-            // ha perso di significato.
             await volontario.chiamata(`/api/magazzino/verbali/${conConferma.corpo?.verbale_id}/conferma`, { method: 'POST' });
             const dopoConferma = await volontario.chiamata(`/api/notifiche?dopo=${(dpi?.id || 1) - 1}`);
             verifica('confermati i DPI, la notifica non è più in coda',
@@ -1714,7 +1517,6 @@ async function eseguiTest() {
 
         if (canale) canale.close();
 
-        // Un token revocato col logout non deve poter aprire il canale.
         if (WebSocketNode && gettoneApp) {
             await anonimo.chiamata('/logout', { method: 'POST', headers: { Authorization: `Bearer ${gettoneApp}` } });
             const rifiutato = await new Promise(risolvi => {
@@ -1726,8 +1528,6 @@ async function eseguiTest() {
             verifica('un token revocato non apre il WebSocket', rifiutato);
         }
 
-        // Il materiale in carico: il proprio lo vede chiunque, quello degli
-        // altri non un utente esterno.
         const esterno = await admin.chiamata('/api/users', {
             method: 'POST', body: { nome: `Esterno${Date.now().toString().slice(-6)}`, cognome: 'Collaudo', role: 'esterno' }
         });
@@ -1756,7 +1556,6 @@ async function eseguiTest() {
             const eliminaEsterno = await clientEsterno.chiamata('/api/squadre/999999', { method: 'DELETE' });
             verifica('un esterno non elimina squadre -> 403', eliminaEsterno.stato === 403, `HTTP ${eliminaEsterno.stato}`);
 
-            // La rubrica d'emergenza: la tiene la sala, non chi viene da fuori.
             const vuotoRubrica = await volontario.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Senza numeri' } });
             const numeroStorto = await volontario.chiamata('/api/rubrica', { method: 'POST', body: { nome: 'Numero storto', telefono: 'chiamami' } });
             verifica('rubrica: senza telefono né email, o con un numero storto -> 400',
@@ -1784,10 +1583,7 @@ async function eseguiTest() {
             const disponibiliEsterno = await clientEsterno.chiamata('/api/users/unassigned');
             verifica("un esterno non vede l'idoneita' dei volontari -> 403", disponibiliEsterno.stato === 403, `HTTP ${disponibiliEsterno.stato}`);
 
-            // Nell'app un esterno ha solo l'emergenza: la vede e, in squadra,
-            // ne manda la posizione (la Croce Rossa arrivata al COC).
             const contestoEsterno = await clientEsterno.chiamata('/api/app/contesto');
-            // (e, a emergenza aperta, i documenti del gruppo segnati per l'emergenza)
             verifica("per un esterno l'app ha solo l'emergenza",
                 contestoEsterno.stato === 200 && (contestoEsterno.corpo?.capacita || []).filter(c => c !== 'documenti').join() === 'emergenza',
                 `HTTP ${contestoEsterno.stato} ${JSON.stringify(contestoEsterno.corpo?.capacita)}`);
@@ -1798,7 +1594,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
     console.log('\n[8] Tesserino pubblico');
     if (idVolontario) {
         const profilo = await volontario.chiamata('/api/users/me');
@@ -1813,7 +1608,6 @@ async function eseguiTest() {
                 verifica('senza emergenza attiva il tesserino non rivela dati',
                     badge.corpo?.available === false && !badge.corpo?.cognome);
             }
-            // Chi ha fatto l'accesso lo vede sempre, emergenza o no.
             const badgeConAccesso = await volontario.chiamata(`/api/public/volunteer/${token}`);
             verifica('con l\'accesso il tesserino si vede sempre',
                 badgeConAccesso.stato === 200 && badgeConAccesso.corpo?.available === true, `HTTP ${badgeConAccesso.stato}`);
@@ -1821,8 +1615,6 @@ async function eseguiTest() {
         const badgeInventato = await anonimo.chiamata('/api/public/volunteer/token-non-valido');
         verifica('token del tesserino non valido rifiutato', badgeInventato.stato === 400, `HTTP ${badgeInventato.stato}`);
 
-        // La foto profilo: chi ha fatto l'accesso la vede, chi ha solo il
-        // link no. Il tesserino pubblico la mostra tramite il proprio token.
         const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
         const moduloFoto = new FormData();
         moduloFoto.append('photo', new Blob([png], { type: 'image/png' }), 'io.png');
@@ -1848,7 +1640,6 @@ async function eseguiTest() {
         }
     }
 
-    // ------------------------------------------------------------------
     console.log('\n[8-quater] App Android: proposta e interruttore dell\'amministratore');
     const offertaPrima = await volontario.chiamata('/api/app/offerta');
     verifica('il web chiede se proporre l\'app', offertaPrima.stato === 200 && typeof offertaPrima.corpo?.disponibile === 'boolean',
@@ -1868,7 +1659,6 @@ async function eseguiTest() {
         JSON.stringify(contestoSpento.corpo?.app));
     await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { app_android_enabled: valorePrima } });
 
-    // ------------------------------------------------------------------
     console.log('\n[8-quinquies] Sessioni, token di rinnovo, tesserino rigenerato');
     {
         const persona = await admin.chiamata('/api/users', {
@@ -1907,7 +1697,6 @@ async function eseguiTest() {
             const rinnovoDopo = await anonimo.chiamata('/api/app/rinnovo/accesso', { method: 'POST', body: { rinnovo: rinnovo.corpo?.rinnovo } });
             verifica('e anche i token di rinnovo', rinnovoDopo.stato === 401, `HTTP ${rinnovoDopo.stato}`);
 
-            // Un tesserino perso: il QR vecchio smette di funzionare.
             const vecchio = (await web.chiamata('/api/users/me')).corpo?.public_token;
             const rigenera = await admin.chiamata(`/api/admin/users/${persona.corpo.id}/rigenera-tesserino`, { method: 'POST' });
             verifica('la segreteria rigenera il QR del tesserino',
@@ -1919,8 +1708,6 @@ async function eseguiTest() {
             const rigeneraVolontario = await volontario.chiamata(`/api/admin/users/${persona.corpo.id}/rigenera-tesserino`, { method: 'POST' });
             verifica('un volontario non rigenera tesserini', [401, 403].includes(rigeneraVolontario.stato), `HTTP ${rigeneraVolontario.stato}`);
 
-            // Il fascicolo della segreteria legge QR e foto di una persona sola;
-            // l'elenco degli utenti non li porta.
             const tesserino = await admin.chiamata(`/api/admin/users/${persona.corpo.id}/tesserino`);
             verifica('la segreteria legge il QR del tesserino di un volontario',
                 tesserino.stato === 200 && /^[0-9a-f-]{36}$/.test(tesserino.corpo?.public_token || ''), `HTTP ${tesserino.stato}`);
@@ -1934,8 +1721,6 @@ async function eseguiTest() {
             const fotoVuota = await admin.chiamata(`/api/admin/users/${persona.corpo.id}/photo`, { method: 'POST' });
             verifica('senza immagine la foto non cambia -> 400', fotoVuota.stato === 400, `HTTP ${fotoVuota.stato}`);
 
-            // QR spenti dall'amministrazione: il token non esce da nessuna
-            // parte e la pagina pubblica non verifica piu' niente.
             const tokenPrima = tesserino.corpo?.public_token;
             const spegni = await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { badge_qr_enabled: 'false' } });
             verifica("l'amministratore spegne i QR dei volontari", spegni.stato === 200, `HTTP ${spegni.stato}`);
@@ -1961,8 +1746,6 @@ async function eseguiTest() {
             console.log('  --   utente di prova non creato: controlli saltati');
         }
 
-        // Le impostazioni pubbliche non devono portarsi dietro gli indirizzi
-        // della segreteria.
         const completa = await admin.chiamata('/api/branding/settings/full');
         const segreteriaPrima = completa.corpo?.segreteria_config;
         verifica('la password della posta non torna al browser, nemmeno all\'amministratore',
@@ -1972,8 +1755,6 @@ async function eseguiTest() {
         const pubbliche = await anonimo.chiamata('/api/branding/settings');
         verifica('le email interne della segreteria non sono pubbliche',
             !JSON.stringify(pubbliche.corpo || {}).includes('interno@esempio.it'), JSON.stringify(pubbliche.corpo?.segreteria_config));
-        // Il riepilogo delle scadenze mandato a mano: con la segreteria spenta
-        // lo dice, invece di rispondere "inviato" senza aver mandato niente.
         const reportSpento = await admin.chiamata('/api/admin/report-scadenze', { method: 'POST' });
         verifica('il riepilogo a segreteria spenta non parte e lo dice -> 409',
             reportSpento.stato === 409 && /spento/i.test(reportSpento.corpo?.message || ''), `HTTP ${reportSpento.stato}`);
@@ -1987,7 +1768,6 @@ async function eseguiTest() {
         });
     }
 
-    // ------------------------------------------------------------------
     console.log('\n[8-ter] Pagine riservate');
     for (const pagina of ['/centro-operativo.html', '/admin-segreteria.html', '/magazzino.html', '/profile.html', '/print-report.html', '/magazzino-etichette.html', '/magazzino-verbale.html']) {
         const senza = await anonimo.chiamata(pagina);
@@ -2000,12 +1780,7 @@ async function eseguiTest() {
         verifica(`${pagina} resta pubblica`, pubblica.stato === 200 || (pagina === '/logo.png' && pubblica.stato === 404), `HTTP ${pubblica.stato}`);
     }
 
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
     console.log('\n[8-bis] Sistema: backup e ripristino');
-    // Qui NON si ripristina niente: un ripristino cancella il database, e
-    // questa batteria gira anche su istanze di collaudo con dentro dati veri.
-    // Si controlla chi può fare cosa e che le conferme deboli vengano rifiutate.
     const backupAmministratore = await admin.chiamata('/api/sistema/backup');
     verifica('l\'amministratore vede l\'elenco dei backup',
         backupAmministratore.stato === 200 && Array.isArray(backupAmministratore.corpo?.backup),
@@ -2048,9 +1823,6 @@ async function eseguiTest() {
     verifica('un nome di file che esce dalla cartella viene rifiutato',
         nomeConPercorso.stato === 400 || nomeConPercorso.stato === 404, `HTTP ${nomeConPercorso.stato}`);
 
-    // Aggiornamenti: qui NON si aggiorna niente. Si controlla che il contatto
-    // col mondo esterno sia spento finché qualcuno non lo accende, e che
-    // nessuno oltre all'amministratore possa toccarlo.
     const versione = await admin.chiamata('/api/sistema/versione');
     verifica('la pagina Sistema sa dire che versione è installata',
         versione.stato === 200 && typeof versione.corpo?.versione_installata === 'string',
@@ -2079,8 +1851,6 @@ async function eseguiTest() {
     const chiaveStrana = await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { 'Chiave Strana!': 'x' } });
     verifica('una chiave di impostazione malformata -> 400', chiaveStrana.stato === 400, `HTTP ${chiaveStrana.stato}`);
 
-    // Un dump con un comando di psql ("\\!" esegue un programma sul server)
-    // viene rifiutato già al caricamento.
     {
         const { gzipSync } = await import('zlib');
         const righe = ['--', '-- PostgreSQL database dump', '--', 'SET statement_timeout = 0;'];
@@ -2094,8 +1864,6 @@ async function eseguiTest() {
             caricato.stato === 400 && /comando di psql/.test(caricato.corpo?.message || ''), `HTTP ${caricato.stato} ${JSON.stringify(caricato.corpo)}`);
     }
 
-    // "Controlla adesso" funziona anche con il controllo giornaliero spento.
-    // Il servizio è una porta chiusa sulla macchina stessa: niente rete.
     {
         const configPrima = (await admin.chiamata('/api/sistema/versione')).corpo?.aggiornamenti || {};
         await admin.chiamata('/api/sistema/aggiornamenti/config', {
@@ -2109,7 +1877,6 @@ async function eseguiTest() {
         });
     }
 
-    // Con un'emergenza aperta non si aggiorna: lo dicono già i requisiti.
     {
         const stato = await admin.chiamata('/api/emergencies/status');
         const giaAperta = !!(stato.corpo?.emergency || stato.corpo?.active);
@@ -2137,10 +1904,6 @@ async function eseguiTest() {
     verifica('la pagina Sistema non si apre senza essere amministratori -> 403',
         paginaSistemaAlVolontario.stato === 403, `HTTP ${paginaSistemaAlVolontario.stato}`);
 
-    // ------------------------------------------------------------------
-    // Gli esterni temporanei: la Croce Rossa arriva al COC, le si dà un
-    // accesso con un nome e un QR, entra in una squadra e manda la posizione.
-    // Tutto finisce con l'emergenza.
     console.log('\n[8-sexies] Esterni temporanei');
     {
         const stato = await admin.chiamata('/api/emergencies/status');
@@ -2155,8 +1918,6 @@ async function eseguiTest() {
         if (!giaAperta) verifica('emergenza di prova aperta', aperta.stato === 200 || aperta.stato === 201, `HTTP ${aperta?.stato}`);
         let avvisoApertura = null;
         if (!giaAperta) {
-            // L'apertura non finisce più nella coda di tutti: l'avviso arriva
-            // solo a chi entra in squadra (tests/emergenza-app.mjs).
             await new Promise(r => setTimeout(r, 500));
             avvisoApertura = ((await volontario.chiamata('/api/notifiche')).corpo?.notifiche || [])
                 .find(n => n.tipo === 'emergenza_aperta' && n.riferimento_id === aperta.corpo?.emergency?.id) || null;
@@ -2165,7 +1926,6 @@ async function eseguiTest() {
             verifica("in emergenza l'app controlla la coda ogni 15 minuti",
                 contestoEmergenza.corpo?.notifiche?.controllo_minuti === 15, JSON.stringify(contestoEmergenza.corpo?.notifiche));
 
-            // Il diario di sala: note che non riguardano una segnalazione.
             const notaSala = await volontario.chiamata('/api/emergencies/diario-sala', {
                 method: 'POST', body: { testo: 'Telefonata dalla Prefettura: allerta arancione fino a domani' }
             });
@@ -2182,8 +1942,6 @@ async function eseguiTest() {
         const usati = new Set((squadre.corpo || []).map(s => s.nome_radio));
         const vuoto = await volontario.chiamata('/api/esterni-temporanei', { method: 'POST', body: { nome: '   ' } });
         verifica('senza nome -> 400', vuoto.stato === 400, `HTTP ${vuoto.stato}`);
-        // Un nome radio libero: quelli delle squadre sciolte in questa
-        // emergenza (anche da giri di prova precedenti) sono bloccati.
         let creato = null;
         let libero = null;
         for (const n of ['Zulu', 'Yankee', 'X-ray', 'Whiskey', 'Victor', 'Uniform', 'Tango', 'Sierra', 'Romeo', 'Quebec', 'Papa'].filter(n => !usati.has(n))) {
@@ -2218,8 +1976,6 @@ async function eseguiTest() {
         const creaDaEsterno = await cri.chiamata('/api/esterni-temporanei', { method: 'POST', body: { nome: 'Altro' } });
         verifica('un esterno non crea altri accessi -> 403', creaDaEsterno.stato === 403, `HTTP ${creaDaEsterno.stato}`);
 
-        // Il magazzino dell'associazione non è suo: inventario, movimenti e
-        // "chi ha cosa" portano nomi e dotazioni dei volontari.
         for (const percorso of ['/api/magazzino/beni', '/api/magazzino/chi-ha-cosa', '/api/magazzino/movimenti', '/api/magazzino/categorie']) {
             const r = await cri.chiamata(percorso);
             verifica(`un esterno non legge ${percorso} -> 403`, r.stato === 403, `HTTP ${r.stato}`);
@@ -2232,9 +1988,6 @@ async function eseguiTest() {
         const rinnovoEsterno = await cri.chiamata('/api/app/rinnovo', { method: 'POST', body: { dispositivo: 'Collaudo' } });
         verifica('un accesso temporaneo non ottiene token di rinnovo -> 403', rinnovoEsterno.stato === 403, `HTTP ${rinnovoEsterno.stato}`);
 
-        // Un esterno agisce solo sulle segnalazioni della sua squadra: una
-        // segnalazione non assegnata a lui non la tocca, né con una nota né
-        // spostandone il punto (le foto erano già protette così).
         const segnAltrui = await admin.chiamata('/api/reports', {
             method: 'POST', body: { title: 'Intervento di un\'altra squadra', reporter_name: 'Collaudo', reporter_contact: '000', priority: 'Low' }
         });
@@ -2256,9 +2009,6 @@ async function eseguiTest() {
         verifica('un QR nuovo annulla il vecchio', nuovo.stato === 200 && vecchio.stato === 401 && conNuovo.stato === 200,
             `${nuovo.stato}/${vecchio.stato}/${conNuovo.stato}`);
 
-        // Il codice si rivede (per mostrare di nuovo il QR o rimandare il link),
-        // e per un cambio turno l'accesso passa a un'altra persona: chi c'era
-        // esce, il suo codice non vale più, chi subentra entra col nuovo.
         const rivisto = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/codice`);
         verifica('il codice di un accesso si rivede uguale', rivisto.stato === 200 && rivisto.corpo?.codice === nuovo.corpo?.codice && !!rivisto.corpo?.link,
             `HTTP ${rivisto.stato}`);
@@ -2280,9 +2030,6 @@ async function eseguiTest() {
         verifica('in squadra compare chi è subentrato', (squadraDopoCambio?.membri || []).some(m => m.nome === 'Paolo'),
             JSON.stringify(squadraDopoCambio?.membri));
 
-        // In Gestione utenti l'accesso temporaneo sta fra gli esterni, con
-        // emergenza, data di creazione e ultimo accesso; password, sospensione
-        // e modifica si fanno dal centro operativo, non da lì.
         const elencoUtenti = await admin.chiamata('/api/admin/users');
         const rigaTemp = (elencoUtenti.corpo || []).find(u => u.id === idTemp);
         verifica('Gestione utenti: il temporaneo ha emergenza, creazione e ultimo accesso',
@@ -2300,15 +2047,11 @@ async function eseguiTest() {
             sospendiTemp.stato === 409 && azzeraTemp.stato === 409 && modificaTemp.stato === 409,
             `${sospendiTemp.stato}/${azzeraTemp.stato}/${modificaTemp.stato}`);
 
-        // La configurazione iniziale esiste solo finché non c'è un amministratore.
         const primoGet = await anonimo.chiamata('/api/primo-accesso');
         const primoPost = await anonimo.chiamata('/api/primo-accesso', { method: 'POST', body: { codice: 'AAAA-BBBB-CCCC-DDDD', nome: 'X', cognome: 'Y', username: 'intruso', password: 'Coc-Intruso-2026!' } });
         verifica('primo accesso: con un amministratore già presente il modulo non c\'è (409)',
             primoGet.corpo?.necessario === false && primoPost.stato === 409, `${JSON.stringify(primoGet.corpo)} ${primoPost.stato}`);
 
-        // Le funzioni di supporto: spente non esistono; accese, un incarico
-        // affida a una funzione un compito su una segnalazione, e concluderlo
-        // non chiude la segnalazione.
         const statoFunzioniPrima = (await admin.chiamata('/api/branding/settings')).corpo?.funzioni_enabled;
         await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'false' } });
         const funzioniSpente = await volontario.chiamata('/api/funzioni');
@@ -2329,9 +2072,6 @@ async function eseguiTest() {
         });
         const idFrana = frana.corpo?.id;
         const senzaMotivo = await volontario.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f2?.id, motivazione: '  ' } });
-        // Le note di diario restano legate a chi le scrive (e chi ne ha scritte
-        // non si elimina): le scrive l'amministratore, il volontario prova solo
-        // quello che viene rifiutato.
         const incaricoF2 = await admin.chiamata(`/api/reports/${idFrana}/incarichi`, {
             method: 'POST', body: { funzione_id: f2?.id, motivazione: 'Due persone allettate da trasferire' }
         });
@@ -2374,8 +2114,6 @@ async function eseguiTest() {
         const annullaConcluso = await volontario.chiamata(`/api/incarichi/${incaricoF2.corpo?.id}`, { method: 'DELETE' });
         verifica('un incarico ancora aperto si annulla; uno preso o concluso no (409)',
             annullato.stato === 200 && annullaConcluso.stato === 409, `${annullato.stato}/${annullaConcluso.stato}`);
-        // L'esterno della funzione agisce sulla segnalazione solo finché la sua
-        // funzione ha un incarico da concludere, e con il modulo acceso.
         const dopoConcluso = await subentro.chiamata(`/api/reports/${idFrana}/updates`, { method: 'POST', body: { update_text: 'dopo la conclusione' } });
         const riassegnato = await admin.chiamata(`/api/reports/${idFrana}/incarichi`, { method: 'POST', body: { funzione_id: f2?.id, motivazione: 'Di nuovo' } });
         await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'false' } });
@@ -2384,21 +2122,17 @@ async function eseguiTest() {
         verifica("l'esterno della funzione non scrive più a incarico concluso, né a modulo spento (403)",
             dopoConcluso.stato === 403 && riassegnato.stato === 201 && aModuloSpento.stato === 403,
             `${dopoConcluso.stato}/${riassegnato.stato}/${aModuloSpento.stato}`);
-        // Due "Concludi" nello stesso istante: uno passa, l'altro trova l'incarico già concluso.
         const [primo, secondo] = await Promise.all(['primo', 'secondo'].map(esito =>
             admin.chiamata(`/api/incarichi/${riassegnato.corpo?.id}/concludi`, { method: 'POST', body: { esito } })));
         verifica('due conclusioni insieme: una sola passa, l\'altra 409', [primo.stato, secondo.stato].sort().join() === '200,409', `${primo.stato}/${secondo.stato}`);
         await admin.chiamata(`/api/funzioni/${f7?.id}/membri/${idVolontario}`, { method: 'DELETE' });
 
-        // La mappa: strade chiuse e zone dell'emergenza le disegna la sala, gli
-        // elementi del piano l'amministratore; le vedono tutti, esterni compresi.
         const linea = { type: 'LineString', coordinates: [[12.2010, 46.1395], [12.2050, 46.1400], [12.2090, 46.1410]] };
         const area = { type: 'Polygon', coordinates: [[[12.20, 46.13], [12.21, 46.13], [12.21, 46.14], [12.20, 46.13]]] };
         const stradaDaEsterno = await subentro.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'strada_chiusa', nome: 'no', geometria: linea } });
         const stradaComeArea = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'strada_chiusa', geometria: area } });
         const proiettata = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'zona_interdetta', geometria: { type: 'Polygon', coordinates: [[[1750000, 5110000], [1751000, 5110000], [1751000, 5111000], [1750000, 5110000]]] } } });
         const pianoDaVolontario = await volontario.chiamata('/api/mappa/elementi', { method: 'POST', body: { tipo: 'pericolo_alluvione', geometria: area, piano: true } });
-        // Il limite alto della mappa (8 MB) vale solo per chi ha una sessione.
         const grosso = JSON.stringify({ tipo: 'altro', geometria: { type: 'LineString', coordinates: Array.from({ length: 20000 }, (_, i) => [12 + i * 1e-6, 46]) } });
         const anonimoGrosso = await fetch(`${BASE}/api/mappa/elementi`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: grosso });
         const tipoEreditato = await admin.chiamata('/api/mappa/piano?tipo=constructor&disegnati=1', { method: 'DELETE' });
@@ -2430,7 +2164,6 @@ async function eseguiTest() {
             importa.stato === 201 && importa.corpo?.importati === 2 && svuota.corpo?.tolti === 2 && toltaZona.stato === 200,
             `${importa.stato}/${svuota.stato} ${svuota.corpo?.tolti}/${toltaZona.stato}`);
 
-        // Il punto di situazione: lo legge chi lavora in sala, non l'esterno.
         const situazioneFunzioni = await volontario.chiamata('/api/situazione');
         verifica('punto di situazione: gli incarichi delle funzioni, con motivazione ed esito',
             (situazioneFunzioni.corpo?.funzioni || []).some(f => f.sigla === 'F2'
@@ -2464,7 +2197,6 @@ async function eseguiTest() {
             revoca.stato === 200 && dopoRevoca.stato === 403 && dopoRevoca.corpo?.motivo === 'accesso_temporaneo_finito',
             `${revoca.stato}/${dopoRevoca.stato} ${JSON.stringify(dopoRevoca.corpo)}`);
 
-        // Alla chiusura dell'emergenza gli accessi rimasti finiscono da soli.
         if (!giaAperta) {
             const secondo = await volontario.chiamata('/api/esterni-temporanei', {
                 method: 'POST', body: { nome: 'Luca Tecnico', ente: 'Comune', squadra_id: idSquadra }
@@ -2473,8 +2205,6 @@ async function eseguiTest() {
             await tecnico.chiamata('/api/accesso-temporaneo', { method: 'POST', body: { codice: secondo.corpo?.codice } });
             const notaEsterno = await tecnico.chiamata('/api/emergencies/diario-sala', { method: 'POST', body: { testo: 'Sono un esterno' } });
             verifica('un esterno non scrive nel diario di sala -> 403', notaEsterno.stato === 403, `HTTP ${notaEsterno.stato}`);
-            // Un intervento della squadra dell'ambulanza, chiuso: la squadra si
-            // scioglierà con l'emergenza, ma chi è intervenuto deve restare scritto.
             const intervento = await admin.chiamata('/api/reports', {
                 method: 'POST', body: { title: 'Trasporto in ospedale', reporter_name: 'Collaudo', reporter_contact: '000', priority: 'Medium' }
             });
@@ -2494,8 +2224,6 @@ async function eseguiTest() {
             const contestoDopo = await volontario.chiamata('/api/app/contesto');
             verifica("fuori emergenza l'app controlla la coda ogni ora",
                 contestoDopo.corpo?.notifiche?.controllo_minuti === 60, JSON.stringify(contestoDopo.corpo?.notifiche));
-            // La squadra dell'ambulanza è rimasta vuota: si chiude d'ufficio,
-            // dopo il resoconto (che gira subito dopo la risposta).
             let ancoraLi = true;
             for (let i = 0; i < 20 && ancoraLi; i++) {
                 await new Promise(r => setTimeout(r, 250));
@@ -2514,12 +2242,9 @@ async function eseguiTest() {
         if (idSquadra) await admin.chiamata(`/api/squadre/${idSquadra}`, { method: 'DELETE' });
     }
 
-    // ------------------------------------------------------------------
     console.log('\n[9] Pulizia');
     await admin.chiamata('/api/magazzino/config', { method: 'PUT', body: { verbale_consegna: verbaleConsegnaPrima } });
     if (idVolontario) {
-        // Il volontario di prova ha ancora in carico le scarpe consegnate in
-        // [7-nonies]: si dichiarano rientrate, come farebbe l'amministratore.
         const inCaricoFinale = await admin.chiamata(`/api/magazzino/in-carico/persona/${idVolontario}`);
         const beni = (Array.isArray(inCaricoFinale.corpo) ? inCaricoFinale.corpo : [])
             .map(b => ({ bene_id: b.bene_id, decisione: 'rientrata' }));

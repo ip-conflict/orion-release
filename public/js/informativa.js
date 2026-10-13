@@ -1,20 +1,13 @@
-// L'accettazione delle condizioni d'uso. Si arriva qui dal controllo
-// d'accesso (al primo accesso e quando il testo cambia), con ?redirect= la
-// pagina da cui si veniva; oppure dal profilo e dalla pagina di accesso, solo
-// per rileggere. Senza sessione il testo si legge e basta.
-
 (function () {
     const $ = (id) => document.getElementById(id);
     const parametri = new URLSearchParams(location.search);
-    // Solo un indirizzo di questo sito: un redirect verso fuori non si segue.
+    // Un redirect verso fuori non si segue.
     const redirect = (() => {
         const r = parametri.get('redirect') || '';
         return r.startsWith('/') && !r.startsWith('//') && !r.startsWith('/informativa.html') ? r : null;
     })();
     let versione = null;
 
-    // Testo semplice: "# " titolo, "## " capitolo, righe vuote fra i paragrafi.
-    // Il titolo va nella testata del riquadro.
     function impagina(testo, contenitore, testata) {
         contenitore.replaceChildren();
         String(testo || '').split(/\n\s*\n/).forEach(blocco => {
@@ -48,7 +41,6 @@
     }
 
     async function carica() {
-        // Il nome dell'associazione nella testata, se c'è.
         fetch('/api/branding/settings').then(r => r.ok ? r.json() : null)
             .then(s => { if (s?.association_name) $('associazione').textContent = s.association_name; }).catch(() => {});
         fetch('/api/branding').then(r => r.ok ? r.json() : null)
@@ -63,7 +55,6 @@
                 $('presa-visione').hidden = false;
             }
         } catch (e) {
-            // Senza sessione: il testo pubblico, da leggere.
             if (e.status === 401 || e.status === 403) {
                 try {
                     const r = await fetch('/api/pubblico/informativa');
@@ -87,7 +78,6 @@
             await fetchApi('/api/informativa/presa-visione', { method: 'POST', body: JSON.stringify({ versione }) });
             location.href = redirect || '/';
         } catch (err) {
-            // Il testo è cambiato mentre si leggeva: si ricarica e si rilegge.
             if (err.status === 409) {
                 $('accetto-condizioni').checked = false;
                 await carica();
@@ -97,7 +87,6 @@
         }
     });
 
-    // Chi non le accetta esce: senza, ORION non si usa.
     $('esci').addEventListener('click', async () => {
         try { await fetchApi('/logout', { method: 'POST' }); } catch { /* si esce comunque */ }
         try { localStorage.removeItem('userRole'); localStorage.removeItem('userRuoli'); localStorage.removeItem('userPermessi'); localStorage.removeItem('username'); } catch { /* niente */ }

@@ -1,6 +1,3 @@
-// Il catalogo dei permessi, per chi deve mostrarlo, e i permessi in più di
-// una persona, che dà e toglie solo l'amministratore (permessi.js).
-
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
 import { checkAdminRole } from './autenticazione.js';

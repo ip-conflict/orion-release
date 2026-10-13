@@ -1,10 +1,3 @@
-// Il verbale di consegna (o di rientro) da stampare e far firmare. Lo apre il
-// magazziniere subito dopo la consegna (o dall'elenco dei verbali) e il
-// volontario dal suo profilo: il server decide chi può leggere quale.
-//
-// Sopra il modulo c'è il foglio firmato: il magazziniere che preferisce la
-// carta lo fotografa e lo allega qui, e quella foto diventa il verbale.
-
 document.addEventListener('DOMContentLoaded', async () => {
     const $ = (id) => document.getElementById(id);
 
@@ -15,8 +8,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         firmato_cartaceo: 'Firmato su carta'
     };
 
-    // Da dove si è arrivati è da dove si torna: il magazziniere al magazzino,
-    // il volontario al suo profilo.
     const daProfilo = new URLSearchParams(window.location.search).get('da') === 'profilo';
     const indietro = $('link-indietro');
     if (daProfilo || !haPermesso('magazzino.gestione', 'magazzino.consegne')) {
@@ -51,7 +42,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return mostraErrore(e.message || 'Non riesco a leggere il verbale.');
     }
 
-    // Intestazione dell'associazione: senza, il foglio resta valido lo stesso.
     try {
         const [impostazioni, marchio] = await Promise.all([
             fetch('/api/branding/settings').then(r => r.json()),
@@ -70,7 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('titolo-barra').textContent = `${titolo} n. ${verbale.id}`;
     $('titolo-tipo').textContent = titolo;
     if (rientro) {
-        // Nel rientro le parti si scambiano: firma chi restituisce, riceve il magazzino.
         $('etichetta-destinatario').textContent = 'Restituito da';
         $('etichetta-emesso-da').textContent = 'Ricevuto da';
         $('titolo-firma-consegna').textContent = 'Chi restituisce';
@@ -84,8 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('data').textContent = dataOra(verbale.emesso_il);
     $('emesso-da').textContent = verbale.emesso_da || '—';
     $('stato').textContent = ETICHETTE_STATO[verbale.stato] || verbale.stato;
-    // "In attesa di conferma" su un foglio da firmare confonde: la firma è
-    // proprio la conferma. Lo stato si scrive solo quando c'è già.
+    // "In attesa di conferma" su un foglio da firmare confonde: la firma è proprio la conferma.
     $('campo-stato').hidden = verbale.stato === 'da_confermare' || verbale.stato === 'da_firmare';
     $('firma-consegna').textContent = (rientro ? verbale.destinatario_nome : verbale.emesso_da) || '';
     $('firma-riceve').textContent = (rientro ? verbale.emesso_da : verbale.destinatario_nome) || '';
@@ -113,9 +101,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('note').hidden = false;
     }
 
-    // Confermato dall'app o dal profilo: il verbale si compila da sé con il
-    // nome, la data e la firma di chi ha ricevuto (la conferma elettronica,
-    // con l'impronta di quello che ha confermato).
     if (verbale.stato === 'confermato' && verbale.confermato_il) {
         const chi = verbale.confermato_da || verbale.destinatario_nome || 'chi ha ricevuto';
         const quando = dataOra(verbale.confermato_il);
@@ -135,11 +120,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     $('foglio').hidden = false;
 
-    // Il foglio firmato
     const puoAllegare = haPermesso('magazzino.gestione', 'magazzino.consegne');
 
-    // Il file sta dietro l'autenticazione: si scarica con il token e si
-    // mostra da un indirizzo locale del browser.
+    // Il file sta dietro l'autenticazione: si scarica con il token.
     async function scaricaFirmato(url) {
         const token = getToken();
         const risposta = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -193,8 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Le foto dei telefoni pesano parecchi MB: per leggere una firma bastano
-    // 2400 pixel sul lato lungo. Un PDF, o una foto già piccola, va com'è.
+    // Per leggere una firma bastano 2400 pixel sul lato lungo.
     async function riduci(file) {
         if (!file.type.startsWith('image/') || file.size < 1.5 * 1024 * 1024) return file;
         try {
