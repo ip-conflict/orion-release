@@ -16,6 +16,39 @@ export async function sigilla() {
     }
 }
 
+// Le voci del registro delle operazioni più vecchie di ORION_REGISTRO_GIORNI escono, e la catena
+// annota quali; con 0 o senza variabile il registro non scade.
+export async function scadenzaRegistro(giorni = Number.parseInt(process.env.ORION_REGISTRO_GIORNI, 10)) {
+    if (!Number.isInteger(giorni) || giorni <= 0) return 0;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('SELECT orion_sigilla()');
+        const vecchie = await client.query(
+            `SELECT id FROM audit_log WHERE occurred_at < NOW() - make_interval(days => $1) ORDER BY id LIMIT 20000`, [giorni]);
+        if (!vecchie.rowCount) {
+            await client.query('ROLLBACK');
+            return 0;
+        }
+        const ids = vecchie.rows.map(r => Number(r.id));
+        await client.query("SELECT set_config('orion.scadenza_registro', 'si', true)");
+        await client.query('DELETE FROM audit_log WHERE id = ANY($1::bigint[])', [ids]);
+        await client.query('SELECT orion_annota_evento($1, $2::jsonb)', ['scadenza_registro', JSON.stringify({
+            giorni, righe: { audit_log: ids }
+        })]);
+        await client.query("SELECT set_config('orion.scadenza_registro', '', true)");
+        await client.query('COMMIT');
+        logger.info(`[Integrità] Uscite dal registro delle operazioni ${ids.length} voci più vecchie di ${giorni} giorni.`);
+        return ids.length;
+    } catch (e) {
+        await client.query('ROLLBACK').catch(() => {});
+        logger.error('[Integrità] Scadenza del registro non riuscita:', e);
+        return null;
+    } finally {
+        client.release();
+    }
+}
+
 export async function sigilloAttuale(esecutore = pool) {
     await esecutore.query('SELECT orion_sigilla()');
     const r = await esecutore.query('SELECT id, impronta, quando FROM registro_integrita ORDER BY id DESC LIMIT 1');

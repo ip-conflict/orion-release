@@ -11,11 +11,10 @@ import { reportCreationLimiter, uploadLimiter } from './middleware/rateLimiters.
 import { avvisaSquadra } from './squadre.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { notifiche, wss } from './tempoReale.js';
-import { fileURLToPath } from 'url';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { aggiornaRischi } from './rischiZone.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Il centro operativo segna ferma una posizione dopo cinque minuti.
 export const MINUTI_SUBENTRO = 3;
@@ -43,7 +42,7 @@ export function registraRotteSegnalazioni(app) {
     }
 
     app.get('/uploads/:filename', async (req, res) => {
-        const imagesDir = path.resolve(__dirname, '..', 'protected_uploads', 'images');
+        const imagesDir = path.resolve(RADICE_DATI, 'protected_uploads', 'images');
         const safePath = path.resolve(imagesDir, req.params.filename);
         // Con il separatore finale: una cartella "images_old" non passa.
         if (!safePath.startsWith(imagesDir + path.sep)) {

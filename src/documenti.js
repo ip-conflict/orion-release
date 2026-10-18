@@ -6,16 +6,15 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import { registraAudit } from './audit.js';
 import { nomeUtente, ruoliDi } from './autenticazione.js';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { pool } from './db.js';
 import { haPermesso, richiedePermesso } from './permessi.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const cartellaDocumenti = path.join(__dirname, '..', 'protected_uploads', 'documenti-gruppo');
+export const cartellaDocumenti = path.join(RADICE_DATI, 'protected_uploads', 'documenti-gruppo');
 fs.mkdirSync(cartellaDocumenti, { recursive: true });
 
 // Finisce in ogni backup.

@@ -52,16 +52,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('titolo').textContent = `Ciao ${dati.nome || nome || ''}`.trim();
     aggiungi('p', `Sei dentro ORION${dati.ente ? ` come ${dati.ente}` : ''} per l'emergenza in corso. ` +
         "L'accesso finisce da solo quando l'emergenza viene chiusa.");
-    const mappa = aggiungi('a', 'Apri la mappa del centro operativo', 'pulsante');
-    mappa.href = '/centro-operativo.html';
-
-    if (!/Android/i.test(navigator.userAgent || '')) return;
+    // Prima l'app, poi la mappa: con la mappa in cima si toccava quella e la proposta non si vedeva.
+    const android = navigator.userAgentData?.platform === 'Android' || /Android/i.test(navigator.userAgent || '');
     let offerta = null;
-    try {
-        const r = await fetch('/api/app/offerta', { headers: { Authorization: `Bearer ${dati.token}` } });
-        if (r.ok) offerta = await r.json();
-    } catch { /* senza app si usa il web */ }
-    if (!offerta?.disponibile) return;
+    if (android) {
+        try {
+            const r = await fetch('/api/app/offerta', { headers: { Authorization: `Bearer ${dati.token}` } });
+            if (r.ok) offerta = await r.json();
+        } catch { /* senza app si usa il web */ }
+    }
+    const mappa = document.createElement('a');
+    mappa.href = '/centro-operativo.html';
+    if (!offerta?.disponibile) {
+        mappa.className = 'pulsante';
+        mappa.textContent = 'Apri la mappa del centro operativo';
+        contenuto.appendChild(mappa);
+        return;
+    }
 
     const app = aggiungi('div', null, 'app');
     const titolo = document.createElement('strong');
@@ -82,4 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     apri.href = `orionmobile://accesso?server=${encodeURIComponent(window.location.origin)}&c=${encodeURIComponent(codice)}`;
     apri.textContent = "Apri nell'app";
     app.appendChild(apri);
+    mappa.className = 'pulsante secondario';
+    mappa.textContent = 'Continua sul web';
+    contenuto.appendChild(mappa);
 });

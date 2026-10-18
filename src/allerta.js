@@ -4,7 +4,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import { pool } from './db.js';
 import { dataItaliana, oggiLocale } from './date.js';
@@ -16,9 +15,9 @@ import { protectedDocsDir } from './caricamenti.js';
 import { sqlHaPermesso } from './permessi.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { avvisaClienti, notifiche } from './tempoReale.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CARTELLA_PDF = path.join(__dirname, '..', 'protected_uploads', 'bollettini');
+const CARTELLA_PDF = path.join(RADICE_DATI, 'protected_uploads', 'bollettini');
 
 const INDIRIZZO = process.env.ORION_ALLERTA_URL
     || 'https://raw.githubusercontent.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica/master/files/all/latest_all.zip';

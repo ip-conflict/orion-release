@@ -38,7 +38,7 @@ const persone = [];
 for (const nome of ['Anna', 'Bruno', 'Carla']) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Capo${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Squadra!${suffisso}Aa1`;
+    const password = `Turno!${suffisso}Lampione1`;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
     await prendiVisione(BASE, token);

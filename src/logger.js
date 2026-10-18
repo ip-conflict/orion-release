@@ -1,10 +1,8 @@
 
 import winston from 'winston';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { RADICE_DATI } from './percorsi.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const levels = {
   error: 0,
@@ -41,12 +39,12 @@ const transports = [
     format: format, // Applica il formato colorato
   }),
   new winston.transports.File({
-    filename: path.join(__dirname, '..', 'logs', 'error.log'),
+    filename: path.join(RADICE_DATI, 'logs', 'error.log'),
     level: 'error', // Logga solo gli errori
     format: winston.format.combine(winston.format.timestamp(), winston.format.json()), // Formato JSON per i file
   }),
   new winston.transports.File({
-    filename: path.join(__dirname, '..', 'logs', 'all.log'),
+    filename: path.join(RADICE_DATI, 'logs', 'all.log'),
     format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   }),
 ];
@@ -56,10 +54,10 @@ const logger = winston.createLogger({
   levels,
   transports,
   exceptionHandlers: [
-    new winston.transports.File({ filename: path.join(__dirname, '..', 'logs', 'exceptions.log') }),
+    new winston.transports.File({ filename: path.join(RADICE_DATI, 'logs', 'exceptions.log') }),
   ],
   rejectionHandlers: [
-     new winston.transports.File({ filename: path.join(__dirname, '..', 'logs', 'rejections.log') }),
+     new winston.transports.File({ filename: path.join(RADICE_DATI, 'logs', 'rejections.log') }),
   ],
   exitOnError: false, // Non terminare l'applicazione in caso di eccezione non gestita
 });

@@ -4,10 +4,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import bcrypt from 'bcrypt';
 import { pool } from './db.js';
+import { RADICE_DATI } from './percorsi.js';
 import {
     MAGIA, apriFileCon, cifraCon, decifraCon, eCifrato, flussoCifratoCon,
     leggiChiaveDiRecupero, leggiFileChiaveDa, scriviChiaveDiRecupero
@@ -15,21 +15,19 @@ import {
 
 export { eCifrato };
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RADICE = path.join(__dirname, '..');
-export const FILE_CHIAVE = process.env.ORION_CHIAVE_FILE || path.join(RADICE, 'chiave-dati.key');
+export const FILE_CHIAVE = process.env.ORION_CHIAVE_FILE || path.join(RADICE_DATI, 'chiave-dati.key');
 
 const PREFISSO_TESTO = 'enc1:';
 
 // I loghi restano in chiaro: sono pubblici.
 export const CARTELLE_PROTETTE = [
-    path.join(RADICE, 'protected_uploads', 'certificates'),
-    path.join(RADICE, 'protected_uploads', 'documents'),
-    path.join(RADICE, 'protected_uploads', 'images'),
-    path.join(RADICE, 'protected_uploads', 'magazzino'),
-    path.join(RADICE, 'protected_uploads', 'documenti-gruppo'),
-    path.join(RADICE, 'protected_uploads', 'emergency_logs'),
-    path.join(RADICE, 'uploads', 'photos')
+    path.join(RADICE_DATI, 'protected_uploads', 'certificates'),
+    path.join(RADICE_DATI, 'protected_uploads', 'documents'),
+    path.join(RADICE_DATI, 'protected_uploads', 'images'),
+    path.join(RADICE_DATI, 'protected_uploads', 'magazzino'),
+    path.join(RADICE_DATI, 'protected_uploads', 'documenti-gruppo'),
+    path.join(RADICE_DATI, 'protected_uploads', 'emergency_logs'),
+    path.join(RADICE_DATI, 'uploads', 'photos')
 ];
 
 let chiave = null;
@@ -82,6 +80,13 @@ export async function preparaCifratura() {
     }
     if (stato === 'pronta') await cifraSegretiInChiaro().catch(e => logger.error('[Cifratura] Segreti non cifrati:', e));
     return stato;
+}
+
+// Per gli script davanti a un database ancora vuoto: se la chiave è sbagliata lo dice il tag GCM.
+export function usaChiaveDelFile() {
+    const k = leggiFileChiave();
+    if (k) { chiave = k; stato = 'pronta'; }
+    return !!k;
 }
 
 export const cifraturaPronta = () => stato === 'pronta';
@@ -160,6 +165,11 @@ async function cifraSegretiInChiaro() {
         await pool.query('UPDATE users SET mfa_segreto = $2 WHERE id = $1 AND mfa_segreto = $3', [u.id, cifraTesto(u.mfa_segreto), u.mfa_segreto]);
     }
     if (m.rowCount) logger.info(`[Cifratura] Cifrati ${m.rowCount} segreti della verifica in due passaggi.`);
+    const esiti = await pool.query("SELECT id, status FROM user_medical_records WHERE status NOT LIKE 'enc1:%'");
+    for (const r of esiti.rows) {
+        await pool.query('UPDATE user_medical_records SET status = $2 WHERE id = $1 AND status = $3', [r.id, cifraTesto(r.status), r.status]);
+    }
+    if (esiti.rowCount) logger.info(`[Cifratura] Cifrati ${esiti.rowCount} esiti di visite mediche.`);
 }
 
 // Scrive accanto e poi rinomina: un'interruzione non lascia mezzo file.

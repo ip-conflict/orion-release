@@ -15,7 +15,7 @@ import { creaIdempotenza } from './middleware/idempotenza.js';
 import { authenticateToken, checkAdminRole, chiudiSessioni, haRuolo, nomeUtente, nonEsterni, ruoliDi, ruoloPrincipale, scriviRuoli } from './autenticazione.js';
 import { verifyJwtToken } from './authHelper.js';
 import { CARTELLA_BACKUP_APP, CARTELLA_BACKUP_CRON, CARTELLA_BACKUP_FILE, backupDiRecupero, eseguiBackupDatabase, impostaManutenzione, manutenzioneInCorso } from './backup.js';
-import { magazzinoDir, uploadArchivioBackup, uploadDocumentoMagazzino, uploadScansioneVerbale, verbaliDir } from './caricamenti.js';
+import { CARTELLA_LOGHI, magazzinoDir, uploadArchivioBackup, uploadDocumentoMagazzino, uploadScansioneVerbale, verbaliDir } from './caricamenti.js';
 import { cookieSecret, domainName, port, versioneOrion } from './config.js';
 import { NOMI_RADIO, allowedOrigins, erroreNonTrovato, erroreRichiesta } from './costanti.js';
 import { dbDatabase, dbHost, dbPort, dbUser, pool } from './db.js';
@@ -29,6 +29,8 @@ import { registraRotteMagazzino } from './magazzino.js';
 import { registraRotteManutenzione } from './manutenzione.js';
 import { apiLimiter, limitePerRete } from './middleware/rateLimiters.js';
 import { applicaMigrazioniMancanti } from './migrazioni.js';
+import { RADICE_APP, RADICE_DATI, datiSeparati } from './percorsi.js';
+import { portaAppAndroid } from './appAndroid.js';
 import { CARTELLA_APK, registraRottePubbliche } from './pubbliche.js';
 import { cleanupRevokedTokens, runDailyExpiryCheck } from './scadenze.js';
 import { registraRotteSegnalazioni } from './segnalazioni.js';
@@ -68,12 +70,12 @@ const app = express();
 const server = http.createServer(app);
 
 // Un'eccezione fuori dalle richieste lascia il processo in uno stato incerto: si esce
-// e PM2 lo riavvia.
+// e Docker lo riavvia.
 process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled Promise Rejection (richiesta non gestita, il server resta attivo):', { error: reason });
 });
 process.on('uncaughtException', (err) => {
-    logger.error('Uncaught Exception: arresto del processo per permettere a PM2 di riavviarlo pulito.', { error: err });
+    logger.error('Uncaught Exception: arresto del processo per farlo ripartire pulito.', { error: err });
     process.exit(1);
 });
 
@@ -148,6 +150,14 @@ app.use(async (req, res, next) => {
         res.redirect('/login.html?redirect=' + encodeURIComponent(req.originalUrl));
     }
 });
+let migrazioniFallite = false;
+// Per il controllo di salute del container; il server ascolta solo a avvio finito.
+app.get('/api/salute', (req, res) => res.status(migrazioniFallite ? 503 : 200).json({ ok: !migrazioniFallite }));
+
+if (datiSeparati) {
+    app.get(['/logo.png', '/logo2.png'], (req, res, next) =>
+        res.sendFile(path.join(CARTELLA_LOGHI, path.basename(req.path)), e => e && next()));
+}
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Anche l'accesso è chiuso: una sessione aperta ora varrebbe per un database che sta cambiando.
@@ -275,7 +285,8 @@ const manutenzione = registraRotteManutenzione(app, {
     cartellaApp: CARTELLA_BACKUP_APP,
     cartellaCron: CARTELLA_BACKUP_CRON,
     cartellaFile: CARTELLA_BACKUP_FILE,
-    cartellaApplicazione: path.join(__dirname, '..'),
+    cartellaDati: RADICE_DATI,
+    cartellaAgente: process.env.ORION_AGENTE_DIR || null,
     versioneInstallata: versioneOrion,
     connessioneDb: {
         host: dbHost, porta: dbPort, utente: dbUser,
@@ -326,7 +337,13 @@ app.use((err, req, res, next) => {
 
 (async () => {
     try {
-        await applicaMigrazioniMancanti();
+        migrazioniFallite = (await applicaMigrazioniMancanti()) < 0;
+        if (datiSeparati) {
+            const apk = await portaAppAndroid(path.join(RADICE_APP, 'app-android'), CARTELLA_APK);
+            if (apk.esito === 'copiata') logger.info(`[App Android] Portata la versione ${apk.nuova.nome || apk.nuova.codice} dall'immagine.`);
+            else if (apk.esito === 'altra-chiave') logger.warn('[App Android] L\'APK dell\'immagine è firmato con un\'altra chiave: resta quello installato.');
+            else if (apk.esito === 'errore') logger.error(`[App Android] Copia dall'immagine non riuscita: ${apk.errore}`);
+        }
         await preparaCifratura();
         cifraFileInChiaro().catch(e => logger.error('[Cifratura] Giro dei file non riuscito:', e));
         setInterval(() => cifraFileInChiaro().catch(() => {}), 3600000);

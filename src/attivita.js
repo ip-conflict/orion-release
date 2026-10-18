@@ -15,9 +15,9 @@ import crypto from 'crypto';
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { FORMATI, MB_MASSIMI, TIPO_DA_ESTENSIONE, contenutoValido } from './documenti.js';
+import { RADICE_DATI } from './percorsi.js';
 
 const LIMITE = { titolo: 150, descrizione: 4000, luogo: 200, nota: 300, motivo: 300, scenario: 4000, enti: 500 };
 const NATURE = ['generica', 'addestramento', 'esercitazione'];
@@ -57,7 +57,7 @@ function interoOpzionale(valore) {
 }
 
 // Stessi formati e stesso tetto dell'archivio dei documenti, cifrati come gli altri caricati.
-export const cartellaAllegati = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'protected_uploads', 'attivita');
+export const cartellaAllegati = path.join(RADICE_DATI, 'protected_uploads', 'attivita');
 fs.mkdirSync(cartellaAllegati, { recursive: true });
 const ALLEGATI_MASSIMI = 20;
 const caricaAllegato = multer({

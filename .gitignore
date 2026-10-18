@@ -44,3 +44,6 @@ public/uploads/
 public/logo2.png
 PRIMO-ACCESSO.txt
 chiave-dati.key
+
+# Backup di un'istanza di sviluppo (nei container stanno fuori dal codice)
+/backup/

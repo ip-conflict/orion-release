@@ -7,11 +7,13 @@ import { CARTELLA_BACKUP_APP } from './backup.js';
 import { fileTypeFromFile } from 'file-type';
 import { fileURLToPath } from 'url';
 import { inviaFile } from './cifratura.js';
+import { RADICE_DATI, datiSeparati } from './percorsi.js';
+import { nomeBackup } from './nomiBackup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 
-export const certDir = path.join(__dirname, '..', 'protected_uploads', 'certificates');
+export const certDir = path.join(RADICE_DATI, 'protected_uploads', 'certificates');
 if (!fs.existsSync(certDir)) {
     fs.mkdirSync(certDir, { recursive: true });
 }
@@ -47,7 +49,7 @@ export const uploadCertificate = multer({
 });
 
 // Cartella a parte: i permessi sono diversi da quelli dei fascicoli.
-export const magazzinoDir = path.join(__dirname, '..', 'protected_uploads', 'magazzino');
+export const magazzinoDir = path.join(RADICE_DATI, 'protected_uploads', 'magazzino');
 if (!fs.existsSync(magazzinoDir)) {
     fs.mkdirSync(magazzinoDir, { recursive: true });
 }
@@ -88,8 +90,7 @@ export const uploadArchivioBackup = multer({
             cb(null, CARTELLA_BACKUP_APP);
         },
         filename: (req, file, cb) => {
-            const orario = new Date().toISOString().replace(/[:-]/g, '').replace(/\..+/, '').replace('T', '_');
-            cb(null, `db_${orario}_caricato.sql.gz`);
+            cb(null, nomeBackup('caricato'));
         }
     }),
 
@@ -98,7 +99,7 @@ export const uploadArchivioBackup = multer({
 
 const photoStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = path.join(__dirname, '../uploads/photos');
+        const dir = path.join(RADICE_DATI, 'uploads', 'photos');
 
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
@@ -117,7 +118,7 @@ export const uploadPhoto = multer({
     }
 });
 
-const protectedImagesDir = path.join(__dirname, '..', 'protected_uploads', 'images');
+const protectedImagesDir = path.join(RADICE_DATI, 'protected_uploads', 'images');
 if (!fs.existsSync(protectedImagesDir)) fs.mkdirSync(protectedImagesDir, { recursive: true });
 
 const storageUpload = multer.diskStorage({ 
@@ -154,7 +155,7 @@ const imageFileFilter = (req, file, cb) => {
   };
   
 
-  const excelImportTmpDir = path.join(__dirname, '..', 'protected_uploads', 'tmp_imports');
+  const excelImportTmpDir = path.join(RADICE_DATI, 'protected_uploads', 'tmp_imports');
   if (!fs.existsSync(excelImportTmpDir)) fs.mkdirSync(excelImportTmpDir, { recursive: true });
   export const uploadExcelMulter = multer({ dest: excelImportTmpDir, fileFilter: excelFileFilter });
 
@@ -176,7 +177,7 @@ const documentFileFilter = (req, file, cb) => {
     }
 };
 
-export const protectedDocsDir = path.join(__dirname, '..', 'protected_uploads', 'documents');
+export const protectedDocsDir = path.join(RADICE_DATI, 'protected_uploads', 'documents');
 if (!fs.existsSync(protectedDocsDir)) fs.mkdirSync(protectedDocsDir, { recursive: true });
 
 const storageDocs = multer.diskStorage({
@@ -193,14 +194,14 @@ export const uploadDocumentMulter = multer({
     fileFilter: documentFileFilter
 });
 
-const publicDir  = path.join(__dirname, '..', 'public');
+export const CARTELLA_LOGHI = datiSeparati ? path.join(RADICE_DATI, 'loghi') : path.join(__dirname, '..', 'public');
 const LOGO_FILENAME = 'logo.png';
-export const LOGO_FILE_PATH = path.join(publicDir, LOGO_FILENAME);
+export const LOGO_FILE_PATH = path.join(CARTELLA_LOGHI, LOGO_FILENAME);
 export const LOGO_URL_PATH = `/${LOGO_FILENAME}`;
 
 // Il logo nuovo prende il posto del vecchio solo dopo la verifica.
 const storageLogo = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, publicDir),
+    destination: (req, file, cb) => cb(null, CARTELLA_LOGHI),
     filename: (req, file, cb) => {
         cb(null, `${LOGO_FILENAME}.upload-${crypto.randomBytes(8).toString('hex')}.tmp`);
     }
@@ -213,11 +214,11 @@ export const uploadLogoMulter = multer({
 });
 
 const LOGO2_FILENAME = 'logo2.png';
-export const LOGO2_FILE_PATH = path.join(publicDir, LOGO2_FILENAME);
+export const LOGO2_FILE_PATH = path.join(CARTELLA_LOGHI, LOGO2_FILENAME);
 export const LOGO2_URL_PATH = `/${LOGO2_FILENAME}`;
 
 const storageLogo2 = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, publicDir),
+    destination: (req, file, cb) => cb(null, CARTELLA_LOGHI),
     filename: (req, file, cb) => {
         cb(null, `${LOGO2_FILENAME}.upload-${crypto.randomBytes(8).toString('hex')}.tmp`);
     }
@@ -316,12 +317,23 @@ export async function verifyExcelUpload(filePath, originalname) {
 
 
 
-if (!fs.existsSync(publicDir)) {
-    fs.mkdirSync(publicDir, { recursive: true });
-    logger.info(`Cartella creata: ${publicDir}`);
+if (!fs.existsSync(CARTELLA_LOGHI)) {
+    fs.mkdirSync(CARTELLA_LOGHI, { recursive: true });
+    logger.info(`Cartella creata: ${CARTELLA_LOGHI}`);
+}
+// Con i dati fuori dal codice i loghi di serie si copiano una volta; quelli caricati restano.
+if (datiSeparati) {
+    for (const nome of [LOGO_FILENAME, LOGO2_FILENAME]) {
+        const qui = path.join(CARTELLA_LOGHI, nome);
+        try {
+            if (!fs.existsSync(qui)) fs.copyFileSync(path.join(__dirname, '..', 'public', nome), qui);
+        } catch (e) {
+            logger.warn(`Logo di serie ${nome} non copiato: ${e.message}`);
+        }
+    }
 }
 
-const CARTELLA_FOTO = path.resolve(__dirname, '..', 'uploads', 'photos');
+const CARTELLA_FOTO = path.resolve(RADICE_DATI, 'uploads', 'photos');
 
 export function inviaFoto(res, nomeFile) {
     const filePath = path.resolve(CARTELLA_FOTO, nomeFile);

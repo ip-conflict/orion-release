@@ -7,13 +7,15 @@ import { dbDatabase, dbHost, dbPort, dbUser } from './db.js';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { cifraturaPronta, flussoCifrato } from './cifratura.js';
+import { RADICE_DATI } from './percorsi.js';
+import { leggiNomeBackup, nomeBackup } from './nomiBackup.js';
 
 // Una cartella sua: quelli di cron, scritti da root, non li può cancellare.
-export const CARTELLA_BACKUP_APP = process.env.ORION_BACKUP_DIR || '/var/backups/orion/auto';
-export const CARTELLA_BACKUP_CRON = '/var/backups/orion/db';
+export const CARTELLA_BACKUP_APP = process.env.ORION_BACKUP_DIR || path.join(RADICE_DATI, 'backup', 'auto');
+export const CARTELLA_BACKUP_CRON = process.env.ORION_BACKUP_NOTTE_DIR || path.join(RADICE_DATI, 'backup', 'notte');
 const GIORNI_BACKUP = parseInt(process.env.ORION_BACKUP_RETENTION_DAYS, 10) || 30;
 const ORE_MAX_SENZA_BACKUP = 20;
-export const CARTELLA_BACKUP_FILE = '/var/backups/orion/files';
+export const CARTELLA_BACKUP_FILE = process.env.ORION_BACKUP_FILE_DIR || path.join(RADICE_DATI, 'backup', 'file');
 
 // server.js chiude le API finché questo è impostato.
 export let manutenzioneInCorso = null;
@@ -33,8 +35,7 @@ export async function eseguiBackupDatabase(motivo) {
     try {
         await fs.promises.mkdir(CARTELLA_BACKUP_APP, { recursive: true });
 
-        const orario = new Date().toISOString().replace(/[:-]/g, '').replace(/\..+/, '').replace('T', '_');
-        const percorsoFile = path.join(CARTELLA_BACKUP_APP, `db_${orario}_${motivo}.sql.gz`);
+        const percorsoFile = path.join(CARTELLA_BACKUP_APP, nomeBackup(motivo));
 
         // La password nell'ambiente, non negli argomenti: 'ps' li mostra a tutti.
         const processoDump = spawn('pg_dump', [
@@ -76,7 +77,7 @@ export async function eseguiBackupDatabase(motivo) {
     } catch (errore) {
         if (errore.code === 'EACCES' || errore.code === 'EPERM') {
             backupDisabilitato = true;
-            logger.error(`[Backup] Cartella ${CARTELLA_BACKUP_APP} non scrivibile dall'utente dell'applicazione: i backup automatici sono disattivati. Esegui: sudo mkdir -p ${CARTELLA_BACKUP_APP} && sudo chown -R <utente_app> ${CARTELLA_BACKUP_APP}`);
+            logger.error(`[Backup] Cartella ${CARTELLA_BACKUP_APP} non scrivibile dall'utente dell'applicazione: i backup automatici sono disattivati. Nell'istanza è backup/auto: va data all'utente dell'istanza.`);
         } else if (errore.code === 'ENOENT' && errore.syscall === 'spawn pg_dump') {
             backupDisabilitato = true;
             logger.error('[Backup] Comando pg_dump non disponibile sul server: i backup automatici sono disattivati. Installa il pacchetto postgresql-client.');
@@ -94,7 +95,7 @@ async function rimuoviBackupScaduti() {
         const limite = Date.now() - GIORNI_BACKUP * 24 * 3600 * 1000;
         const elenco = await fs.promises.readdir(CARTELLA_BACKUP_APP);
         for (const nome of elenco) {
-            if (!nome.startsWith('db_') || !nome.endsWith('.sql.gz')) continue;
+            if (!leggiNomeBackup(nome)) continue;
             const percorso = path.join(CARTELLA_BACKUP_APP, nome);
             const info = await fs.promises.stat(percorso);
             if (info.mtimeMs < limite) {

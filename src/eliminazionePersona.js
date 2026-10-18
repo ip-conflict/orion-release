@@ -3,13 +3,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CARTELLE = {
-    '/api/photos/': path.join(RADICE, 'uploads', 'photos'),
-    '/api/documents/certificates/': path.join(RADICE, 'protected_uploads', 'certificates')
+    '/api/photos/': path.join(RADICE_DATI, 'uploads', 'photos'),
+    '/api/documents/certificates/': path.join(RADICE_DATI, 'protected_uploads', 'certificates')
 };
 
 // Solo dentro le cartelle note.

@@ -89,6 +89,15 @@ document.addEventListener('DOMContentLoaded', () => {
             'Copia dei file caricati',
             dati.copia_file ? `${quandoLeggibile(dati.copia_file)} (${daQuanto(dati.copia_file)})` : 'nessuna'
         ));
+        const disco = dati.copia_esterna;
+        if (disco?.configurato) {
+            const giorni = disco.ultima ? (Date.now() - new Date(disco.ultima).getTime()) / 86400000 : Infinity;
+            contenitore.appendChild(voceStato(
+                'Copia su disco esterno',
+                disco.ultima ? `${quandoLeggibile(disco.ultima)} (${daQuanto(disco.ultima)})` : 'mai',
+                giorni > 14 ? 'allarme' : giorni > 7 ? 'attenzione' : null
+            ));
+        }
     }
 
     function disegnaElenco() {
@@ -435,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!dati.versioni.length) {
                 const li = document.createElement('li');
                 li.className = 'vuoto';
-                li.textContent = 'Nessuna versione messa da parte: compaiono qui dopo il primo aggiornamento fatto da questa pagina.';
+                li.textContent = 'Nessuna versione precedente: compaiono qui dopo il primo aggiornamento.';
                 elenco.append(li);
                 return;
             }
@@ -447,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nome.textContent = `Versione ${v.versione}`;
                 const dettagli = document.createElement('span');
                 dettagli.className = 'versione-dettagli';
-                dettagli.textContent = `Messa da parte il ${quandoLeggibile(v.lasciata_il)}${v.dati ? ', con i dati di quel momento' : ', senza backup dei dati'}`;
+                dettagli.textContent = `Lasciata il ${quandoLeggibile(v.lasciata_il)}${v.dati ? ', con i dati di quel momento' : ', senza backup dei dati'}`;
                 testo.append(nome, dettagli);
                 const bottone = document.createElement('button');
                 bottone.type = 'button';

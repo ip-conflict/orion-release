@@ -3,79 +3,44 @@
 Applicazione web e app Android per la gestione delle attività di un gruppo o di un'associazione di protezione civile: emergenze e sala operativa, squadre, segreteria
 dei volontari, magazzino.
 
-Questo documento descrive la procedura di installazione automatizzata su un server Ubuntu pulito.
+ORION si installa in container Docker: una macchina Ubuntu può ospitare una
+sola associazione o parecchie, ognuna con la sua istanza separata. Il
+dettaglio è nel capitolo 2 di `docs/manuale-tecnico.md`; qui i passi.
 
 ---
 
 ## Prerequisiti
 
-Prima di iniziare, assicurati di avere a disposizione i seguenti elementi:
-
- Server Ubuntu: Un server (fisico o virtuale) con un'installazione pulita di Ubuntu.
-     Testato su Ubuntu 24.04 LTS.
- Indirizzo IP Statico: Un indirizzo IP pubblico statico associato al tuo server.
- Dominio: Un nome di dominio (es. `orion.miaassociazione.it`) con un record DNS (tipo A) che punta all'IP statico del server.
+ Server Ubuntu Server 24.04 LTS, fisico o virtuale, con almeno 4 GB di RAM e
+     80 GB di SSD.
+ Indirizzo IPv4 pubblico e statico, non dietro CGNAT, con le porte 80 e 443
+     inoltrate al server e nient'altro.
+ Un nome di dominio per ogni istanza (va bene anche un sottodominio), con un
+     record DNS di tipo A verso l'indirizzo pubblico.
 
 ---
 
 ## Installazione
 
-L'installazione è gestita da uno script automatizzato.
+1.  Una volta per macchina, prepara Docker, Nginx, Certbot, firewall e l'agente
+    degli aggiornamenti:
 
-1.  Accedi al tuo server
-    Connettiti al tuo server Ubuntu tramite SSH.
+        git clone https://github.com/ip-conflict/orion-release.git
+        cd orion-release
+        sudo scripts/docker/prepara-host.sh
 
-2.  Clona il Repository
-    Clona questo repository nella tua home directory (o in un percorso a tua scelta):
-    git clone https://github.com/ip-conflict/orion-release.git
+2.  Per ogni associazione, crea la sua istanza:
 
-3.  Entra nella Directory
-    cd orion-release
+        sudo scripts/docker/nuova-istanza.sh <nome> <dominio> <versione>
 
-4.  Imposta i Permessi
-    Rendi eseguibile lo script di setup:
-    chmod +x ./setup.sh
+    Lo script avvia programma e database, chiede il certificato HTTPS a
+    Let's Encrypt e alla fine stampa il **codice del primo accesso**.
 
-5.  Esegui lo Script
-    Esegui lo script con i privilegi di `sudo`:
-    sudo ./setup.sh
+3.  Apri `https://<dominio>`: al posto del login c'è la configurazione iniziale,
+    dove con quel codice si crea il primo amministratore.
 
----
-
-
-Lo script `setup.sh` è interattivo e automatizza l'intera configurazione del server e dell'applicazione.
-
-Nello specifico, lo script si occupa di:
-
- Installare le dipendenze: Installa Nginx, Node.js, npm, PM2 (process manager) e altri requisiti di sistema.
- Copiare i file: Sposta i file dell'applicazione nella directory di produzione (es. `/var/www/tuo.dominio.it`).
- Configurare il Database: Installa e configura il database.
- Creare il Servizio (Demone): Configura PM2 per avviare l'applicazione con un utente di sistema dedicato (non root) e farla ripartire automaticamente al riavvio del server.
-
-Durante l'esecuzione, lo script ti chiederà di inserire:
-
-1.  Credenziali Database: I nomi e le password sicure per l'utente del database.
-2.  Utente PM2: Il nome di un utente di sistema (che verrà creato se non esiste) per eseguire l'applicazione in modo sicuro.
-3.  Credenziali Admin: Un nome utente (o email) e una password per il primo account Amministratore dell'applicazione web.
-
-### Gestione SSL (HTTPS)
-
-Per garantire la sicurezza (HTTPS), lo script gestirà i certificati SSL in due modi:
-
-1.  Certbot (Automatico): Tenterà di usare Certbot per generare e installare automaticamente un certificato gratuito da Let's Encrypt per il dominio specificato.
-2.  Manuale: Se Certbot fallisce o se preferisci, ti chiederà di caricare manualmente i tuoi file del certificato ( `.crt` e `.key`) in un percorso specifico.
-
----
-
-##
-
-Se la procedura di setup è terminata con successo, l'applicazione sarà immediatamente disponibile all'indirizzo del dominio che hai configurato.
-
-1.  Apri il tuo browser e naviga su:
-    > `https://tuo.dominio.it`
-
-2.  Effettua il login utilizzando le credenziali dell'utente Amministratore che hai impostato durante l'esecuzione dello script.
-
+`sudo orion-agente stato` elenca le istanze della macchina con versione,
+porta e salute.
 
 ### Segnalazioni che non aspettano una squadra
 
@@ -502,14 +467,16 @@ copia la fa il backup notturno ed è **speculare**, cioè la situazione
 dell'ultima notte. Si possono ripristinare insieme al database spuntando la
 casella, che mostra la data della copia disponibile.
 
-I backup contengono tutto il database e i certificati medici: sulla macchina
-li leggono solo root e, in sola lettura, l'utente dell'applicazione. Le
-installazioni precedenti li avevano leggibili a tutti; il backup notturno
-sistema i permessi dei file già presenti.
+I backup notturni li fa l'agente sul server e sono cifrati con la chiave
+dell'istanza; il programma li legge e li ripristina ma non li può cancellare.
 
 Questi backup restano sulla stessa macchina dell'applicazione: proteggono da un
-errore o da una cancellazione, **non dalla rottura del server**. Ogni tanto va
-scaricata una copia e tenuta altrove.
+errore o da una cancellazione, **non dalla rottura del server**. Per la copia
+fuori serve un disco USB: preparato una volta con `sudo orion-agente disco
+prepara /dev/sdX`, riceve ogni notte, se è collegato, una copia cifrata dei
+backup e dei file di ogni istanza. Con due dischi a rotazione, uno resta
+collegato e l'altro sta altrove. La pagina Sistema mostra la data dell'ultima
+copia su disco.
 
 ### Aggiornamenti
 
@@ -522,31 +489,20 @@ Sempre dalla pagina **Sistema**: si vede la versione installata e, con
   notifica sull'app e un'email. Le versioni si possono cercare fra le
   *release* del progetto su GitHub oppure su un indirizzo proprio, indicando un
   piccolo manifesto JSON.
-- **L'ordine dell'aggiornamento è pensato perché un guasto non lasci
-  l'installazione a metà**: backup del database, scaricamento e verifica del
-  pacchetto, installazione delle dipendenze accanto al pacchetto nuovo,
-  migrazioni del database lette dal pacchetto nuovo, copia di sicurezza del
-  codice attuale, sostituzione dei file, riavvio. Se le dipendenze o le
-  migrazioni falliscono nessun file è stato ancora toccato e il programma sta
-  ancora girando nella versione di prima.
-- La sostituzione non tocca quello che non appartiene al programma: i file
-  nascosti della cartella (che è anche la home dell'utente di sistema, con la
-  configurazione di PM2 e di npm), i dati caricati, i loghi, i registri e la
-  cartella `app-android` con l'APK.
+- **L'aggiornamento lo esegue l'agente sul server**: la pagina Sistema gli
+  manda la richiesta, lui fa il backup, scarica l'immagine della versione
+  nuova, aggiorna il database e la mette in servizio. Se la versione nuova
+  non parte entro quattro minuti, rimette quella di prima con il database
+  com'era.
+- Chi gestisce il server decide per ogni istanza se gli aggiornamenti
+  partono da soli, aspettano la sua approvazione o sono bloccati.
 - **Non si aggiorna da solo**: decide l'amministratore, e con un'emergenza
   aperta l'aggiornamento è bloccato.
+- Si torna a una versione precedente dalla stessa pagina, tenendo i dati di
+  adesso oppure riportandoli a com'erano.
 - Il numero di versione è quello delle release pubbliche, dalla 1.0.0 in poi.
   Le versioni 3.x citate nella documentazione sono la numerazione interna di
   sviluppo, precedente alla 1.0.
-
-Resta valido anche `sudo ./update.sh` dal server, per chi preferisce la riga di
-comando o deve aggiornare un'installazione che non parte più.
-
-Le installazioni di prova precedenti alla 1.0 (numerate 3.x) non vedono la
-1.0.0 come un aggiornamento, perché il numero è più basso: si reinstallano da
-zero, oppure si aggiornano una volta con `sudo ./update.sh`. Fino alla 3.36,
-inoltre, l'aggiornamento dalla pagina Sistema cancellava la cartella `.pm2`;
-`update.sh` se ne accorge e riavvia ORION da capo.
 
 Il dettaglio delle scelte è nel capitolo 7 di `docs/manuale-tecnico.md`.
 
@@ -555,7 +511,9 @@ Il dettaglio delle scelte è nel capitolo 7 di `docs/manuale-tecnico.md`.
 I manuali d'uso, per chi usa ORION ogni giorno, sono due: `docs/manuale-web.md`
 per il browser e `docs/manuale-app.md` per l'app Android, con le immagini in
 `docs/immagini`. Il manuale tecnico, per chi installa, mantiene e
-sviluppa, è in `docs/manuale-tecnico.md`.
+sviluppa, è in `docs/manuale-tecnico.md`. Per la protezione dei dati c'è
+`docs/modello-dpia.md`, una valutazione d'impatto già compilata nelle parti
+che riguardano il software, da completare da parte di ogni associazione.
 
 ---
 

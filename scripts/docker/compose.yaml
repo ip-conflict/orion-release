@@ -1,0 +1,58 @@
+# Un'istanza di ORION: il programma e il suo database. Il database sta in una rete senza uscita;
+# il programma esce su internet (posta, aggiornamenti, allerta) e risponde solo sull'host.
+name: orion-${ORION_ISTANZA:?}
+
+services:
+  db:
+    image: ${ORION_POSTGRES_IMMAGINE:-postgres:17-trixie}
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      ORION_DB_PASSWORD: ${ORION_DB_PASSWORD:?}
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/orion.sh:ro
+    networks: [interna]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "orion_db_user", "-d", "orion_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: ${ORION_MEMORIA_DB:-512m}
+
+  app:
+    image: ${ORION_IMMAGINE_RIF:?}
+    restart: unless-stopped
+    user: "${ORION_UID:?}:${ORION_UID:?}"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    env_file: orion.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: orion_db_user
+      DB_DATABASE: orion_db
+      DB_PASSWORD: ${ORION_DB_PASSWORD:?}
+      ORION_AGENTE_DIR: /agente
+      ORION_ISTANZA: ${ORION_ISTANZA}
+    volumes:
+      - ./dati:/dati
+      - ./chiave:/chiave
+      - ./backup/auto:/backup/auto
+      - ./backup/notte:/backup/notte:ro
+      - ./backup/file:/backup/file:ro
+      - ./agente/richieste:/agente/richieste
+      - ./agente/stato:/agente/stato:ro
+    ports: ["127.0.0.1:${ORION_PORTA:?}:3000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [interna, esterna]
+    mem_limit: ${ORION_MEMORIA:-1g}
+
+networks:
+  interna:
+    internal: true
+  esterna: {}

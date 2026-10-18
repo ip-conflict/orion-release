@@ -1,5 +1,6 @@
 import { accessoRiuscito, attesaPerAccount, erroreAccesso, messaggioAttesa } from './tentativiAccesso.js';
 import { controllaPassword } from './password.js';
+import { idoneitaFisica } from './esitiVisite.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -18,6 +19,7 @@ import { apiLimiter, limitePerRete, passwordLimiter } from './middleware/rateLim
 import { activeEmergency } from './statoEmergenza.js';
 import { body, validationResult } from 'express-validator';
 import { fileURLToPath } from 'url';
+import { RADICE_DATI } from './percorsi.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,7 +71,7 @@ const IMPOSTAZIONI_PUBBLICHE = [
 const CAMPI_SEGRETERIA_PUBBLICI = ['enabled', 'block_on_medical', 'block_on_course'];
 
 // Senza accesso: chi installa l'app non ha ancora una sessione.
-export const CARTELLA_APK = path.join(__dirname, '..', 'app-android');
+export const CARTELLA_APK = path.join(RADICE_DATI, 'app-android');
 
 export function registraRottePubbliche(app) {
     app.get('/', (req, res) => { res.sendFile(path.join(__dirname, '..', 'public', 'index.html')); });
@@ -323,14 +325,7 @@ export function registraRottePubbliche(app) {
             const user = userRes.rows[0];
 
 
-            const medQuery = `
-            SELECT (umr.status = 'Idoneo' AND umr.expiry_date >= CURRENT_DATE) as is_ok
-            FROM user_medical_records umr JOIN medical_visit_types mvt ON umr.visit_type_id = mvt.id
-            WHERE umr.user_id = $1 AND LOWER(mvt.name) = 'visita di idoneità fisica'
-            ORDER BY umr.last_visit_date DESC LIMIT 1
-        `;
-            const medRes = await client.query(medQuery, [user.id]);
-            const isMedOk = medRes.rowCount > 0 ? medRes.rows[0].is_ok : false;
+            const isMedOk = (await idoneitaFisica([user.id], client)).get(user.id) === true;
 
 
             const baseCourseQuery = `

@@ -3,19 +3,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import zlib from 'zlib';
 import bcrypt from 'bcrypt';
-import { spawn } from 'child_process';
-import { pipeline } from 'stream/promises';
-import { applicaMigrazioniMancanti } from './migrazioni.js';
-import { runner } from 'node-pg-migrate';
-import { connessioneDb as connessionePg } from './db.js';
-import { allineaMigrazioni } from './allineaMigrazioni.js';
-import readline from 'readline';
-import { PassThrough, Transform } from 'stream';
-import { StringDecoder } from 'string_decoder';
-import { apriFile, cifraturaPronta, fileCifrato } from './cifratura.js';
+import crypto from 'crypto';
+import { applicaMigrazioniMancanti, modificheDaAnnullare } from './migrazioni.js';
 import { fetchEsterno, controllaIndirizzo } from './indirizziEsterni.js';
+import { leggiNomeBackup, nomeDaScaricare } from './nomiBackup.js';
+import { ripristinaDatabase as ripristinaDatabaseCon, verificaArchivio } from './ripristinoDb.js';
 
 // Qualunque altro carattere è un tentativo di uscire dalla cartella.
 const NOME_BACKUP_VALIDO = /^[A-Za-z0-9._-]+\.sql\.gz$/;
@@ -27,13 +20,26 @@ export function registraRotteManutenzione(app, ctx) {
     const {
         pool, logger, registraAudit, soloAdmin,
         eseguiBackup, cartellaApp, cartellaCron, cartellaFile,
-        connessioneDb, cartellaApplicazione, versioneInstallata,
+        connessioneDb, cartellaDati, versioneInstallata,
         impostaManutenzione, avvisaClienti, caricaArchivio,
-        emergenzaAttiva = () => null, notificaA = null, inviaEmail = null
+        emergenzaAttiva = () => null, notificaA = null, inviaEmail = null, cartellaAgente = null
     } = ctx;
 
     // L'applicazione si riavvia subito dopo il ripristino: l'esito non può restare in memoria.
     const FILE_ESITO = path.join(cartellaApp, 'ultimo-ripristino.json');
+
+    // Il codice sta nell'immagine: aggiornamenti e ritorni li esegue l'agente sull'host
+    // (scripts/docker/orion-agente.sh), qui si scrive solo la richiesta.
+    const agente = cartellaAgente ? {
+        richiesta: path.join(cartellaAgente, 'richieste', 'richiesta'),
+        visto: path.join(cartellaAgente, 'richieste', 'visto'),
+        stato: path.join(cartellaAgente, 'stato', 'agente.json'),
+        operazione: path.join(cartellaAgente, 'stato', 'operazione.json'),
+        versioni: path.join(cartellaAgente, 'stato', 'versioni.json'),
+        disco: path.join(cartellaAgente, 'stato', 'disco.json')
+    } : null;
+    // Docker riavvia il container quando il processo esce; fuori dai container (sviluppo) no.
+    const riavvioAutomatico = () => !!agente;
 
     let operazione = null; // { tipo, iniziata, passi: [], finita, esito, messaggio }
 
@@ -64,6 +70,62 @@ export function registraRotteManutenzione(app, ctx) {
         } catch (e) {
             logger.error('[Manutenzione] Esito non salvato su file:', { error: e.message });
         }
+    }
+
+    const leggiJson = async (percorso) => {
+        try {
+            return JSON.parse(await fs.promises.readFile(percorso, 'utf8'));
+        } catch {
+            return null;
+        }
+    };
+
+    // L'agente si fa vivo ogni minuto.
+    async function statoAgente() {
+        const letto = await leggiJson(agente.stato);
+        const vivo = !!letto?.visto_il && Date.now() - new Date(letto.visto_il).getTime() < 3 * 60000;
+        return { vivo, politica: letto?.politica || null };
+    }
+
+    const VALORE_RICHIESTA = /^[0-9A-Za-z._+-]{0,80}$/;
+    async function chiediAllAgente(campi) {
+        const id = crypto.randomBytes(8).toString('hex');
+        const righe = Object.entries({ id, ...campi }).map(([chiave, valore]) => {
+            if (!VALORE_RICHIESTA.test(String(valore))) throw new Error(`Valore non ammesso per ${chiave}.`);
+            return `${chiave}=${valore}`;
+        });
+        const temporaneo = `${agente.richiesta}.${process.pid}.tmp`;
+        await fs.promises.writeFile(temporaneo, righe.join('\n') + '\n', { mode: 0o640 });
+        await fs.promises.rename(temporaneo, agente.richiesta);
+        return id;
+    }
+
+    // L'operazione in memoria finisce quando la dichiara finita l'agente; se l'agente sparisce
+    // prima di prendere la richiesta, la si chiude per non bloccare la pagina.
+    async function operazioneDellAgente() {
+        if (!agente) return null;
+        const letta = await leggiJson(agente.operazione);
+        if (operazione?.id) {
+            if (letta?.id === operazione.id) {
+                if (letta.finita) operazione = null;
+                return letta;
+            }
+            const inAttesa = Date.now() - new Date(operazione.iniziata).getTime();
+            if (inAttesa > 10 * 60000 && !(await statoAgente()).vivo) {
+                await fs.promises.rm(agente.richiesta, { force: true }).catch(() => {});
+                ultimoPasso('errore');
+                operazione.finita = true;
+                operazione.esito = 'errore';
+                operazione.messaggio = 'L\'agente del server non ha preso la richiesta: non è cambiato niente. Avvisa chi gestisce il server.';
+                const chiusa = operazione;
+                operazione = null;
+                return chiusa;
+            }
+            return operazione;
+        }
+        if (!letta?.id) return null;
+        const visto = (await fs.promises.readFile(agente.visto, 'utf8').catch(() => '')).trim();
+        return letta.id === visto ? null : letta;
     }
 
     // Quelli di cron li scrive root: si leggono e si ripristinano, non si cancellano.
@@ -102,10 +164,12 @@ export function registraRotteManutenzione(app, ctx) {
     }
 
     function descriviMotivo(nome) {
-        const pezzi = nome.replace(/\.sql\.gz$/, '').split('_');
-        if (pezzi.length < 4) return null;
-        const motivo = pezzi.slice(3).join('_');
+        const motivo = leggiNomeBackup(nome)?.motivo;
+        if (!motivo) return null;
         const tradotti = {
+            notte: 'notturno',
+            caricato: 'caricato da un file',
+            'pre-ritorno': 'prima di tornare a una versione precedente',
             recupero: 'recupero dopo un fermo',
             manuale: 'richiesto a mano',
             'pre-ripristino': 'prima di un ripristino',
@@ -127,207 +191,7 @@ export function registraRotteManutenzione(app, ctx) {
         return { cartella, percorso };
     }
 
-    async function verificaArchivio(percorso) {
-        const info = await fs.promises.stat(percorso).catch(() => null);
-        if (!info || !info.isFile()) return { valido: false, motivo: 'il file non esiste' };
-        if (info.size < 1000) return { valido: false, motivo: `il file è troppo piccolo (${info.size} byte)` };
-
-        // Il controllo del contenuto (e del tag di autenticità) si fa sul flusso decifrato.
-        const cifrato = await fileCifrato(percorso);
-        if (cifrato && !cifraturaPronta()) {
-            return { valido: false, motivo: 'è cifrato e la chiave dei dati non è disponibile: inserisci prima la chiave di recupero (riquadro Cifratura)' };
-        }
-        if (!cifrato) {
-            const magici = Buffer.alloc(2);
-            const handle = await fs.promises.open(percorso, 'r');
-            try {
-                await handle.read(magici, 0, 2, 0);
-            } finally {
-                await handle.close();
-            }
-            if (magici[0] !== 0x1f || magici[1] !== 0x8b) {
-                return { valido: false, motivo: 'non è un file compresso con gzip' };
-            }
-        }
-
-        const inizio = await new Promise(async (risolvi, rifiuta) => {
-            let letto = '';
-            const decompressore = zlib.createGunzip();
-            let lettura;
-            try { lettura = await apriFile(percorso); } catch (e) { return rifiuta(e); }
-            decompressore.on('data', pezzo => {
-                letto += pezzo.toString('utf8');
-                if (letto.length > 4000) {
-                    lettura.destroy();
-                    decompressore.destroy();
-                    risolvi(letto);
-                }
-            });
-            decompressore.on('end', () => risolvi(letto));
-            decompressore.on('error', e => (letto ? risolvi(letto) : rifiuta(e)));
-            lettura.on('error', rifiuta);
-            lettura.pipe(decompressore);
-        }).catch(() => null);
-
-        if (inizio === null) return { valido: false, motivo: 'il file è compresso male o troncato' };
-        if (!/PostgreSQL database dump/i.test(inizio)) {
-            return { valido: false, motivo: 'non sembra un backup del database di ORION' };
-        }
-        const comando = await primoComandoPsql(percorso);
-        if (comando === false) return { valido: false, motivo: cifrato ? 'il file è troncato, alterato o cifrato con un\'altra chiave' : 'il file è compresso male o troncato' };
-        if (comando) {
-            logger.warn(`[Manutenzione] Archivio ${path.basename(percorso)} rifiutato: contiene un comando di psql alla riga ${comando.riga}.`);
-            return { valido: false, motivo: `contiene un comando di psql che un backup di ORION non ha (riga ${comando.riga})` };
-        }
-        return { valido: true, dimensione: info.size };
-    }
-
-    // psql esegue anche i comandi con la barra rovesciata ("\! comando" lancia un
-    // programma). pg_dump usa solo \restrict, \unrestrict e \. : qualunque altro è un
-    // archivio manomesso.
-    function esaminaRiga(stato, riga) {
-        if (stato.inCopy) {
-            if (riga === '\\.') stato.inCopy = false;
-            return null;
-        }
-        if (/^COPY\s.+\sFROM\s+stdin;\s*$/i.test(riga)) {
-            stato.inCopy = true;
-            return null;
-        }
-        const pulita = riga.trimStart();
-        if (pulita.startsWith('\\') && !/^\\(restrict|unrestrict)(\s|$)/.test(pulita)) return pulita.slice(0, 40);
-        return null;
-    }
-
-    async function primoComandoPsql(percorso) {
-        const stato = { inCopy: false };
-        let numero = 0;
-        try {
-            // .pipe() non passa gli errori: un tag di autenticità sbagliato
-            // (backup cifrato alterato) deve far fallire la lettura.
-            const sorgente = await apriFile(percorso);
-            const decompresso = zlib.createGunzip();
-            sorgente.on('error', e => decompresso.destroy(e));
-            const righe = readline.createInterface({
-                input: sorgente.pipe(decompresso),
-                crlfDelay: Infinity
-            });
-            for await (const riga of righe) {
-                numero++;
-                const trovato = esaminaRiga(stato, riga);
-                if (trovato) {
-                    righe.close();
-                    return { riga: numero, testo: trovato };
-                }
-            }
-            return null;
-        } catch {
-            return false;
-        }
-    }
-
-    // Lo stesso controllo mentre il dump scorre verso psql, se il file fosse cambiato dopo la verifica.
-    function filtroComandiPsql(alRifiuto) {
-        const stato = { inCopy: false };
-        const decodifica = new StringDecoder('utf8');
-        let resto = '';
-        const controlla = (riga) => {
-            if (!esaminaRiga(stato, riga)) return;
-            // Prima di tutto si ferma psql: se vedesse chiudersi il flusso
-            // farebbe COMMIT di quello che ha già letto.
-            alRifiuto();
-            throw new Error('il backup contiene un comando di psql non ammesso: ripristino interrotto.');
-        };
-        return new Transform({
-            transform(pezzo, _codifica, fatto) {
-                try {
-                    const testo = resto + decodifica.write(pezzo);
-                    const righe = testo.split('\n');
-                    resto = righe.pop();
-                    righe.forEach(controlla);
-                    fatto(null, pezzo);
-                } catch (e) {
-                    fatto(e);
-                }
-            },
-            flush(fatto) {
-                try {
-                    resto += decodifica.end();
-                    if (resto) controlla(resto);
-                    fatto();
-                } catch (e) {
-                    fatto(e);
-                }
-            }
-        });
-    }
-
-    async function ripristinaDatabase(percorso) {
-        const prefisso =
-            '-- Preparato da ORION prima del ripristino\n' +
-            'DROP SCHEMA IF EXISTS public CASCADE;\n' +
-            'CREATE SCHEMA public;\n';
-
-        const processo = spawn('psql', [
-            '-h', connessioneDb.host,
-            '-p', String(connessioneDb.porta),
-            '-U', connessioneDb.utente,
-            '-d', connessioneDb.database,
-            '--no-password',
-            '--no-psqlrc',
-            '--quiet',
-            '--single-transaction',
-            '-v', 'ON_ERROR_STOP=1',
-            '-f', '-'
-        ], {
-            // La password passa dall'ambiente, non dagli argomenti: la riga di
-            // comando la legge chiunque con 'ps'.
-            env: { ...process.env, PGPASSWORD: connessioneDb.password || '' }
-        });
-
-        let errori = '';
-        processo.stderr.on('data', pezzo => { errori += pezzo.toString(); });
-        processo.stdout.on('data', () => {});
-
-        const uscita = new Promise((risolvi, rifiuta) => {
-            processo.on('error', rifiuta);
-            processo.on('close', codice => codice === 0
-                ? risolvi()
-                : rifiuta(new Error(spiegaErrorePsql(errori, codice))));
-        });
-
-        const flusso = new PassThrough();
-        flusso.write(prefisso);
-        let erroreFiltro = null;
-        const fermaPsql = () => processo.kill('SIGKILL');
-        const invio = pipeline(await apriFile(percorso), zlib.createGunzip(), filtroComandiPsql(fermaPsql), flusso)
-            .catch(e => { erroreFiltro = e; });
-        const scrittura = pipeline(flusso, processo.stdin).catch(() => {});
-
-        try {
-            await Promise.all([uscita, invio, scrittura]);
-        } catch (e) {
-            if (erroreFiltro) throw new Error(`${erroreFiltro.message} Il database NON è stato modificato.`);
-            throw e;
-        }
-        if (erroreFiltro) throw new Error(`${erroreFiltro.message} Il database NON è stato modificato.`);
-    }
-
-    function spiegaErrorePsql(errori, codice) {
-        const testo = (errori || '').trim();
-        if (/role .* does not exist/i.test(testo)) {
-            const ruolo = (testo.match(/role "([^"]+)" does not exist/i) || [])[1] || 'quello indicato';
-            return `il backup viene da un'installazione il cui utente di database si chiama "${ruolo}", che qui non esiste. ` +
-                   `Un backup si ripristina su un'installazione con lo stesso utente di database. Dettaglio: ${testo.slice(0, 300)}`;
-        }
-        if (/permission denied|must be owner/i.test(testo)) {
-            return `l'utente del database non ha i permessi per rifare lo schema. Dettaglio: ${testo.slice(0, 300)}`;
-        }
-        if (/could not connect|connection refused/i.test(testo)) {
-            return `il database non risponde. Dettaglio: ${testo.slice(0, 300)}`;
-        }
-        return `psql è terminato con codice ${codice}. Il database NON è stato modificato. Dettaglio: ${testo.slice(0, 400)}`;
-    }
+    const ripristinaDatabase = (percorso) => ripristinaDatabaseCon(percorso, connessioneDb);
 
     // La copia dei file è quella dell'ultima notte, non del giorno del dump.
     async function ripristinaFileCaricati() {
@@ -336,7 +200,7 @@ export function registraRotteManutenzione(app, ctx) {
         for (const nome of ['uploads', 'protected_uploads']) {
             const da = path.join(origine, nome);
             if (!fs.existsSync(da)) continue;
-            const a = path.join(cartellaApplicazione, nome);
+            const a = path.join(cartellaDati, nome);
             await fs.promises.cp(da, a, { recursive: true, force: true });
             copiate.push(nome);
         }
@@ -362,6 +226,7 @@ export function registraRotteManutenzione(app, ctx) {
             res.json({
                 backup: await elencoBackup(),
                 copia_file: await dataCopiaFile(),
+                copia_esterna: agente ? await leggiJson(agente.disco) : null,
                 cartella_applicazione: cartellaApp,
                 cartella_notturni: cartellaCron
             });
@@ -395,7 +260,7 @@ export function registraRotteManutenzione(app, ctx) {
         // Un dump contiene l'anagrafica completa dei volontari: chi lo scarica
         // resta scritto.
         registraAudit(req, 'backup.scaricato', { dettagli: { file: req.params.nome, cartella: req.params.cartella } });
-        res.download(trovato.percorso, req.params.nome);
+        res.download(trovato.percorso, nomeDaScaricare(req.params.nome));
     });
 
     app.delete('/api/sistema/backup/:cartella/:nome', soloAdmin, async (req, res) => {
@@ -446,6 +311,10 @@ export function registraRotteManutenzione(app, ctx) {
     });
 
     app.get('/api/sistema/operazione', soloAdmin, async (req, res) => {
+        if (agente && (!operazione || operazione.id)) {
+            const dallAgente = await operazioneDellAgente();
+            if (dallAgente) return res.json(dallAgente);
+        }
         if (operazione) return res.json(operazione);
         try {
             const salvato = await fs.promises.readFile(FILE_ESITO, 'utf8');
@@ -456,6 +325,11 @@ export function registraRotteManutenzione(app, ctx) {
     });
 
     app.delete('/api/sistema/operazione', soloAdmin, async (req, res) => {
+        if (agente && (!operazione || operazione.id)) {
+            const dallAgente = await operazioneDellAgente();
+            if (dallAgente && !dallAgente.finita) return res.status(409).json({ message: "L'operazione è ancora in corso." });
+            if (dallAgente?.id) await fs.promises.writeFile(agente.visto, dallAgente.id + '\n').catch(() => {});
+        }
         if (operazione && !operazione.finita) return res.status(409).json({ message: "L'operazione è ancora in corso." });
         operazione = null;
         try {
@@ -557,24 +431,23 @@ export function registraRotteManutenzione(app, ctx) {
             }
         }
 
-        const sottoPm2 = process.env.pm_id !== undefined || process.env.PM2_HOME;
-        if (sottoPm2) {
+        const riavvioDaSolo = riavvioAutomatico();
+        if (riavvioDaSolo) {
             passo('Riavvio dell\'applicazione', 'fatto');
         } else {
             passo('In attesa del riavvio manuale dell\'applicazione', 'saltato');
         }
 
-        chiudiOperazione('fatto', sottoPm2
+        chiudiOperazione('fatto', riavvioDaSolo
             ? 'Ripristino completato. L\'applicazione si sta riavviando: ricarica la pagina fra qualche secondo e rifai l\'accesso, ' +
               'perché anche gli utenti e le password sono tornati a quelli del backup.'
-            : 'Ripristino completato. L\'applicazione resta ferma finché qualcuno non la riavvia sul server ' +
-              '(pm2 restart Orion, oppure il comando con cui è stata avviata): la memoria del programma contiene ancora i dati di prima. ' +
+            : 'Ripristino completato. L\'applicazione resta ferma finché qualcuno non la riavvia: la memoria del programma contiene ancora i dati di prima. ' +
               'Dopo il riavvio rifai l\'accesso, perché anche gli utenti e le password sono tornati a quelli del backup.');
         logger.warn(`[Manutenzione] Ripristino completato (richiesto da ${chi}). Riavvio del processo.`);
 
-        // Lo stato in memoria non corrisponde più al database: si riparte. Senza PM2
-        // resta in manutenzione.
-        if (sottoPm2) {
+        // Lo stato in memoria non corrisponde più al database: si riparte. Fuori dai
+        // container resta in manutenzione.
+        if (riavvioDaSolo) {
             setTimeout(() => process.exit(0), 1500);
         } else {
             impostaManutenzione({
@@ -585,8 +458,6 @@ export function registraRotteManutenzione(app, ctx) {
         }
     }
 
-    // Le migrazioni si applicano prima di toccare i file: se falliscono, gira ancora
-    // la versione di prima.
     const CONFIG_AGGIORNAMENTI = {
         // Di base spento: da solo ORION non contatta nessuno.
         attivo: false,
@@ -651,69 +522,36 @@ export function registraRotteManutenzione(app, ctx) {
         };
     }
 
-    // I motivi per cui non si può aggiornare si dicono prima: a metà strada
-    // l'installazione è già stata toccata.
     async function verificaRequisiti() {
         const problemi = [];
         const avvertenze = [];
 
-        try {
-            await fs.promises.access(cartellaApplicazione, fs.constants.W_OK);
-        } catch {
-            problemi.push(`La cartella dell'applicazione (${cartellaApplicazione}) non e' scrivibile dall'utente con cui gira il programma: l'aggiornamento non puo' sostituire i file.`);
+        if (!agente) {
+            problemi.push('Questa installazione non ha l\'agente degli aggiornamenti: ORION si aggiorna solo quando gira nei container (vedi il manuale tecnico).');
+        } else {
+            const { vivo, politica } = await statoAgente();
+            if (!vivo) problemi.push('L\'agente degli aggiornamenti sul server non risponde: avvisa chi gestisce il server.');
+            else if (politica === 'bloccati') problemi.push('Chi gestisce il server ha bloccato gli aggiornamenti di questa installazione.');
+            else if (politica === 'chiedi') avvertenze.push('L\'aggiornamento parte quando lo approva chi gestisce il server.');
         }
-
-        if (!eseguibilePresente('tar')) problemi.push('Il comando tar non e\' disponibile sul server.');
-        if (!eseguibilePresente('npm')) problemi.push('Il comando npm non e\' disponibile sul server.');
-
-        try {
-            const spazio = await fs.promises.statfs(cartellaApplicazione);
-            const liberiMb = Math.floor((spazio.bavail * spazio.bsize) / 1024 / 1024);
-            if (liberiMb < 600) {
-                problemi.push(`Sul disco restano ${liberiMb} MB: troppo pochi per scaricare il pacchetto e installare le sue dipendenze accanto a quelle attuali.`);
-            }
-        } catch { /* statfs non disponibile: si prosegue, il download fallira' semmai da solo */ }
 
         const emergenza = emergenzaAttiva();
         if (emergenza) {
             problemi.push(`C'è un'emergenza aperta (${emergenza.code}): si aggiorna dopo averla chiusa.`);
         }
 
-        if (process.env.pm_id === undefined && !process.env.PM2_HOME) {
-            avvertenze.push('L\'applicazione non risulta avviata con PM2: al termine dell\'aggiornamento resterà ferma finché qualcuno non la riavvia sul server.');
-        }
-
         return { pronto: problemi.length === 0, problemi, avvertenze };
     }
 
-    function eseguibilePresente(nome) {
-        const cartelle = (process.env.PATH || '').split(path.delimiter);
-        return cartelle.some(c => {
-            try {
-                fs.accessSync(path.join(c, nome), fs.constants.X_OK);
-                return true;
-            } catch {
-                return false;
-            }
-        });
-    }
-
+    // Qui si sa solo che c'è una versione nuova: quale immagine scaricare lo decide l'agente.
     async function cercaVersione(config) {
         if (config.origine === 'manifesto') {
             if (!config.manifesto) throw new Error('Non e\' stato indicato l\'indirizzo del manifesto.');
             const risposta = await fetchEsterno(config.manifesto, { headers: { 'Accept': 'application/json', 'User-Agent': 'ORION' } });
             if (!risposta.ok) throw new Error(`Il manifesto ha risposto ${risposta.status}.`);
             const dati = await risposta.json();
-            if (!dati.versione || !dati.pacchetto) {
-                throw new Error('Il manifesto non contiene "versione" e "pacchetto".');
-            }
-            return {
-                versione: String(dati.versione),
-                note: dati.note || null,
-                pubblicata_il: dati.pubblicata_il || null,
-                pacchetto: dati.pacchetto,
-                sha256: dati.sha256 || null
-            };
+            if (!dati.versione) throw new Error('Il manifesto non contiene "versione".');
+            return { versione: String(dati.versione), note: dati.note || null, pubblicata_il: dati.pubblicata_il || null };
         }
 
         const indirizzo = `${config.api.replace(/\/$/, '')}/repos/${config.repo}/releases/latest`;
@@ -728,9 +566,7 @@ export function registraRotteManutenzione(app, ctx) {
         return {
             versione: String(dati.tag_name || '').replace(/^v/, ''),
             note: dati.body || null,
-            pubblicata_il: dati.published_at || null,
-            pacchetto: dati.tarball_url,
-            sha256: null
+            pubblicata_il: dati.published_at || null
         };
     }
 
@@ -782,8 +618,6 @@ export function registraRotteManutenzione(app, ctx) {
                 versione: trovata.versione,
                 note: trovata.note,
                 pubblicata_il: trovata.pubblicata_il,
-                pacchetto: trovata.pacchetto,
-                sha256: trovata.sha256,
                 errore: null,
                 avvisata: precedente.avvisata || null
             });
@@ -853,246 +687,74 @@ export function registraRotteManutenzione(app, ctx) {
         logger.info(`[Manutenzione] Avvisati ${rows.length} amministratori della versione ${nuova}.`);
     }
 
+    async function passwordGiusta(req, password) {
+        const utente = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+        return utente.rowCount > 0 && await bcrypt.compare(password, utente.rows[0].password);
+    }
+
+    async function mandaAllAgente(res, tipo, campi, messaggio) {
+        await operazioneDellAgente();
+        if (!iniziaOperazione(tipo)) {
+            return res.status(409).json({ message: 'C\'è già un\'operazione di manutenzione in corso.' });
+        }
+        try {
+            operazione.id = await chiediAllAgente({ tipo, ...campi });
+            passo('Richiesta mandata al server', 'fatto');
+            return res.json({ message: messaggio, avviato: true });
+        } catch (e) {
+            operazione = null;
+            logger.error('[Manutenzione] Richiesta all\'agente non scritta:', { error: e.message });
+            return res.status(500).json({ message: `La richiesta al server non è partita: ${e.message}` });
+        }
+    }
+
     app.post('/api/sistema/aggiornamenti/applica', soloAdmin, async (req, res) => {
         const { password, conferma } = req.body || {};
         if (conferma !== 'AGGIORNA') {
             return res.status(400).json({ message: 'Per procedere scrivi AGGIORNA nella casella di conferma.' });
         }
         if (!password) return res.status(400).json({ message: 'Serve la tua password per confermare.' });
-        const utente = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-        const passwordGiusta = utente.rowCount > 0 && await bcrypt.compare(password, utente.rows[0].password);
-        if (!passwordGiusta) return res.status(403).json({ message: 'Password errata.' });
+        if (!await passwordGiusta(req, password)) return res.status(403).json({ message: 'Password errata.' });
 
         const stato = await leggiImpostazione('aggiornamenti_stato', {});
-        if (!stato.pacchetto || !stato.versione) {
-            return res.status(400).json({ message: 'Prima bisogna controllare se c\'e\' una versione nuova.' });
+        if (!stato.versione) {
+            return res.status(400).json({ message: 'Prima bisogna controllare se c\'è una versione nuova.' });
         }
         if (!versionePiuRecente(stato.versione, versioneInstallata)) {
-            return res.status(400).json({ message: `La versione installata (${versioneInstallata}) non e\' piu\' vecchia di quella trovata (${stato.versione}).` });
+            return res.status(400).json({ message: `La versione installata (${versioneInstallata}) non è più vecchia di quella trovata (${stato.versione}).` });
         }
         const requisiti = await verificaRequisiti();
         if (!requisiti.pronto) {
-            return res.status(409).json({ message: `Non si puo\' aggiornare: ${requisiti.problemi.join(' ')}` });
+            return res.status(409).json({ message: `Non si può aggiornare: ${requisiti.problemi.join(' ')}` });
         }
-        if (!iniziaOperazione('aggiornamento')) {
-            return res.status(409).json({ message: 'C\'e\' gia\' un\'operazione di manutenzione in corso.' });
-        }
-
         registraAudit(req, 'sistema.aggiornamento', { dettagli: { da: versioneInstallata, a: stato.versione } });
         logger.warn(`[Manutenzione] AGGIORNAMENTO da ${versioneInstallata} a ${stato.versione} richiesto da ${req.user.username}.`);
-        res.json({ message: 'Aggiornamento avviato.', avviato: true });
-
-        eseguiAggiornamento(stato).catch(e => {
-            ultimoPasso('errore');
-            impostaManutenzione(null);
-            chiudiOperazione('errore', e.message);
-        });
+        return mandaAllAgente(res, 'aggiornamento', { versione: stato.versione }, 'Aggiornamento chiesto al server.');
     });
 
-    async function eseguiAggiornamento(stato) {
-        const lavoro = path.join(cartellaApp, 'aggiornamento');
-        await fs.promises.rm(lavoro, { recursive: true, force: true });
-        await fs.promises.mkdir(lavoro, { recursive: true });
-        try {
-            await aggiornaDaCartella(stato, lavoro);
-        } finally {
-            // La cartella di lavoro pesa quanto le dipendenze: non resta fra i backup.
-            await fs.promises.rm(lavoro, { recursive: true, force: true }).catch(() => {});
-        }
-    }
-
-    async function aggiornaDaCartella(stato, lavoro) {
-        // Se il backup non riesce non si comincia nemmeno.
-        passo('Backup del database');
-        const sicurezza = await eseguiBackup('pre-aggiornamento');
-        if (!sicurezza) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', 'Il backup non e\' riuscito, quindi l\'aggiornamento non e\' partito: l\'installazione e\' intatta.');
-            return;
-        }
-        ultimoPasso('fatto');
-        operazione.backup_sicurezza = path.basename(sicurezza);
-
-        passo(`Scaricamento della versione ${stato.versione}`);
-        const archivio = path.join(lavoro, 'pacchetto.tar.gz');
-        await scaricaFile(stato.pacchetto, archivio);
-        if (stato.sha256 && await improntaFile(archivio) !== stato.sha256.toLowerCase()) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', 'Il pacchetto scaricato non corrisponde all\'impronta dichiarata: scaricamento interrotto, niente e\' stato toccato.');
-            return;
-        }
-        ultimoPasso('fatto');
-
-        passo('Verifica del pacchetto');
-        const radice = await scompattaPacchetto(archivio, lavoro);
-        const descrizione = JSON.parse(await fs.promises.readFile(path.join(radice, 'package.json'), 'utf8'));
-        if (String(descrizione.name).toLowerCase() !== 'orion') {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', `Il pacchetto scaricato non e\' ORION (si chiama "${descrizione.name}"). Niente e\' stato toccato.`);
-            return;
-        }
-        for (const richiesto of ['src/server.js', 'migrations', 'public']) {
-            if (!fs.existsSync(path.join(radice, richiesto))) {
-                ultimoPasso('errore');
-                chiudiOperazione('errore', `Il pacchetto scaricato e\' incompleto (manca ${richiesto}). Niente e\' stato toccato.`);
-                return;
-            }
-        }
-        await allineaNumeroVersione(radice, descrizione, stato.versione);
-        ultimoPasso('fatto');
-
-        // Le dipendenze nella cartella di lavoro: se npm fallisce, l'installazione è intatta.
-        passo('Installazione delle dipendenze della versione nuova');
-        try {
-            await installaDipendenze(radice);
-            ultimoPasso('fatto');
-        } catch (e) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', `${e.message} Niente e\' stato toccato: database e file sono quelli di prima.`);
-            return;
-        }
-
-        passo('Aggiornamento del database');
-        try {
-            await applicaMigrazioni(radice);
-            ultimoPasso('fatto');
-        } catch (e) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore',
-                `Le migrazioni del database non sono riuscite: ${e.message} Nessun file e\' stato sostituito, l\'applicazione sta ancora girando nella versione di prima.`);
-            return;
-        }
-
-        // Il database ha i suoi backup, il codice no.
-        passo('Copia di sicurezza della versione attuale');
-        const copiaCodice = await archiviaCodice();
-        ultimoPasso(copiaCodice ? 'fatto' : 'errore');
-        if (!copiaCodice) {
-            chiudiOperazione('errore', 'Non e\' stato possibile mettere da parte una copia del codice attuale: l\'aggiornamento si ferma qui. Il database e\' gia\' stato aggiornato, quindi conviene riprovare o aggiornare a mano.');
-            return;
-        }
-        operazione.copia_codice = path.basename(copiaCodice);
-
-        impostaManutenzione({ motivo: 'aggiornamento del programma in corso', iniziata: new Date().toISOString() });
-        avvisaClienti('manutenzione', { attiva: true, motivo: 'aggiornamento' });
-
-        try {
-            passo('Sostituzione dei file');
-            await copiaVersione(radice);
-            if (!fs.existsSync(path.join(cartellaApplicazione, 'node_modules', '.bin', 'node-pg-migrate'))) {
-                throw new Error('Dopo la copia le dipendenze non risultano al loro posto.');
-            }
-            ultimoPasso('fatto');
-            await aggiornaAppAndroid(radice);
-        } catch (e) {
-            ultimoPasso('errore');
-            impostaManutenzione(null);
-            avvisaClienti('manutenzione', { attiva: false });
-            chiudiOperazione('errore',
-                `${e.message} La copia della versione precedente e\' in ${copiaCodice}: si puo\' tornare indietro scompattandola sopra la cartella dell\'applicazione.`);
-            return;
-        }
-
-        const sottoPm2 = process.env.pm_id !== undefined || process.env.PM2_HOME;
-        passo(sottoPm2 ? 'Riavvio dell\'applicazione' : 'In attesa del riavvio manuale dell\'applicazione',
-              sottoPm2 ? 'fatto' : 'saltato');
-        chiudiOperazione('fatto', sottoPm2
-            ? `Aggiornamento alla versione ${stato.versione} completato. L'applicazione si sta riavviando: ricarica la pagina fra qualche secondo.`
-            : `Aggiornamento alla versione ${stato.versione} completato. Adesso l'applicazione va riavviata sul server (pm2 restart Orion, o il comando con cui e' stata avviata).`);
-
-        logger.warn(`[Manutenzione] Aggiornamento alla versione ${stato.versione} completato.`);
-        if (sottoPm2) setTimeout(() => process.exit(0), 1500);
-        else impostaManutenzione({
-            motivo: `aggiornamento completato: riavvia l'applicazione`,
-            iniziata: new Date().toISOString(),
-            riavvio_manuale: true
-        });
-    }
-
-    // Ogni aggiornamento lascia il backup del database (pre-aggiornamento) e il codice
-    // lasciato (codice_..._v<versione>.tar.gz): con quelli si torna indietro.
-    const NOME_CODICE_VALIDO = /^codice_(\d{8})_(\d{6})_v([0-9A-Za-z.+-]{1,40})\.tar\.gz$/;
-    const NOME_DB_PRIMA = /^db_(\d{8})_(\d{6})_(pre-aggiornamento|pre-ritorno)\.sql\.gz$/;
     const PAROLA_RITORNO = 'TORNA';
-    const versioniLette = new Map(); // nome -> { mtime, versione }
-
-    const istanteDa = (giorno, ora) =>
-        Date.UTC(+giorno.slice(0, 4), +giorno.slice(4, 6) - 1, +giorno.slice(6, 8), +ora.slice(0, 2), +ora.slice(2, 4), +ora.slice(4, 6));
-
-    // Quella nel nome può essere sbagliata (un pacchetto che non aggiornava il numero).
-    async function versioneDellArchivio(percorso, nome, mtime) {
-        const memo = versioniLette.get(nome);
-        if (memo && memo.mtime === mtime) return memo.versione;
-        let versione = null;
-        try {
-            const testo = await eseguiComando('tar', ['-xzOf', percorso, './package.json'], {}, 60 * 1000);
-            versione = JSON.parse(testo).version || null;
-        } catch { /* archivio senza package.json leggibile: vale il nome */ }
-        versioniLette.set(nome, { mtime, versione });
-        return versione;
-    }
-
-    const migrazioniLette = new Map(); // nome -> { mtime, nomi }
-    async function migrazioniDellArchivio(percorso, nome, mtime) {
-        const memo = migrazioniLette.get(nome);
-        if (memo && memo.mtime === mtime) return memo.nomi;
-        let nomi = null;
-        try {
-            const elenco = await eseguiComando('tar', ['-tzf', percorso], {}, 60 * 1000);
-            nomi = elenco.split('\n').map(r => r.match(/^\.?\/?migrations\/([^/]+)\.c?js$/)?.[1]).filter(Boolean);
-        } catch { /* si saprà al momento del ritorno */ }
-        migrazioniLette.set(nome, { mtime, nomi });
-        return nomi;
-    }
-
-    // Tenendo i dati, le migrazioni successive si annullano dalla più recente con il
-    // "down" della versione installata.
-    async function modificheDaAnnullare(nomiVecchi) {
-        const { rows } = await pool.query('SELECT name FROM pgmigrations ORDER BY run_on DESC, id DESC');
-        const vecchie = new Set(nomiVecchi);
-        const extra = rows.map(r => r.name).filter(n => !vecchie.has(n));
-        const ultime = rows.slice(0, extra.length).map(r => r.name);
-        const inCoda = extra.every(n => ultime.includes(n));
-        const conFile = extra.every(n => fs.existsSync(path.join(cartellaApplicazione, 'migrations', `${n}.cjs`))
-            || fs.existsSync(path.join(cartellaApplicazione, 'migrations', `${n}.js`)));
-        return { nomi: extra, annullabili: inCoda && conFile };
-    }
-
     const descriviMigrazione = (n) => n.replace(/^\d+_/, '').replace(/[-_]/g, ' ');
 
+    // Le versioni sono le immagini che l'agente ha già fatto girare qui.
     async function versioniPrecedenti() {
-        let nomi = [];
-        try {
-            nomi = await fs.promises.readdir(cartellaApp);
-        } catch {
-            return [];
-        }
-        const backup = nomi.map(n => n.match(NOME_DB_PRIMA)).filter(Boolean)
-            .map(m => ({ nome: m[0], istante: istanteDa(m[1], m[2]) }));
+        const storia = agente ? await leggiJson(agente.versioni) : null;
+        if (!Array.isArray(storia)) return [];
+        const viste = new Set();
         const elenco = [];
-        for (const nome of nomi) {
-            const m = nome.match(NOME_CODICE_VALIDO);
-            if (!m) continue;
-            const percorso = path.join(cartellaApp, nome);
-            const info = await fs.promises.stat(percorso).catch(() => null);
-            if (!info?.isFile()) continue;
-            const istante = istanteDa(m[1], m[2]);
-            const coppia = backup.filter(b => b.istante <= istante && istante - b.istante <= 6 * 3600 * 1000)
-                .sort((a, b) => b.istante - a.istante)[0];
-            const migrazioni = await migrazioniDellArchivio(percorso, nome, info.mtimeMs);
-            const daAnnullare = migrazioni ? await modificheDaAnnullare(migrazioni) : null;
+        for (const v of [...storia].reverse()) {
+            if (!v?.versione || v.versione === versioneInstallata || viste.has(v.versione) || !Array.isArray(v.migrazioni)) continue;
+            viste.add(v.versione);
+            const daAnnullare = await modificheDaAnnullare(v.migrazioni);
+            const backup = v.backup && NOME_BACKUP_VALIDO.test(v.backup) && fs.existsSync(path.join(cartellaCron, v.backup)) ? v.backup : null;
             elenco.push({
-                nome,
-                versione: (await versioneDellArchivio(percorso, nome, info.mtimeMs)) || m[3],
-                modifiche: daAnnullare ? { annullabili: daAnnullare.annullabili, elenco: daAnnullare.nomi.map(descriviMigrazione) } : null,
-                lasciata_il: new Date(istante).toISOString(),
-                dimensione: info.size,
-                dati: coppia ? { nome: coppia.nome, del: new Date(coppia.istante).toISOString() } : null
+                nome: `v${v.versione}`,
+                versione: v.versione,
+                modifiche: { annullabili: daAnnullare.annullabili, elenco: daAnnullare.nomi.map(descriviMigrazione) },
+                lasciata_il: v.al || v.dal,
+                dati: backup ? { nome: backup, del: v.al || v.dal } : null
             });
         }
-        const viste = new Set();
-        return elenco.sort((a, b) => b.lasciata_il.localeCompare(a.lasciata_il))
-            .filter(v => v.versione !== versioneInstallata && !viste.has(v.versione) && viste.add(v.versione));
+        return elenco;
     }
 
     app.get('/api/sistema/versioni-precedenti', soloAdmin, async (req, res) => {
@@ -1110,358 +772,28 @@ export function registraRotteManutenzione(app, ctx) {
             return res.status(400).json({ message: `Per procedere scrivi ${PAROLA_RITORNO} nella casella di conferma.` });
         }
         if (!password) return res.status(400).json({ message: 'Serve la tua password per confermare.' });
-        const utente = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-        const passwordGiusta = utente.rowCount > 0 && await bcrypt.compare(password, utente.rows[0].password);
-        if (!passwordGiusta) return res.status(403).json({ message: 'Password errata.' });
+        if (!await passwordGiusta(req, password)) return res.status(403).json({ message: 'Password errata.' });
 
         const scelta = (await versioniPrecedenti()).find(v => v.nome === nome);
-        if (!scelta) return res.status(400).json({ message: 'Versione non trovata fra quelle messe da parte.' });
-        let backupDati = null;
-        if (!dati && scelta.modifiche && !scelta.modifiche.annullabili) {
+        if (!scelta) return res.status(400).json({ message: 'Versione non trovata fra quelle passate di qui.' });
+        if (!dati && !scelta.modifiche.annullabili) {
             return res.status(400).json({ message: 'Il database ha modifiche che quella versione non conosce e che non si possono annullare: si può tornare solo riportando anche i dati a com\'erano.' });
         }
         if (dati) {
             if (!scelta.dati) return res.status(400).json({ message: 'Per questa versione non c\'è il backup dei dati di allora: si può tornare solo al programma.' });
-            backupDati = path.join(cartellaApp, scelta.dati.nome);
-            const verifica = await verificaArchivio(backupDati);
+            const verifica = await verificaArchivio(path.join(cartellaCron, scelta.dati.nome));
             if (!verifica.valido) return res.status(400).json({ message: `Il backup dei dati di allora non si può usare: ${verifica.motivo}.` });
         }
         const requisiti = await verificaRequisiti();
         if (!requisiti.pronto) {
             return res.status(409).json({ message: `Non si può tornare indietro adesso: ${requisiti.problemi.join(' ')}` });
         }
-        if (!iniziaOperazione('ritorno')) {
-            return res.status(409).json({ message: 'C\'è già un\'operazione di manutenzione in corso.' });
-        }
-
-        registraAudit(req, 'sistema.ritorno_versione', { dettagli: { da: versioneInstallata, a: scelta.versione, archivio: nome, dati: !!dati } });
+        registraAudit(req, 'sistema.ritorno_versione', { dettagli: { da: versioneInstallata, a: scelta.versione, dati: !!dati } });
         logger.warn(`[Manutenzione] RITORNO dalla versione ${versioneInstallata} alla ${scelta.versione}${dati ? ' con i dati di allora' : ''}, richiesto da ${req.user.username}.`);
-        res.json({ message: 'Ritorno alla versione precedente avviato.', avviato: true });
-
-        const lavoro = path.join(cartellaApp, 'aggiornamento');
-        (async () => {
-            await fs.promises.rm(lavoro, { recursive: true, force: true });
-            await fs.promises.mkdir(lavoro, { recursive: true });
-            try {
-                await tornaAllaVersione(scelta, path.join(cartellaApp, nome), backupDati, lavoro);
-            } finally {
-                await fs.promises.rm(lavoro, { recursive: true, force: true }).catch(() => {});
-            }
-        })().catch(e => {
-            ultimoPasso('errore');
-            impostaManutenzione(null);
-            avvisaClienti('manutenzione', { attiva: false });
-            chiudiOperazione('errore', e.message);
-        });
+        return mandaAllAgente(res, 'ritorno',
+            { versione: scelta.versione, dati: dati ? 'si' : 'no', backup: dati ? scelta.dati.nome : '' },
+            'Ritorno chiesto al server.');
     });
-
-    async function tornaAllaVersione(scelta, archivio, backupDati, lavoro) {
-        passo('Backup del database attuale');
-        const sicurezza = await eseguiBackup('pre-ritorno');
-        if (!sicurezza) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', 'Il backup non è riuscito, quindi non si è tornati indietro: l\'installazione è intatta.');
-            return;
-        }
-        ultimoPasso('fatto');
-        operazione.backup_sicurezza = path.basename(sicurezza);
-
-        passo(`Copia di sicurezza della versione ${versioneInstallata}`);
-        const copiaCodice = await archiviaCodice();
-        if (!copiaCodice) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', 'Non è stato possibile mettere da parte il codice attuale: non si torna indietro. L\'installazione è intatta.');
-            return;
-        }
-        ultimoPasso('fatto');
-        operazione.copia_codice = path.basename(copiaCodice);
-
-        passo(`Preparazione della versione ${scelta.versione}`);
-        const radice = await scompattaPacchetto(archivio, lavoro);
-        const descrizione = JSON.parse(await fs.promises.readFile(path.join(radice, 'package.json'), 'utf8'));
-        if (String(descrizione.name).toLowerCase() !== 'orion' || !fs.existsSync(path.join(radice, 'src', 'server.js'))) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', 'L\'archivio non contiene ORION. Niente è stato toccato.');
-            return;
-        }
-        ultimoPasso('fatto');
-        passo('Installazione delle dipendenze di quella versione');
-        try {
-            await installaDipendenze(radice);
-            ultimoPasso('fatto');
-        } catch (e) {
-            ultimoPasso('errore');
-            chiudiOperazione('errore', `${e.message} Niente è stato toccato: database e programma sono quelli di adesso.`);
-            return;
-        }
-
-        impostaManutenzione({ motivo: 'ritorno a una versione precedente', iniziata: new Date().toISOString() });
-        avvisaClienti('manutenzione', { attiva: true, motivo: 'ritorno a una versione precedente' });
-
-        if (backupDati) {
-            try {
-                passo(`Dati come erano il ${new Date(scelta.dati.del).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}`);
-                await ripristinaDatabase(backupDati);
-                ultimoPasso('fatto');
-                passo('Allineamento del database a quella versione');
-                await applicaMigrazioni(radice);
-                ultimoPasso('fatto');
-            } catch (e) {
-                ultimoPasso('errore');
-                impostaManutenzione(null);
-                avvisaClienti('manutenzione', { attiva: false });
-                chiudiOperazione('errore', `Il ripristino dei dati di allora non è riuscito: ${e.message} Il programma è ancora quello di adesso.`);
-                return;
-            }
-        } else {
-            try {
-                const nomiVecchi = (await fs.promises.readdir(path.join(radice, 'migrations')))
-                    .map(f => f.match(/^(.+)\.c?js$/)?.[1]).filter(Boolean);
-                const daAnnullare = await modificheDaAnnullare(nomiVecchi);
-                if (!daAnnullare.nomi.length) {
-                    passo('I dati restano quelli di adesso: il database va già bene a quella versione', 'saltato');
-                } else {
-                    passo(`I dati restano; si annullano ${daAnnullare.nomi.length === 1 ? 'una modifica' : `${daAnnullare.nomi.length} modifiche`} al database delle versioni successive (${daAnnullare.nomi.map(descriviMigrazione).join(', ')})`);
-                    if (!daAnnullare.annullabili) throw new Error('alcune modifiche al database non si possono annullare.');
-                    await runner({
-                        databaseUrl: connessionePg,
-                        dir: path.join(cartellaApplicazione, 'migrations'),
-                        migrationsTable: 'pgmigrations',
-                        direction: 'down',
-                        count: daAnnullare.nomi.length,
-                        singleTransaction: true,
-                        log: () => {},
-                        logger: { debug: () => {}, info: () => {}, warn: m => logger.warn(`[Migrazioni] ${m}`), error: m => logger.error(`[Migrazioni] ${m}`) }
-                    });
-                    ultimoPasso('fatto');
-                }
-            } catch (e) {
-                ultimoPasso('errore');
-                impostaManutenzione(null);
-                avvisaClienti('manutenzione', { attiva: false });
-                chiudiOperazione('errore', `Il database non è tornato alla forma di quella versione: ${e.message} Niente è cambiato (le modifiche si annullano tutte insieme o nessuna). Si può riprovare riportando anche i dati a com'erano.`);
-                return;
-            }
-        }
-
-        try {
-            passo('Sostituzione dei file');
-            await copiaVersione(radice);
-            if (!fs.existsSync(path.join(cartellaApplicazione, 'node_modules', '.bin', 'node-pg-migrate'))) {
-                throw new Error('Dopo la copia le dipendenze non risultano al loro posto.');
-            }
-            ultimoPasso('fatto');
-        } catch (e) {
-            ultimoPasso('errore');
-            impostaManutenzione(null);
-            avvisaClienti('manutenzione', { attiva: false });
-            chiudiOperazione('errore', `${e.message} Il codice di prima è in ${copiaCodice}${backupDati ? ` e i dati di prima nel backup ${path.basename(sicurezza)}` : ''}.`);
-            return;
-        }
-
-        const sottoPm2 = process.env.pm_id !== undefined || process.env.PM2_HOME;
-        passo(sottoPm2 ? 'Riavvio dell\'applicazione' : 'In attesa del riavvio manuale dell\'applicazione', sottoPm2 ? 'fatto' : 'saltato');
-        const avanti = `Per tornare alla ${versioneInstallata} basta aggiornare di nuovo dalla pagina Sistema${backupDati ? `; i dati di adesso sono nel backup ${path.basename(sicurezza)}` : ''}.`;
-        chiudiOperazione('fatto', sottoPm2
-            ? `Tornati alla versione ${scelta.versione}. L'applicazione si sta riavviando: ricarica la pagina fra qualche secondo${backupDati ? ' e rifai l\'accesso' : ''}. ${avanti}`
-            : `Tornati alla versione ${scelta.versione}. Adesso l'applicazione va riavviata sul server (pm2 restart Orion). ${avanti}`);
-        logger.warn(`[Manutenzione] Ritorno alla versione ${scelta.versione} completato.`);
-        if (sottoPm2) setTimeout(() => process.exit(0), 1500);
-        else impostaManutenzione({ motivo: 'ritorno completato: riavvia l\'applicazione', iniziata: new Date().toISOString(), riavvio_manuale: true });
-    }
-
-    // Se chi pubblica non aggiorna package.json, ORION riproporrebbe lo stesso
-    // aggiornamento all'infinito: vale il numero della release.
-    async function allineaNumeroVersione(radice, descrizione, versione) {
-        if (!versione || descrizione.version === versione) return;
-        logger.warn(`[Manutenzione] Il pacchetto dichiara la versione ${descrizione.version}, la release e' la ${versione}: vale la release.`);
-        descrizione.version = versione;
-        await fs.promises.writeFile(path.join(radice, 'package.json'), JSON.stringify(descrizione, null, 2) + '\n');
-        const fileLock = path.join(radice, 'package-lock.json');
-        if (fs.existsSync(fileLock)) {
-            const lock = JSON.parse(await fs.promises.readFile(fileLock, 'utf8'));
-            lock.version = versione;
-            if (lock.packages?.['']) lock.packages[''].version = versione;
-            await fs.promises.writeFile(fileLock, JSON.stringify(lock, null, 2) + '\n');
-        }
-    }
-
-    async function scaricaFile(indirizzo, destinazione) {
-        const risposta = await fetchEsterno(indirizzo, { headers: { 'User-Agent': 'ORION', 'Accept': 'application/octet-stream' } });
-        if (!risposta.ok) throw new Error(`Scaricamento non riuscito: il server ha risposto ${risposta.status}.`);
-        await pipeline(risposta.body, fs.createWriteStream(destinazione));
-        const info = await fs.promises.stat(destinazione);
-        if (info.size < 10000) throw new Error(`Il pacchetto scaricato e' troppo piccolo (${info.size} byte): non e' un aggiornamento valido.`);
-    }
-
-    async function improntaFile(percorso) {
-        const { createHash } = await import('crypto');
-        const somma = createHash('sha256');
-        await pipeline(fs.createReadStream(percorso), somma);
-        return somma.digest('hex');
-    }
-
-    // I pacchetti di GitHub hanno una cartella con la revisione nel nome.
-    async function scompattaPacchetto(archivio, lavoro) {
-        const destinazione = path.join(lavoro, 'contenuto');
-        await fs.promises.mkdir(destinazione, { recursive: true });
-        await eseguiComando('tar', ['-xzf', archivio, '-C', destinazione]);
-        const voci = await fs.promises.readdir(destinazione, { withFileTypes: true });
-        const cartelle = voci.filter(v => v.isDirectory());
-        if (voci.some(v => v.isFile() && v.name === 'package.json')) return destinazione;
-        if (cartelle.length === 1) return path.join(destinazione, cartelle[0].name);
-        throw new Error('Il pacchetto non ha la forma attesa: non si capisce quale sia la cartella del programma.');
-    }
-
-    async function applicaMigrazioni(radice) {
-        const binario = [radice, cartellaApplicazione]
-            .map(c => path.join(c, 'node_modules', '.bin', 'node-pg-migrate'))
-            .find(b => fs.existsSync(b));
-        if (!binario) throw new Error('node-pg-migrate non e\' installato.');
-        let url = `postgres://${connessioneDb.utente}:${encodeURIComponent(connessioneDb.password)}` +
-                    `@${connessioneDb.host}:${connessioneDb.porta}/${connessioneDb.database}`;
-        if (process.env.DB_SSL === 'true') {
-            const parametri = new URLSearchParams({ sslmode: process.env.DB_SSL_STRICT === 'false' ? 'no-verify' : 'verify-full' });
-            if (process.env.DB_SSL_CA) parametri.set('sslrootcert', process.env.DB_SSL_CA);
-            url += `?${parametri}`;
-        }
-        // Un database nato prima della 1.0 si allinea alla base della 1.0.
-        await allineaMigrazioni(url);
-        await eseguiComando(binario, ['up', '-m', path.join(radice, 'migrations')], {
-            cwd: radice,
-            env: { ...process.env, DATABASE_URL: url }
-        });
-    }
-
-    async function archiviaCodice() {
-        const orario = new Date().toISOString().replace(/[:-]/g, '').replace(/\..+/, '').replace('T', '_');
-        const destinazione = path.join(cartellaApp, `codice_${orario}_v${versioneInstallata}.tar.gz`);
-        try {
-            await eseguiComando('tar', [
-                '-czf', destinazione,
-                '-C', cartellaApplicazione,
-                '--exclude=node_modules', '--exclude=.git', '--exclude=uploads',
-                '--exclude=protected_uploads', '--exclude=logs', '--exclude=.env',
-                '--exclude=.pm2', '--exclude=.npm', '--exclude=.cache', '--exclude=app-android',
-                // La chiave dei dati non va mai accanto ai backup che apre.
-                '--exclude=chiave-dati.key', '--exclude=PRIMO-ACCESSO.txt',
-                '.'
-            ]);
-            await fs.promises.chmod(destinazione, 0o640).catch(() => {});
-            return destinazione;
-        } catch (e) {
-            logger.error('[Manutenzione] Copia del codice non riuscita:', { error: e.message });
-            return null;
-        }
-    }
-
-    // La cartella è anche la home dell'utente di sistema (.pm2, npm): tutto ciò che
-    // comincia col punto resta. Senza chiave-dati.key i file cifrati non si leggono più.
-    const ESCLUSIONI = ['/.*', '/uploads', '/protected_uploads', '/logs', '/app-android',
-                        '/public/uploads', '/public/logo.png', '/public/logo2.png',
-                        '/chiave-dati.key', '/PRIMO-ACCESSO.txt'];
-
-    // app-android resta fuori (un APK messo a mano non si perde), ma l'APK del pacchetto
-    // si copia se più nuovo e firmato con la stessa chiave.
-    async function aggiornaAppAndroid(radice) {
-        const leggi = async (cartella) => {
-            try {
-                return JSON.parse(await fs.promises.readFile(path.join(cartella, 'versione.json'), 'utf8'));
-            } catch {
-                return null;
-            }
-        };
-        const origine = path.join(radice, 'app-android');
-        const destinazione = path.join(cartellaApplicazione, 'app-android');
-        const nuova = await leggi(origine);
-        if (!Number.isInteger(nuova?.codice) || !fs.existsSync(path.join(origine, 'orion.apk'))) return;
-        const attuale = await leggi(destinazione);
-        const apkPresente = fs.existsSync(path.join(destinazione, 'orion.apk'));
-        let motivo = null;
-        if (attuale && apkPresente) {
-            if (Number.isInteger(attuale.codice) && attuale.codice >= nuova.codice) return;
-            if (attuale.certificato_sha256 && nuova.certificato_sha256 && attuale.certificato_sha256 !== nuova.certificato_sha256) {
-                motivo = 'l\'APK installato e\' firmato con un\'altra chiave';
-            }
-        }
-        if (motivo) {
-            passo(`App Android ${nuova.nome || nuova.codice}: lasciata quella installata (${motivo})`, 'saltato');
-            return;
-        }
-        passo(`App Android ${nuova.nome || nuova.codice}`);
-        try {
-            await fs.promises.mkdir(destinazione, { recursive: true });
-            // Prima l'APK, poi versione.json: un telefono non deve vedere
-            // annunciata una versione che non si scarica ancora.
-            const temporaneo = path.join(destinazione, `.orion.apk.${process.pid}`);
-            await fs.promises.copyFile(path.join(origine, 'orion.apk'), temporaneo);
-            await fs.promises.rename(temporaneo, path.join(destinazione, 'orion.apk'));
-            await fs.promises.copyFile(path.join(origine, 'versione.json'), path.join(destinazione, 'versione.json'));
-            for (const nome of ['orion.apk', 'versione.json']) await fs.promises.chmod(path.join(destinazione, nome), 0o644).catch(() => {});
-            ultimoPasso('fatto');
-        } catch (e) {
-            await fs.promises.rm(path.join(destinazione, `.orion.apk.${process.pid}`), { force: true }).catch(() => {});
-            logger.error('[Manutenzione] Copia dell\'app Android non riuscita:', { error: e.message });
-            ultimoPasso('errore');
-        }
-    }
-
-    async function copiaVersione(radice) {
-        if (eseguibilePresente('rsync')) {
-            const argomenti = ['-a', '--delete-after', '--chmod=Dgo-w,Fgo-w'];
-            ESCLUSIONI.forEach(e => argomenti.push(`--exclude=${e}`));
-            argomenti.push(`${radice}/`, `${cartellaApplicazione}/`);
-            await eseguiComando('rsync', argomenti, {}, 15 * 60 * 1000);
-            return;
-        }
-        const protette = new Set(ESCLUSIONI.filter(e => !e.slice(1).includes('/')).map(e => e.slice(1)));
-        for (const voce of await fs.promises.readdir(radice)) {
-            if (voce.startsWith('.') || protette.has(voce)) continue;
-            const destinazione = path.join(cartellaApplicazione, voce);
-            if (voce === 'node_modules') await fs.promises.rm(destinazione, { recursive: true, force: true });
-            await fs.promises.cp(path.join(radice, voce), destinazione, {
-                recursive: true, force: true,
-                filter: origine => !['public/uploads', 'public/logo.png', 'public/logo2.png']
-                    .some(p => origine === path.join(radice, p) || origine.startsWith(path.join(radice, p) + path.sep))
-            });
-        }
-    }
-
-    async function installaDipendenze(radice) {
-        const conLock = fs.existsSync(path.join(radice, 'package-lock.json'));
-        try {
-            await eseguiComando('npm', [conLock ? 'ci' : 'install', '--omit=dev', '--no-audit', '--no-fund'], {
-                cwd: radice,
-                env: { ...process.env, npm_config_update_notifier: 'false' }
-            }, 15 * 60 * 1000);
-        } catch (e) {
-            throw new Error(`L'installazione delle dipendenze non e' riuscita: ${e.message}`);
-        }
-        // npm a volte esce con successo senza aver installato niente.
-        if (!fs.existsSync(path.join(radice, 'node_modules', '.bin', 'node-pg-migrate'))) {
-            throw new Error('npm e\' terminato senza errori ma le dipendenze non risultano installate.');
-        }
-    }
-
-    function eseguiComando(comando, argomenti, opzioni = {}, tempoMassimo = 5 * 60 * 1000) {
-        return new Promise((risolvi, rifiuta) => {
-            const processo = spawn(comando, argomenti, opzioni);
-            let errori = '';
-            let uscita = '';
-            processo.stderr?.on('data', p => { errori += p.toString(); });
-            processo.stdout?.on('data', p => { uscita += p.toString(); });
-            const scadenza = setTimeout(() => {
-                processo.kill('SIGKILL');
-                rifiuta(new Error(`${comando} non ha risposto entro ${Math.round(tempoMassimo / 60000)} minuti.`));
-            }, tempoMassimo);
-            processo.on('error', e => { clearTimeout(scadenza); rifiuta(e); });
-            processo.on('close', codice => {
-                clearTimeout(scadenza);
-                if (codice === 0) return risolvi(uscita);
-                rifiuta(new Error(`${comando} e' terminato con codice ${codice}: ${(errori || uscita).trim().slice(0, 400)}`));
-            });
-        });
-    }
 
     return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico };
 }

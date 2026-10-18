@@ -6,15 +6,14 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import logger from './logger.js';
 import { pool } from './db.js';
 import { registraAudit } from './audit.js';
 import { COSTO_BCRYPT, scriviRuoli } from './autenticazione.js';
 import { passwordLimiter } from './middleware/rateLimiters.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const FILE_CODICE = path.join(__dirname, '..', 'PRIMO-ACCESSO.txt');
+export const FILE_CODICE = path.join(RADICE_DATI, 'PRIMO-ACCESSO.txt');
 
 export { REGOLA_PASSWORD } from './password.js';
 const USERNAME = /^[a-z0-9._-]{3,50}$/;

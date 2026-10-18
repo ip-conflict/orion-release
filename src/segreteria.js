@@ -12,9 +12,9 @@ import { magazzino } from './istanze.js';
 import { qrVolontariAttivi } from './pubbliche.js';
 import { runDailyExpiryCheck } from './scadenze.js';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
+import { ESITI_VISITA, IDONEO, cifraEsito, conEsitoInChiaro, esitoInChiaro } from './esitiVisite.js';
 import { cancellaFile, fileDaIndirizzi } from './eliminazionePersona.js';
 
-const ESITI_VISITA = ['Idoneo', 'Non Idoneo'];
 
 // Il certificato appena caricato non resta orfano sul disco.
 async function riferimentoInesistente(error, req) {
@@ -94,7 +94,7 @@ export function registraRotteSegreteria(app) {
 
             const nascondi = req.senzaDatiSanitari === true;
             res.json({
-                medical_records: nascondi ? [] : medicalRes.rows,
+                medical_records: nascondi ? [] : medicalRes.rows.map(conEsitoInChiaro),
                 courses: nascondi ? [] : coursesRes.rows,
                 dati_sanitari: !nascondi,
                 equipment: magazzinoAttivo ? equipmentRes.rows : [],
@@ -219,7 +219,7 @@ export function registraRotteSegreteria(app) {
                 await client.query(
                     `INSERT INTO user_medical_records (user_id, visit_type_id, last_visit_date, expiry_date, status, document_url) 
                  VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [userId, visit_type_id || 1, last_visit_date, expiry_date, status, document_url]
+                    [userId, visit_type_id || 1, last_visit_date, expiry_date, cifraEsito(status), document_url]
                 );
                 res.status(201).json({ message: 'Visita medica salvata con successo.', document_url });
             } catch (error) {
@@ -276,16 +276,13 @@ export function registraRotteSegreteria(app) {
         
         try {
             const medicalQuery = `
-            SELECT * FROM (
+            SELECT *, (scadenza IS NULL OR scadenza <= CURRENT_DATE + INTERVAL '30 days') AS in_scadenza FROM (
                 SELECT u.id, u.nome, u.cognome, 
                        (SELECT expiry_date::DATE FROM user_medical_records WHERE user_id = u.id ORDER BY last_visit_date DESC LIMIT 1) AS scadenza,
                        (SELECT status FROM user_medical_records WHERE user_id = u.id ORDER BY last_visit_date DESC LIMIT 1) AS ultimo_stato
                 FROM users u
                 WHERE (u.is_active = true OR u.is_active IS NULL) AND u.role != 'esterno'
             ) as subq
-            WHERE (scadenza IS NULL)
-               OR (scadenza <= CURRENT_DATE + INTERVAL '30 days')
-               OR (ultimo_stato != 'Idoneo')
             -- Nessun limite verso il passato: prima c'era "e non scaduta da più
             -- di 7 giorni", che faceva sparire dal cruscotto proprio chi era
             -- fuori regola da più tempo. Un volontario con la visita scaduta da
@@ -296,6 +293,10 @@ export function registraRotteSegreteria(app) {
             ORDER BY scadenza ASC NULLS FIRST, cognome ASC
         `;
             const medicalRes = await client.query(medicalQuery);
+            const daGuardare = medicalRes.rows
+                .map(({ in_scadenza, ...r }) => ({ ...r, ultimo_stato: esitoInChiaro(r.ultimo_stato), in_scadenza }))
+                .filter(r => r.in_scadenza || r.ultimo_stato !== IDONEO)
+                .map(({ in_scadenza, ...r }) => r);
 
             const coursesQuery = `
             SELECT * FROM (
@@ -316,7 +317,7 @@ export function registraRotteSegreteria(app) {
             const coursesRes = await client.query(coursesQuery);
 
             res.json({
-                expiring_medical: medicalRes.rows,
+                expiring_medical: daGuardare,
                 expired_courses: coursesRes.rows
             });
 
@@ -597,21 +598,21 @@ export function registraRotteSegreteria(app) {
                     const new_document_url = `/api/documents/certificates/${req.file.filename}`;
                     await client.query(
                         `UPDATE user_medical_records SET last_visit_date = $1, expiry_date = $2, status = $3, document_url = $4 WHERE id = $5`,
-                        [last_visit_date, expiry_date, status, new_document_url, recordId]
+                        [last_visit_date, expiry_date, cifraEsito(status), new_document_url, recordId]
                     );
                 } 
 
                 else if (delete_document) {
                     await client.query(
                         `UPDATE user_medical_records SET last_visit_date = $1, expiry_date = $2, status = $3, document_url = NULL WHERE id = $4`,
-                        [last_visit_date, expiry_date, status, recordId]
+                        [last_visit_date, expiry_date, cifraEsito(status), recordId]
                     );
                 } 
 
                 else {
                     await client.query(
                         `UPDATE user_medical_records SET last_visit_date = $1, expiry_date = $2, status = $3 WHERE id = $4`,
-                        [last_visit_date, expiry_date, status, recordId]
+                        [last_visit_date, expiry_date, cifraEsito(status), recordId]
                     );
                 }
 

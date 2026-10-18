@@ -23,9 +23,11 @@ dice se qualcuna ha un problema di sicurezza noto. Express 5 lascia
 librerie del browser (mappa, icone, PDF, QR) non stanno nel repository:
 `copy-libs.js` le copia da `node_modules` in `public/vendor` a ogni
 installazione.
-Davanti c'è Nginx, che fa da proxy, gestisce il certificato HTTPS e lascia
-passare il WebSocket. PM2 tiene acceso il processo e lo fa ripartire al
-riavvio della macchina, con un utente di sistema dedicato e mai come root.
+Il programma e il suo database girano in container Docker, uno per
+associazione (capitolo 2). Davanti c'è Nginx, che fa da proxy, gestisce il
+certificato HTTPS e lascia passare il WebSocket. Docker tiene acceso il
+processo e lo fa ripartire, anche al riavvio della macchina, con un utente di
+sistema dedicato e mai come root.
 
 Il codice del server sta in `src/`, diviso in moduli piccoli. `server.js` è
 solo il punto d'ingresso: prepara Express e i middleware, registra le rotte
@@ -62,73 +64,166 @@ tutte le associazioni: il server si scrive al primo accesso.
 
 ## 2. Installare
 
-Serve una macchina Ubuntu pulita (provata su 24.04 LTS), un indirizzo IP
-pubblico e un nome di dominio che punti a quell'indirizzo. Si clona il
-repository, si rende eseguibile lo script e lo si lancia con i privilegi di
-amministratore:
+ORION si installa in container Docker, una istanza per associazione. Una
+macchina può ospitarne una sola o parecchie: ogni istanza ha i suoi due
+container (il programma e il suo PostgreSQL) in una rete privata, una
+cartella sua sotto `/srv/orion/<nome>`, un utente di sistema suo (un numero
+da 20001 in su) e una porta sua che risponde solo sulla macchina stessa.
+Davanti a tutte c'è lo stesso Nginx, con un sito e un certificato per
+dominio. Accanto alle istanze gira l'agente (`/usr/local/sbin/orion-agente`,
+da `scripts/docker/orion-agente.sh`), che esegue gli aggiornamenti chiesti
+dalla pagina Sistema e fa i backup notturni.
+
+### Cosa serve
+
+| Cosa | Caratteristiche |
+|---|---|
+| Macchina | Ubuntu Server 24.04 LTS, processore x86, 4 GB di RAM per una o due istanze (8–16 GB per di più), SSD da almeno 80 GB, rete via cavo |
+| Indirizzo | IPv4 pubblico e statico, non dietro CGNAT |
+| Nomi | un nome per istanza (anche sottodomini dello stesso dominio), con un record A verso l'indirizzo pubblico |
+| Accesso | un utente con sudo e OpenSSH, raggiunto dal tecnico attraverso una VPN |
+
+Per un server in sede servono anche il gruppo di continuità e, nel BIOS, la
+ripartenza automatica al ritorno della corrente; il disco esterno per le
+copie è descritto nel capitolo 7.
+
+Della rete il server vuole poco, ma quel poco va chiesto a chi gestisce il
+router o il firewall. La macchina ha un indirizzo fisso nella rete locale
+(una prenotazione DHCP). Il router inoltra a lei le porte TCP 80 e 443 e
+nient'altro: le porte delle istanze, del database e la 22 restano chiuse,
+perché le istanze rispondono solo sulla macchina stessa e il tecnico entra
+dalla VPN. In uscita la macchina deve raggiungere internet sulle porte 80 e
+443 (aggiornamenti di Ubuntu, registri delle immagini, Let's Encrypt, GitHub
+per gli aggiornamenti e il bollettino di allerta), 53 per il DNS, 123 per
+l'ora e la porta del server di posta (587 o 465); se il firewall ispeziona il
+traffico cifrato, la macchina va esclusa. Se la sala operativa è nella stessa
+rete, il router deve saper raggiungere il server con il suo nome pubblico (NAT
+loopback), oppure un DNS locale deve far puntare i nomi all'indirizzo
+interno: così la sala lavora anche con internet giù. Con IPv6 pubblico, o si
+inoltrano anche lì le porte 80 e 443, o non si pubblicano record AAAA.
+
+### Preparare la macchina
+
+Una volta per macchina, dalla cartella del codice:
 
 ```
-git clone https://github.com/ip-conflict/orion-release.git
-cd orion-release
-chmod +x ./setup.sh
-sudo ./setup.sh
+git clone https://github.com/ip-conflict/orion-release.git && cd orion-release
+sudo scripts/docker/prepara-host.sh
 ```
 
-Lo script è interattivo. Installa Nginx, PostgreSQL, Node.js (la
-versione 24), PM2, Certbot, il firewall e cron; copia l'applicazione nella
-cartella di produzione (`/var/www/<dominio>`); crea il database e il suo
-utente; crea l'utente di sistema che farà girare il programma; prova a
-ottenere il certificato da Let's Encrypt e, se non ci riesce, chiede di
-caricarne uno a mano; configura il backup notturno e ne fa subito un primo di
-prova. Su una macchina senza IPv6 configura Nginx solo in IPv4, invece di
-fermarsi su un errore.
+Lo script installa Docker con il suo plugin compose, jq, rsync, Nginx,
+Certbot e il firewall (solo SSH e Nginx), copia l'agente in
+`/usr/local/sbin/orion-agente` e accende i suoi due timer di systemd:
+`orion-agente.timer` ogni minuto, `orion-backup.timer` alle 3:30. Mette
+anche in Nginx un sito predefinito che non risponde: chi arriva con
+l'indirizzo IP, o con un nome che non è di un'istanza, non finisce dentro
+nessuna.
+
+### Creare un'istanza
+
+```
+sudo scripts/docker/nuova-istanza.sh <nome> <dominio> <versione>
+```
+
+Il nome è fatto di minuscole, cifre e trattini, il dominio deve già puntare
+alla macchina. Lo script sceglie la prima porta libera da 3101 in su, genera
+password e segreti, prepara le cartelle con i permessi giusti, scarica
+l'immagine `ghcr.io/ip-conflict/orion:<versione>`, controlla che contenga
+davvero quella versione, avvia i container e aspetta che il programma
+risponda. Poi scrive il sito di Nginx e chiede il certificato a Let's Encrypt
+(con `ORION_EMAIL` per l'indirizzo degli avvisi); se non ci riesce lo dice, e
+basta rilanciare `sudo certbot --nginx -d <dominio>` quando le porte sono
+aperte. `--senza-nginx` salta questa parte.
+
+L'immagine si può anche costruire sulla macchina, per esempio prima che
+l'immagine ufficiale di una versione sia pubblicata: `sudo docker build -t
+localhost/orion:1.2.3 .` dalla cartella del codice, e l'istanza si crea con
+`ORION_IMMAGINE=localhost/orion`. Il prefisso `localhost/` non è un vezzo:
+con un nome semplice l'agente chiederebbe gli aggiornamenti a Docker Hub, dove
+chiunque può pubblicare un'immagine con quel nome. Per aggiornare si
+costruisce la versione nuova con lo stesso nome; quando l'immagine ufficiale
+c'è, basta mettere `ORION_IMMAGINE=ghcr.io/ip-conflict/orion` nel `.env`
+dell'istanza.
 
 Il primo amministratore non si chiede durante l'installazione: si crea dal
 browser. ORION, avviato senza amministratori, genera un codice di
-configurazione monouso e lo scrive nel file `PRIMO-ACCESSO.txt` della
-cartella dell'applicazione, leggibile solo dal suo utente e da root; lo
-script lo mostra alla fine, insieme all'indirizzo da aprire. La pagina di
-accesso, finché l'amministratore non c'è, mostra al posto del login il modulo
+configurazione monouso e lo scrive in `dati/PRIMO-ACCESSO.txt` dentro la
+cartella dell'istanza; lo script lo mostra alla fine. La pagina di accesso,
+finché l'amministratore non c'è, mostra al posto del login il modulo
 "Configurazione iniziale": codice, nome, cognome, username, email facoltativa
 e password, con le stesse regole di ogni altra password di ORION. Il codice
 serve perché fra la fine dell'installazione e il primo accesso l'indirizzo è
 già pubblico, e senza codice l'amministratore lo diventerebbe il primo che
 arriva. Creato l'amministratore, il file si cancella, il modulo non compare
-più e la rotta risponde 409. Se il codice si perde, lo si rilegge con
-`sudo cat /var/www/<dominio>/PRIMO-ACCESSO.txt`. Il vecchio `create-admin.js`
-resta come strumento di emergenza, per chi ha accesso al server e deve
-ricreare un amministratore a mano.
+più e la rotta risponde 409. Il vecchio `create-admin.js` resta come strumento
+di emergenza, dentro il container: `sudo docker compose -f
+/srv/orion/<nome>/compose.yaml exec -e ADMIN_USERNAME=<nome> -e
+ADMIN_PASSWORD=<password> app node create-admin.js`.
+
+### Com'è fatta un'istanza
+
+| Nella cartella dell'istanza | Cosa contiene | Di chi è |
+|---|---|---|
+| `compose.yaml` | la descrizione dei due container, uguale per tutte | root |
+| `.env` | variabili del compose: immagine, versione, porta, utente, regola degli aggiornamenti, password del database | root, 600 |
+| `orion.env` | segreti e impostazioni del programma | root, 600 |
+| `dati/` | file caricati, loghi, APK, registri, `PRIMO-ACCESSO.txt` | istanza |
+| `chiave/` | `chiave-dati.key` | istanza |
+| `postgres/` | i file del database | PostgreSQL |
+| `backup/auto/` | backup fatti dall'applicazione | istanza |
+| `backup/notte/`, `backup/file/` | backup notturni, quelli prima di aggiornamenti e ritorni, copia dei file | root, letti dall'istanza |
+| `agente/richieste/` | la richiesta che la pagina Sistema scrive all'agente | istanza |
+| `agente/stato/` | stato dell'agente, operazione in corso, versioni passate di qui, ultima copia su disco | root, letti dall'istanza |
+
+Il programma gira con il file system a sola lettura, senza privilegi del
+kernel e senza poterne acquistare; il codice sta nell'immagine e non lo può
+cambiare. I dati vivono nelle cartelle montate, indicate dalle variabili
+`ORION_DATI_DIR`, `ORION_CHIAVE_FILE`, `ORION_BACKUP_DIR`,
+`ORION_BACKUP_NOTTE_DIR` e `ORION_BACKUP_FILE_DIR`, già impostate
+nell'immagine. Il database sta in una rete senza uscita verso internet; ha un
+ruolo suo, `orion_db_user`, padrone del database `orion_db` ma non
+superutente. I limiti di memoria (`ORION_MEMORIA` e `ORION_MEMORIA_DB` nel
+`.env`, di base 1 GB e 512 MB) impediscono che un'istanza rallenti le altre.
+
+Le istanze sulla stessa macchina non vedono i file né il database delle
+altre, ma la macchina resta una: chi è root, o amministra Docker, vede tutto,
+e il kernel è uno solo. Chi gestisce un server con più associazioni è
+responsabile del trattamento per conto di ognuna (art. 28 del GDPR), e la
+loro valutazione d'impatto lo deve dire. Due istanze possono stare su
+sottodomini dello stesso dominio: i cookie di sessione sono legati al nome
+esatto e firmati con segreti diversi, ma chi possiede il dominio comanda i
+nomi di tutte e due.
+
+Un'istanza si sposta su un'altra macchina creandone una nuova con la sua
+chiave (`sudo ORION_CHIAVE_DA=<file della chiave> scripts/docker/nuova-istanza.sh
+...`), entrando con un amministratore provvisorio, caricando e ripristinando
+dalla pagina Sistema l'ultimo backup, e copiando `uploads` e
+`protected_uploads` in `dati/` con il proprietario dell'istanza (`chown -R`).
+Si toglie con un ultimo backup, `docker compose -f
+/srv/orion/<nome>/compose.yaml down`, la cancellazione della sua cartella e
+del suo sito in `/etc/nginx/sites-enabled`.
 
 
 ## 3. Configurazione
 
-La configurazione di sistema sta nel file `.env` della cartella
-dell'applicazione, scritto da `setup.sh`. Le voci che contano sono le
-credenziali del database (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USER`,
-`DB_PASSWORD`, e `DB_SSL` con `DB_SSL_STRICT` se il database è su un'altra
-macchina), i segreti per firmare le sessioni e i cookie (`JWT_SECRET`,
-`COOKIE_SECRET`), il dominio (`DOMAIN_NAME`), la porta interna (`PORT`, di
-norma 3000) e il fuso orario (`TZ`, Europe/Rome). Facoltative sono
-`ORION_BACKUP_DIR`, la cartella dei backup che l'applicazione fa da sola
-(predefinita `/var/backups/orion/auto`), e `ORION_BACKUP_RETENTION_DAYS`,
-quanti giorni tenerli (predefinito 30).
+La configurazione di sistema di un'istanza sta in due file della sua
+cartella, scritti da `nuova-istanza.sh` e leggibili solo da root.
 
-I due segreti non vanno mai cambiati a server acceso senza sapere cosa si fa:
-cambiare `JWT_SECRET` fa uscire tutti. Sono segreti distinti: un'installazione
-nata senza `COOKIE_SECRET` non firma più i cookie con `JWT_SECRET` ma con un
-segreto ricavato da quello (un HMAC, da cui non si risale all'altro), e
-`update.sh` gliene scrive una propria in `.env` al primo aggiornamento; chi è
-collegato in quel momento rifà l'accesso una volta.
+| File | Voce | A cosa serve |
+|---|---|---|
+| `.env` | `ORION_IMMAGINE`, `ORION_VERSIONE`, `ORION_IMMAGINE_RIF` | da dove vengono le immagini, la versione in servizio e la sua impronta; le ultime due le scrive l'agente |
+| `.env` | `ORION_PORTA`, `ORION_UID` | la porta sulla macchina e l'utente dell'istanza |
+| `.env` | `ORION_AGGIORNAMENTI` | `automatici`, `chiedi` o `bloccati` (capitolo 7) |
+| `.env` | `ORION_MEMORIA`, `ORION_MEMORIA_DB`, `ORION_POSTGRES_IMMAGINE` | limiti di memoria e immagine del database |
+| `.env` | `POSTGRES_PASSWORD`, `ORION_DB_PASSWORD` | le password del database |
+| `orion.env` | `JWT_SECRET`, `COOKIE_SECRET` | i segreti di sessioni e cookie |
+| `orion.env` | `DOMAIN_NAME`, `TZ` | il dominio e il fuso orario |
+| `orion.env` | `ORION_BACKUP_RETENTION_DAYS` | quanti giorni tenere i backup (30) |
+| `orion.env` | `ORION_REGISTRO_GIORNI` | dopo quanti giorni escono le voci del registro delle operazioni (0, mai; vedi lo storico inalterabile) |
 
-Con `DB_SSL=true` la connessione al database è cifrata e il certificato del
-server PostgreSQL si verifica, come qualunque certificato TLS. Se il
-certificato è firmato da un'autorità propria (il caso tipico di un database
-gestito o interno), il suo certificato si indica con `DB_SSL_CA`, il percorso
-del file PEM. `DB_SSL_STRICT=false` spegne la verifica: la connessione resta
-cifrata ma non si sa con chi si parla, e il server lo ricorda nel log a ogni
-avvio. Le stesse regole valgono per le migrazioni lanciate dall'aggiornamento
-(`sslmode=verify-full`, con `sslrootcert` se c'è `DB_SSL_CA`) e per
-`create-admin.js`.
+Dopo una modifica si riparte con `sudo docker compose -f
+/srv/orion/<nome>/compose.yaml up -d`. I due segreti non vanno mai cambiati
+senza sapere cosa si fa: cambiare `JWT_SECRET` fa uscire tutti.
 
 La mappa del centro operativo usa servizi di OpenStreetMap chiesti dal
 browser della sala, non dal server: le tessere della mappa
@@ -141,20 +236,19 @@ resta vuota e il percorso diventa linea d'aria; tutto il resto funziona.
 Il bollettino di allerta, se acceso nelle Impostazioni, è l'unica cosa che
 il server stesso scarica da internet: ogni quarto d'ora chiede
 `raw.githubusercontent.com` (vedi "Il bollettino di allerta" più avanti).
-Se la rete dell'ente blocca le uscite del server, quell'indirizzo va lasciato
-passare. `ORION_ALLERTA_URL` sostituisce l'indirizzo, per le prove.
+`ORION_ALLERTA_URL` sostituisce l'indirizzo, per le prove.
 
-Gli indirizzi degli aggiornamenti (il servizio delle release, il manifesto, il
-pacchetto) li sceglie l'amministratore, ma il server non deve
+Gli indirizzi da cui controllare le versioni nuove (il servizio delle
+release, il manifesto) li sceglie l'amministratore, ma il server non deve
 diventare il modo per raggiungere la rete interna. Per questo
 `src/indirizziEsterni.js` accetta solo `https` verso indirizzi pubblici: il
 nome si risolve prima di collegarsi, un indirizzo privato, di loopback,
 link-local, CGNAT o multicast viene rifiutato, e lo stesso controllo si
 ripete a ogni reindirizzamento. Il salvataggio della configurazione rifiuta
-subito un indirizzo che non passa. Chi tiene gli aggiornamenti su un server
+subito un indirizzo che non passa. Chi tiene il manifesto su un server
 dell'ente, raggiungibile solo dalla rete interna, mette
-`ORION_AGGIORNAMENTI_RETE_LOCALE=true` in `.env`: allora sono ammessi anche
-`http` e gli indirizzi interni.
+`ORION_AGGIORNAMENTI_RETE_LOCALE=true` in `orion.env`: allora sono ammessi
+anche `http` e gli indirizzi interni.
 
 Tutto il resto si configura dall'applicazione, nelle Impostazioni, e sta nel
 database: la posta in uscita (SMTP), il logo e il nome dell'associazione, i
@@ -174,22 +268,30 @@ Il database contiene tutto quello che è testo e numeri: utenti, ruoli,
 emergenze, segnalazioni con il loro diario, squadre, fascicoli, magazzino,
 verbali, notifiche, registro delle operazioni.
 
-I file caricati stanno sul disco, in due cartelle. `uploads/photos` tiene le
-foto profilo. Sul web la foto passa prima da `public/js/ritaglio-foto.js`
-(`window.ritagliaFoto(file)`, usato dal profilo e dalla segreteria), che la
-inquadra in una cornice 5 x 6 e carica un JPEG di 500 x 600; l'app fa lo
-stesso con `RitaglioFoto.kt`. Il server la tratta come prima. `protected_uploads` tiene tutto il resto, che si legge solo
-attraverso il server con i permessi giusti: certificati e attestati, immagini
-e documenti delle segnalazioni, file del magazzino (verbali firmati,
-fatture), l'archivio dei documenti del gruppo (`documenti-gruppo`), resoconti
-delle emergenze chiuse, file temporanei delle importazioni, la cartografia
-del territorio (`cartografia/territorio.mbtiles` con accanto
-`territorio.json`, quello che il server ne ha letto; la cartella si sposta
-con `ORION_CARTOGRAFIA_DIR`). Nginx non serve mai direttamente queste cartelle.
+I file caricati stanno nella cartella `dati/` dell'istanza, in due cartelle.
+`uploads/photos` tiene le foto profilo. Sul web la foto passa prima da
+`public/js/ritaglio-foto.js` (`window.ritagliaFoto(file)`, usato dal profilo e
+dalla segreteria), che la inquadra in una cornice 5 x 6 e carica un JPEG di
+500 x 600; l'app fa lo stesso con `RitaglioFoto.kt`. `protected_uploads` tiene
+tutto il resto, che si legge solo attraverso il server con i permessi giusti:
+certificati e attestati, immagini e documenti delle segnalazioni, file del
+magazzino (verbali firmati, fatture), l'archivio dei documenti del gruppo
+(`documenti-gruppo`), resoconti delle emergenze chiuse, file temporanei delle
+importazioni, la cartografia del territorio (`cartografia/territorio.mbtiles`
+con accanto `territorio.json`, quello che il server ne ha letto; la cartella
+si sposta con `ORION_CARTOGRAFIA_DIR`). Nginx non serve mai direttamente
+queste cartelle. Accanto stanno `loghi/` (i loghi caricati; quelli di serie
+vengono dall'immagine) e `app-android/`, dove a ogni avvio arriva l'APK
+dell'immagine se è più recente e firmato con la stessa chiave.
 
-I registri del programma stanno in `logs/` (quelli di PM2) e vanno guardati
-per primi quando qualcosa non torna: gli invii di posta riusciti e falliti,
-per esempio, sono scritti lì.
+I registri del programma stanno in `dati/logs/` e si leggono anche con
+`sudo docker compose -f /srv/orion/<nome>/compose.yaml logs app`; vanno
+guardati per primi quando qualcosa non torna: gli invii di posta riusciti e
+falliti, per esempio, sono scritti lì. Il registro dell'agente è
+`/var/log/orion-agente.log`.
+
+Fuori dai container, per lo sviluppo, `ORION_DATI_DIR` non c'è e i dati
+stanno nella cartella del codice, come i backup (`backup/`).
 
 
 ## 5. Il database e le migrazioni
@@ -203,13 +305,16 @@ risultato di applicarle una dopo l'altra a un database vuoto. Una migrazione
 nuova si crea con `npm run migrate:create -- nome`: node-pg-migrate le dà un
 nome col timestamp, che la mette in coda alle altre.
 
-Le migrazioni si applicano da sole con l'installazione, con l'aggiornamento e
-a ogni avvio del server (`src/migrazioni.js`). Di solito non ce n'è nessuna da
+Le migrazioni si applicano a ogni avvio del server (`src/migrazioni.js`) e,
+prima di cambiare versione, dall'agente con l'immagine nuova
+(`scripts/migrazioni.mjs su`). Di solito all'avvio non ce n'è nessuna da
 fare; servono dopo il ripristino di un backup di una versione precedente, che
 riporta il database allo schema di allora. Se non riescono, il server parte lo
 stesso e lo scrive nel registro, così l'amministratore può entrare e
-ripristinare un altro backup. A mano si lanciano con `npm run migrate`, con
-`DATABASE_URL` che punta al database.
+ripristinare un altro backup; il controllo di salute (`/api/salute`) però
+risponde 503, e l'agente lo vede. A mano si lanciano con `sudo docker compose
+-f /srv/orion/<nome>/compose.yaml run --rm --no-deps app node
+scripts/migrazioni.mjs su`.
 
 Un database nato prima della 1.0 (un'installazione di prova, un backup
 vecchio) ha ancora in `pgmigrations` le 37 righe di allora. Prima di ogni
@@ -269,7 +374,7 @@ accensione utile.
 
 Una volta al giorno pulisce i token revocati, le chiavi d'idempotenza del
 magazzino più vecchie di una settimana e la coda delle notifiche. Ogni sei
-ore controlla se il backup notturno è stato saltato e, se sì, lo recupera.
+ore controlla se il backup notturno è stato saltato e, se sì, ne fa uno suo.
 
 Alla chiusura di un'emergenza fa un backup del database, scrive il
 resoconto, chiude gli accessi esterni temporanei, fa scadere le notifiche
@@ -293,72 +398,115 @@ amministratori, se la posta è configurata.
 
 ## 7. Backup, ripristino, aggiornamenti
 
-Il backup notturno lo fa cron alle 3:30, come root, con `scripts/backup.sh`:
-database e file caricati in `/var/backups/orion`, con il log in
-`/var/log/orion-backup.log`. Poiché lo scrive root, l'utente
-dell'applicazione non può cancellarlo. I file sono di root con il gruppo
-dell'applicazione e permessi 640, le cartelle 750: l'applicazione li legge
-per elencarli e ripristinarli, nessun altro utente della macchina li vede.
-Oltre a questo l'applicazione fa i suoi backup (alla chiusura di
-un'emergenza, prima di un ripristino o di un aggiornamento, e quelli di
-recupero) nella cartella `auto`.
+Il backup notturno lo fa l'agente alle 3:30 per tutte le istanze
+(`orion-backup.timer`). Il dump lo scrive un container nuovo dell'immagine in
+servizio, non il processo che risponde in rete; è cifrato con la chiave
+dell'istanza e va in `backup/notte`, insieme alla copia di `uploads` e
+`protected_uploads` in `backup/file`. I file sono di root con il gruppo
+dell'istanza e permessi 640: il programma li vede, li verifica e li
+ripristina, ma non li può cancellare. I dump più vecchi di
+`ORION_BACKUP_RETENTION_DAYS` giorni escono. Oltre a questi, l'applicazione
+fa i suoi backup in `backup/auto`: alla chiusura di un'emergenza, a richiesta
+dalla pagina Sistema, prima di un ripristino, e quando si accorge che
+l'ultimo ha più di venti ore.
 
-Tutti questi backup stanno sulla stessa macchina: proteggono da un errore,
-non dalla rottura del disco. Una copia va scaricata dalla pagina Sistema e
-tenuta altrove, con regolarità.
+Il nome di ogni backup dice di chi è, quando e perché, così un file scaricato
+o copiato fuori dalla sua cartella si riconosce da solo:
+`orion_<istanza>_db_<data>_<ora>_<motivo>.sql.gz`, con l'ora italiana
+(`TZ` dell'istanza) e un motivo fra `notte`, `manuale`, `emergenza-<codice>`,
+`pre-aggiornamento`, `pre-ritorno`, `pre-ripristino`, `recupero` e `caricato`
+(`src/nomiBackup.js`; l'istanza la dà `ORION_ISTANZA`, o il primo pezzo del
+dominio). I backup con il nome di prima (`db_<data>_<ora>...`, ora UTC) restano
+validi, e scaricati dalla pagina prendono davanti il nome dell'istanza.
+
+### Il disco esterno
+
+I backup sulla stessa macchina proteggono da un errore, non dalla rottura del
+server. Per la copia fuori l'agente sa usare un disco USB: lo si prepara una
+volta con
+
+```
+sudo orion-agente disco prepara /dev/sdX
+```
+
+che rifiuta un disco in uso (quello del sistema, per esempio), chiede di
+scrivere CANCELLA, lo formatta con l'etichetta `ORION-COPIE` e lo aggiunge a
+`/etc/fstab` senza montarlo all'avvio. Dopo ogni backup notturno, se il disco
+è collegato, l'agente lo monta in `/mnt/orion-copie`, ci copia i dump nuovi
+di ogni istanza (`<istanza>/db/`) e un archivio dei suoi file
+(`<istanza>/file/orion_<istanza>_file_<data>_<ora>.tar.gz`), e lo smonta: il resto del tempo il disco
+non lo vede nessuno, nemmeno un programma impazzito sul server. Sul disco va
+solo roba cifrata con la chiave dell'istanza: i dump lo sono già, l'archivio
+dei file si cifra durante la copia, e senza chiave non si scrive. Sul disco
+restano i dump di 90 giorni e gli ultimi tre archivi dei file.
+
+Due dischi preparati allo stesso modo si alternano: uno resta collegato,
+l'altro sta a casa di un responsabile, e una volta al mese si scambiano. La
+copia va su quello collegato; `sudo orion-agente disco copia` la fa subito,
+`sudo orion-agente disco stato` dice spazio libero e ultime copie. La pagina
+Sistema mostra a ogni istanza la data dell'ultima copia, gialla dopo una
+settimana e rossa dopo due. Un dump del disco si ripristina dalla pagina
+Sistema con "Carica un backup da un file"; fuori da ORION, dump e archivi si
+decifrano con `scripts/decifra-backup.mjs` e la chiave di recupero stampata,
+che per questo va tenuta lontana dai dischi.
+
+### Il ripristino
 
 Il ripristino si fa dalla pagina Sistema ed è una transazione sola: se
 qualcosa va storto a metà, il database resta com'era. Prima di cominciare
 ORION salva i dati attuali; durante il lavoro risponde "in manutenzione" a
-tutti; alla fine applica le migrazioni mancanti e si riavvia. Il dump passa a
-psql senza `.psqlrc` e attraverso un filtro: un backup di pg_dump ha solo tre
-comandi con la barra rovesciata (`\restrict`, `\unrestrict` e il `\.` che
-chiude i dati di un COPY), e un archivio con qualunque altro, come `\!` che
-esegue un programma, viene rifiutato prima di cominciare.
+tutti; alla fine applica le migrazioni mancanti ed esce, e Docker lo fa
+ripartire. Il dump passa a psql senza `.psqlrc` e attraverso un filtro: un
+backup di pg_dump ha solo tre comandi con la barra rovesciata (`\restrict`,
+`\unrestrict` e il `\.` che chiude i dati di un COPY), e un archivio con
+qualunque altro, come `\!` che esegue un programma, viene rifiutato prima di
+cominciare. Se psql si ferma, il messaggio riporta la sua riga d'errore.
 
-L'aggiornamento si fa dalla pagina Sistema oppure dalla riga di comando con
-`sudo ./update.sh`. L'ordine è pensato perché un guasto non lasci le cose a
-metà: backup, scaricamento e verifica del pacchetto, dipendenze installate
-nella cartella di lavoro accanto al pacchetto nuovo, migrazioni lette dal
-pacchetto nuovo, copia del codice attuale, sostituzione dei file (dipendenze
-comprese), riavvio. Se dipendenze o migrazioni falliscono, nessun file è
-ancora stato toccato. La sostituzione usa rsync con `--delete-after` ma non
-tocca i file nascosti della cartella, che è anche la home dell'utente di
-sistema (`.pm2`, `.npm`, `.npmrc`, `.env`), i dati caricati, i loghi, i
-registri e `app-android`. Il controllo delle nuove versioni si fa a mano con
-"Controlla adesso"; acceso, quello giornaliero avvisa gli amministratori con
-una notifica e un'email. ORION non si aggiorna mai da solo, e con
-un'emergenza aperta non si aggiorna proprio.
+### Gli aggiornamenti
+
+Il controllo delle versioni nuove si fa a mano con "Controlla adesso";
+acceso, quello giornaliero avvisa gli amministratori con una notifica e
+un'email. ORION non si aggiorna mai da solo, e con un'emergenza aperta non si
+aggiorna proprio.
+
+L'aggiornamento non sostituisce file: cambia immagine, e lo fa l'agente. La
+pagina Sistema scrive soltanto una richiesta (identificativo, tipo, versione)
+in `agente/richieste/richiesta`. Al giro successivo l'agente la legge dentro il
+container, con `docker compose exec`: un collegamento simbolico messo lì dal
+programma punterebbe a un file del container, mai dell'host. Controlla ogni
+campo e guarda la regola dell'istanza (`ORION_AGGIORNAMENTI`: `automatici`,
+`chiedi` o `bloccati`). Scarica l'immagine nuova e controlla la versione
+scritta nel suo `package.json`; fa un backup `pre-aggiornamento` in
+`backup/notte`; applica le migrazioni con l'immagine nuova in un container a
+parte; scrive nel `.env` l'impronta dell'immagine nuova (`ORION_IMMAGINE_RIF`,
+il digest: gira esattamente quello che è stato pubblicato) e ricrea il
+container del programma. Se entro quattro minuti il controllo di salute non
+passa, annulla le migrazioni con i file della versione nuova e rimette
+l'immagine di prima. Ogni passo finisce in `agente/stato/operazione.json`, che
+la pagina Sistema mostra anche dopo il riavvio.
+
+Con `chiedi` la richiesta resta in attesa finché il gestore non scrive
+`sudo orion-agente approva <nome>` (o `rifiuta`); con `bloccati` è rifiutata
+subito, e la pagina Sistema lo dice prima ancora di provare.
+`sudo orion-agente stato` elenca le istanze con versione, porta, regola e
+salute; `sudo orion-agente aggiorna <nome> <versione>` aggiorna senza
+passare dalla pagina.
 
 Si torna a una versione precedente dalla stessa pagina, riquadro "Tornare a
-una versione precedente". Ogni aggiornamento dalla pagina Sistema lascia nella
-cartella dei backup dell'applicazione due file: il backup del database fatto
-prima (`db_<data>_pre-aggiornamento.sql.gz`) e il codice della versione
-lasciata (`codice_<data>_v<versione>.tar.gz`, senza `node_modules`, `.env` e
-chiave dei dati). L'elenco mostra una riga per versione, con la versione letta
-dal `package.json` dentro l'archivio. Il ritorno mette da parte database e
-codice attuali (`pre-ritorno` e un nuovo `codice_`), scompatta la versione
-scelta nella cartella di lavoro, ne installa le dipendenze e la copia al posto
-di quella attuale come fa l'aggiornamento. Di base i dati restano quelli di
-adesso: le migrazioni che la versione scelta non conosce (quelle in
-`pgmigrations` che non sono nella sua cartella `migrations`) si annullano con
-il loro `down`, dalla più recente, in una transazione sola, usando i file
-della versione ancora installata. Le righe restano; si perdono solo le
+una versione precedente". Le versioni proposte sono quelle passate davvero di
+qui, con il loro digest e l'elenco delle loro migrazioni, in
+`agente/stato/versioni.json`: il programma non può chiedere un'immagine
+qualunque. Di base i dati restano quelli di adesso: le migrazioni che la
+versione scelta non conosce si annullano con il loro `down`, dalla più
+recente, in una transazione sola, con l'immagine in servizio
+(`scripts/migrazioni.mjs verso`). Le righe restano; si perdono solo le
 tabelle e le colonne aggiunte dopo, con il loro contenuto. Se una di quelle
-migrazioni non si può annullare (manca il file o non sono le ultime
-applicate) si torna solo riportando anche i dati. Con "Riporta anche i dati a
-com'erano" si ripristina il backup di quel momento, e quello che è stato
-fatto dopo resta solo nel backup `pre-ritorno`. Tornando avanti, le
-migrazioni annullate si riapplicano da sole all'avvio. Gli archivi del codice non scadono; i backup del database sì
-(`ORION_BACKUP_RETENTION_DAYS`, 30 giorni), e dopo una versione si può
-riprendere solo col programma. Per tornare avanti si aggiorna di nuovo.
-
-Fino alla 3.36 l'aggiornamento dalla pagina Sistema cancellava `.pm2`: PM2
-restava acceso ma senza più rispondere, e il primo `update.sh` successivo si
-fermava su "Process Orion not found". Da quelle versioni si aggiorna con
-`update.sh`, che adesso se ne accorge, ferma i processi rimasti dell'utente
-dell'applicazione e riavvia ORION da capo.
-
+migrazioni non si può annullare (non sono le ultime applicate) si torna solo
+riportando anche i dati. Con "Riporta anche i dati a com'erano" si ripristina
+il backup fatto quando quella versione era stata lasciata
+(`scripts/ripristina-db.mjs`, con gli stessi controlli della pagina Sistema).
+In tutti e due i casi prima si fa un backup `pre-ritorno`. Per tornare avanti
+si aggiorna di nuovo.
 
 ### Pubblicare una versione
 
@@ -376,106 +524,74 @@ argomento, facoltativo, alza la versione minima accettata e va usato solo
 quando il server nuovo non funziona più con le app vecchie. I due file di
 `app-android` si mettono nel commit del server.
 
-Poi si provano server e app su un'istanza di prova (`npm test`, capitolo 11)
-e si porta il numero di versione al nuovo valore con `npm version 1.2.3
---no-git-tag-version`, che cambia anche `package-lock.json`. Il codice di
-quel commit si copia in `orion-release`, si fa il commit, si crea il tag
-`v1.2.3` e da quel tag una release su GitHub con le note: sono le note che gli
-amministratori leggono nella pagina Sistema prima di aggiornare. Una release in
-bozza o segnata come pre-release non viene proposta a nessuno. Alla fine, da
-un'installazione di prova, "Controlla adesso" nella pagina Sistema deve
-proporre la versione nuova e l'aggiornamento deve andare a buon fine.
-
-Se ci si dimentica `npm version`, l'aggiornamento dalla pagina Sistema mette
-comunque il numero della release nel `package.json` installato; con
-`update.sh` invece resta quello scritto nel pacchetto, e la pagina Sistema
-continuerebbe a proporre la stessa versione.
+Poi si provano server e app (capitolo 11) e si porta il numero di versione al
+nuovo valore con `npm version 1.2.3 --no-git-tag-version`, che cambia anche
+`package-lock.json`. Il codice di quel commit si copia in `orion-release`, si
+fa il commit, si crea il tag `v1.2.3` e da quel tag una release su GitHub con
+le note: sono le note che gli amministratori leggono nella pagina Sistema
+prima di aggiornare. Una release in bozza o segnata come pre-release non viene
+proposta a nessuno. La release fa partire il workflow
+`.github/workflows/immagine.yml`, che pubblica `ghcr.io/<proprietario>/orion:<versione>`
+con nel `package.json` il numero della release; il pacchetto va reso pubblico
+una volta nelle impostazioni di GitHub, altrimenti le macchine non lo
+scaricano. Prima di annunciare la versione va controllato che il workflow sia
+finito bene, perché senza immagine l'agente risponde che la versione non c'è;
+alla fine, da un'istanza di prova, l'aggiornamento dalla pagina Sistema deve
+andare a buon fine.
 
 Chi non usa GitHub pubblica un manifesto JSON su un indirizzo proprio e lo
-indica nella pagina Sistema. Servono `versione` e `pacchetto` (l'indirizzo
-https del `.tar.gz`); `note`, `pubblicata_il` e `sha256` sono facoltativi, e
-con `sha256` l'aggiornamento controlla l'impronta del pacchetto prima di
-scompattarlo.
+indica nella pagina Sistema; serve `versione`, `note` e `pubblicata_il` sono
+facoltativi. Il manifesto dice soltanto che c'è una versione nuova: quale
+immagine scaricare lo decide l'agente, con `ORION_IMMAGINE` nel `.env`
+dell'istanza.
 
 ```json
-{ "versione": "1.2.3", "note": "Novità...", "pacchetto": "https://esempio.it/orion-1.2.3.tar.gz", "sha256": "…" }
+{ "versione": "1.2.3", "note": "Novità..." }
 ```
 
-### Aggiornare Node.js
+### Node.js e PostgreSQL
 
-ORION gira su Node.js 22.13 o più recente (`engines` in `package.json`) ed è
-provato su Node 24, la versione LTS attiva. `setup.sh` installa la 24. Su un
-server già installato con la 22 (supportata fino ad aprile 2027) il passaggio
-si fa a emergenza chiusa, dopo un backup dalla pagina Sistema:
-
-```
-curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh
-sudo bash /tmp/nodesource_setup.sh
-sudo apt-get install -y nodejs
-cd /var/www/<dominio>
-sudo -u orion_app npm rebuild
-sudo -u orion_app pm2 update
-```
-
-`npm rebuild` ricompila i moduli nativi (bcrypt) per la versione nuova;
-`pm2 update` riavvia PM2 e l'applicazione con il Node appena installato.
-`node -v` deve dire v24, e la pagina Sistema deve rispondere come prima.
-
-### Aggiornare PostgreSQL
-
-`setup.sh` installa il PostgreSQL della distribuzione: la 14 su Ubuntu 22.04,
-la 16 su Ubuntu 24.04. La 14 non riceve più aggiornamenti di sicurezza da
-novembre 2026, e `setup.sh` lo segnala. ORION è provato sulla 16; il
-passaggio si fa con gli strumenti di Ubuntu, che spostano i dati e le
-impostazioni di accesso, a emergenza chiusa:
-
-```
-# 1. Backup dalla pagina Sistema, e uno completo a parte
-sudo -u postgres pg_dumpall > /root/prima-di-postgres-16.sql
-# 2. Il repository ufficiale di PostgreSQL e la versione nuova
-sudo apt-get install -y postgresql-common
-sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-sudo apt-get install -y postgresql-16
-# 3. L'applicazione si ferma; il cluster vuoto creato dall'installazione si toglie
-sudo -u orion_app pm2 stop Orion
-sudo pg_dropcluster 16 main --stop
-# 4. I dati passano dalla 14 alla 16, che prende la porta 5432
-sudo pg_upgradecluster 14 main
-# 5. Si riparte e si controlla
-sudo -u orion_app pm2 start Orion
-```
-
-Il vecchio cluster resta fermo sulla porta 5433: se qualcosa non va si torna
-indietro senza perdere niente. Quando ORION ha lavorato qualche giorno sulla
-16 senza problemi, si toglie con `sudo pg_dropcluster 14 main` e
-`sudo apt-get purge postgresql-14`. I backup di ORION (`pg_dump` in formato
-custom) si ripristinano su una versione uguale o più nuova di quella che li
-ha fatti, quindi quelli vecchi restano buoni.
+Le versioni di Node.js e del client di PostgreSQL le decide l'immagine
+(`Dockerfile`: Node 24 e il client di PostgreSQL 17 di Debian), quella del
+database il compose (`postgres:17-trixie`, o `ORION_POSTGRES_IMMAGINE`). Si
+aggiornano con una release. `pg_dump` rifiuta un server più nuovo di sé,
+quindi un cambio di versione principale di PostgreSQL arriva con una release
+che porta tutti e due; per un'istanza esistente si passa da un backup: backup
+dalla pagina Sistema, istanza nuova accanto con la versione nuova del
+database, ripristino del backup. Gli aggiornamenti minori di PostgreSQL
+(17.x) arrivano scaricando di nuovo l'immagine: `sudo docker compose -f
+/srv/orion/<nome>/compose.yaml pull db && sudo docker compose -f
+/srv/orion/<nome>/compose.yaml up -d db`, a emergenza chiusa.
 
 ### La cifratura
 
 `src/cifratura.js` (con il formato in `src/formatoCifrato.js`) cifra con
 AES-256-GCM i file in `protected_uploads` (certificati, documenti, immagini,
-magazzino, documenti del gruppo, resoconti) e `uploads/photos`, i backup del database e la password
-SMTP. Formato dei file: `ORIONCF1`, IV di 12 byte, dati, tag di 16 byte; il
+magazzino, documenti del gruppo, resoconti) e `uploads/photos`, i backup del database, la password
+SMTP e, nel database, l'esito delle visite mediche (`user_medical_records.status`,
+`enc1:` come i segreti). Tipo e date delle visite restano in chiaro perché
+servono alle scadenze; il confronto con "Idoneo" (squadre, tesserino,
+cruscotto, avvisi) si fa nell'applicazione, in `src/esitiVisite.js`, e senza
+la chiave un esito che non si legge vale come non idoneo. Gli esiti scritti
+prima, o senza chiave, si cifrano all'avvio; tornando a una versione
+precedente la migrazione li rimette in chiaro, e per questo chiede la chiave. Formato dei file: `ORIONCF1`, IV di 12 byte, dati, tag di 16 byte; il
 tag rende evidente anche un file alterato. I file in chiaro di prima restano
 leggibili e un giro orario li cifra; i caricamenti nuovi si cifrano subito
 dopo il controllo del contenuto, e le rotte li mandano decifrati
 (`inviaFile`).
 
-La chiave sta in `chiave-dati.key` nella cartella dell'applicazione (o in
-`ORION_CHIAVE_FILE`), 600, creata al primo avvio. Non è nel database e non
-finisce nei backup; aggiornamenti (`update.sh`, pagina Sistema) e copia
-dell'applicazione prima dell'aggiornamento la escludono. Nel database c'è solo
+La chiave sta in `chiave/chiave-dati.key` nella cartella dell'istanza
+(`ORION_CHIAVE_FILE`), 600, creata al primo avvio. Non è nel database e non
+finisce nei backup né sul disco esterno. Nel database c'è solo
 la sua impronta (`cifratura_impronta`), che dice se la chiave sul disco è
 quella dei dati: se manca o non corrisponde, ORION parte lo stesso, le rotte
 dei file rispondono 503 e la pagina Sistema chiede la chiave di recupero (la
-stessa chiave in base32, 52 caratteri). I backup notturni di `backup.sh` si
-cifrano con `scripts/cifra-backup.mjs`; un backup si decifra fuori da ORION
-con `scripts/decifra-backup.mjs`, dando il file della chiave oppure
-`ORION_CHIAVE_RECUPERO`. Per spostare un'installazione si copia anche
-`chiave-dati.key`, oppure si inserisce la chiave di recupero dalla pagina
-Sistema prima di ripristinare. `node tests/cifratura.mjs` prova cifratura,
+stessa chiave in base32, 52 caratteri). I backup notturni li cifra
+`scripts/backup-db.mjs`, l'archivio dei file per il disco esterno
+`scripts/cifra-flusso.mjs`; tutti si decifrano fuori da ORION con
+`scripts/decifra-backup.mjs`, dando il file della chiave oppure
+`ORION_CHIAVE_RECUPERO`. Per spostare un'istanza si porta anche la chiave
+(`ORION_CHIAVE_DA` di `nuova-istanza.sh`). `node tests/cifratura.mjs` prova cifratura,
 backup alterati, chiave di recupero e password della posta.
 
 ### Lo storico inalterabile
@@ -496,6 +612,14 @@ aggiunge un anello `cancellazione_emergenza` con gli id delle righe uscite.
 `orion_verifica()` ripercorre la catena e confronta ogni riga con la sua
 impronta; risponde in un paio di secondi anche con decine di migliaia di
 voci. Il registro stesso non si modifica (altro trigger).
+
+Il registro delle operazioni (`audit_log`) può anche scadere: con
+`ORION_REGISTRO_GIORNI` maggiore di zero, la pulizia notturna sigilla, dichiara
+la scadenza (`orion.scadenza_registro`, accettata dal trigger solo su questa
+tabella), toglie le voci più vecchie (al massimo ventimila per notte) e
+aggiunge un anello `scadenza_registro` con i loro id. La verifica le conta come
+uscite, non come mancanti. Le altre tabelle dello storico non scadono: sono
+la documentazione delle emergenze.
 
 Il proprietario delle tabelle può spegnere i trigger e ricalcolare la catena:
 contro di lui servono i sigilli tenuti fuori dal server, che
@@ -1160,7 +1284,9 @@ non è più nella squadra. Altrimenti la risposta è 200 con `accettata: false`
 e chi la sta mandando. L'app rimanda l'ultima posizione ogni minuto anche da
 ferma, così il silenzio vuol dire davvero telefono spento o senza campo.
 `GET /api/location` e il messaggio `team_location_update` dicono da quale
-telefono arriva la posizione.
+telefono arriva la posizione. Di ogni squadra si tiene solo l'ultima
+posizione, e alla chiusura dell'emergenza `posizioni_squadre` si svuota nella
+stessa transazione: dove sono stati i volontari non resta.
 
 Dalla app 1.2.2 la posizione porta `eta_ms`, da quanti millisecondi il GPS
 l'ha rilevata (con l'orologio monotono del telefono, così l'ora sbagliata del
@@ -1464,6 +1590,14 @@ si leggono ogni volta dal server.
 
 ## 11. Provare
 
+Per sviluppare e provare non servono i container: con Node 24 e un PostgreSQL
+qualunque, un `.env` nella cartella del codice (`DB_HOST`, `DB_PORT`,
+`DB_DATABASE`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `COOKIE_SECRET`,
+`DOMAIN_NAME`), `npm install` e `npm start` avviano un'istanza di sviluppo,
+con dati e backup nella cartella del codice. Lì aggiornamenti e ritorni non
+ci sono, perché li fa l'agente: si provano con `tests/container.mjs`, più
+sotto.
+
 Il server ha una batteria di prove che gira contro un'istanza vera, con il
 suo database:
 
@@ -1506,6 +1640,14 @@ entrano come amministratore, quindi con il codice: la prima volta attivano da
 sole la verifica e tengono il segreto in `orion-test-mfa/` nella cartella
 temporanea della macchina (oppure lo prendono da `ORION_ADMIN_TOTP`). Vanno lanciate su un'istanza di collaudo, mai su quella di
 produzione.
+
+`tests/container.mjs` prova le istanze in container da capo a fondo, come
+root su una macchina con Docker: aggiornamento e ritorno chiesti dalla
+pagina Sistema ed eseguiti dall'agente, una versione che non parte,
+l'approvazione del gestore, backup notturno e ripristino, la separazione da
+un'altra istanza. Vuole due istanze appena create con `nuova-istanza.sh` e
+due immagini in più: una versione nuova con una migrazione `prova_container`
+e una che non parte (la testa del file dice come lanciarlo).
 
 L'app ha i suoi test su JVM. Quelli di contratto leggono risposte vere del
 server salvate in `app/src/test/resources/risposte`: quando il server cambia

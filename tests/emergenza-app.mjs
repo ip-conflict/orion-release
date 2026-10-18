@@ -53,7 +53,7 @@ try {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: `Squadra${suffisso}`, cognome: 'Prova', role: 'volontario' } })).corpo;
     persona = n.id;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Squadra!${suffisso}Aa1`;
+    const password = `Turno!${suffisso}Lampione1`;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const io = (await accediConFetch(BASE, n.username, password)).token;
     const coda = async () => (await chiama('/api/notifiche', { token: io })).corpo?.notifiche || [];

@@ -659,9 +659,13 @@ raster (preparato con QGIS): con quella la mappa funziona anche senza internet.
 
 ![Il sistema](immagini/web/90-sistema.png)
 
-In alto lo stato: ultimo backup, backup disponibili, spazio, ultima copia
-scaricata. Poi la versione e gli aggiornamenti: "Controlla adesso" dice se c'è
-una versione nuova e la installa. Con un'emergenza aperta non si aggiorna.
+In alto lo stato: ultimo backup, backup disponibili, spazio, copia dei file
+e, se il server ha il disco esterno, l'ultima copia lì (gialla dopo una
+settimana, rossa dopo due). Poi la versione e gli aggiornamenti: "Controlla
+adesso" dice se c'è una versione nuova e la installa. L'aggiornamento lo fa il
+server: la pagina mostra i suoi passi, e se chi gestisce il server ha chiesto
+di approvarli resta in attesa finché non lo fa. Con un'emergenza aperta non
+si aggiorna.
 
 ![La cifratura](immagini/web/91-sistema-cifratura.png)
 
@@ -694,13 +698,13 @@ collegamento di sempre.
 ![I backup](immagini/web/93-sistema-backup.png)
 
 **Backup.** Il server ne fa uno ogni notte e ORION uno a ogni chiusura
-d'emergenza. "Fai
-un backup adesso", Scarica, Verifica, Ripristina. Il ripristino chiede la
-password e la parola RIPRISTINA, e prima salva i dati attuali. Ogni tanto va
-scaricata una copia e tenuta altrove.
+d'emergenza. "Fai un backup adesso", Scarica, Verifica, Ripristina. Il
+ripristino chiede la password e la parola RIPRISTINA, e prima salva i dati
+attuali. Se il server non ha il disco esterno, ogni tanto va scaricata una
+copia e tenuta altrove.
 
 **Tornare a una versione precedente.** Se un aggiornamento dà problemi, nel
-riquadro della versione c'è l'elenco delle versioni lasciate, una per riga.
+riquadro della versione c'è l'elenco delle versioni già usate, una per riga.
 **Torna a questa** chiede la password e la parola TORNA. Di base i dati
 restano quelli di adesso: si tolgono solo le parti del database aggiunte dalle
 versioni successive, e la finestra dice quali. Con **Riporta anche i dati a

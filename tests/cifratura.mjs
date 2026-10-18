@@ -63,7 +63,7 @@ await api(`/api/admin/medical-records/${visita.id}`, { method: 'DELETE' });
 const fatto = await api('/api/sistema/backup', { method: 'POST' });
 const elenco = (await api('/api/sistema/backup')).corpo.backup;
 const backup = elenco.find(b => b.cartella === 'app');
-const cartella = process.env.ORION_BACKUP_DIR || '/var/backups/orion/auto';
+const cartella = process.env.ORION_BACKUP_DIR || path.join(process.env.ORION_DATI_DIR || RADICE, 'backup', 'auto');
 const fileBackup = path.join(cartella, backup.nome);
 verifica('il backup è cifrato', fatto.stato === 200 && cifrato(fileBackup), backup);
 let v = (await api(`/api/sistema/backup/app/${backup.nome}/verifica`, { method: 'POST' })).corpo;

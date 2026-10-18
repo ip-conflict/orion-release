@@ -1,0 +1,8 @@
+[Unit]
+Description=ORION: richieste delle istanze in container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orion-agente giro

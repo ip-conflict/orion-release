@@ -5,7 +5,9 @@ import { escapeHtmlForEmail, sendEmailUtility } from './email.js';
 import { magazzino } from './istanze.js';
 import { notifiche } from './tempoReale.js';
 import { pulisciTokenAvvisi } from './avvisi.js';
+import { scadenzaRegistro } from './integrita.js';
 import { sqlHaPermesso } from './permessi.js';
+import { IDONEO, esitoInChiaro } from './esitiVisite.js';
 
 // Uno solo valido alla volta, e solo se i numeri sono cambiati: un avviso identico ogni
 // mattina non si legge.
@@ -28,25 +30,28 @@ async function accodaRiepiloghi(segreteriaAttiva) {
     }
     try {
         if (segreteriaAttiva) {
-            const { rows: [c] } = await pool.query(`
-                WITH attivi AS (
-                    SELECT u.id FROM users u
-                    WHERE COALESCE(u.is_active, true) = true
-                      AND NOT EXISTS (SELECT 1 FROM utenti_ruoli ur WHERE ur.user_id = u.id AND ur.ruolo = 'esterno')
-                ), visite AS (
-                    SELECT a.id FROM attivi a
-                    LEFT JOIN LATERAL (SELECT expiry_date, status FROM user_medical_records
-                                       WHERE user_id = a.id ORDER BY last_visit_date DESC LIMIT 1) v ON true
-                    WHERE v.expiry_date IS NULL OR v.expiry_date::date <= CURRENT_DATE + 30 OR v.status <> 'Idoneo'
-                ), corsi AS (
+            const attivi = `SELECT u.id FROM users u
+                WHERE COALESCE(u.is_active, true) = true
+                  AND NOT EXISTS (SELECT 1 FROM utenti_ruoli ur WHERE ur.user_id = u.id AND ur.ruolo = 'esterno')`;
+            const ultimeVisite = await pool.query(`
+                SELECT a.id, v.status, (v.expiry_date IS NULL OR v.expiry_date::date <= CURRENT_DATE + 30) AS in_scadenza
+                FROM (${attivi}) a
+                LEFT JOIN LATERAL (SELECT expiry_date, status FROM user_medical_records
+                                   WHERE user_id = a.id ORDER BY last_visit_date DESC LIMIT 1) v ON true`);
+            const corsiInScadenza = await pool.query(`
+                SELECT user_id FROM (
                     SELECT DISTINCT ON (uc.user_id, uc.course_id) uc.user_id, uc.expiry_date
-                    FROM user_courses uc JOIN attivi a ON a.id = uc.user_id
-                    ORDER BY uc.user_id, uc.course_id, uc.acquisition_date DESC
-                )
-                SELECT (SELECT COUNT(*) FROM visite)::int AS visite,
-                       (SELECT COUNT(*) FROM corsi WHERE expiry_date IS NOT NULL AND expiry_date::date <= CURRENT_DATE + 30)::int AS corsi,
-                       (SELECT COUNT(DISTINCT id) FROM (SELECT id FROM visite UNION
-                            SELECT user_id FROM corsi WHERE expiry_date IS NOT NULL AND expiry_date::date <= CURRENT_DATE + 30) p)::int AS persone`);
+                    FROM user_courses uc JOIN (${attivi}) a ON a.id = uc.user_id
+                    ORDER BY uc.user_id, uc.course_id, uc.acquisition_date DESC) c
+                WHERE expiry_date IS NOT NULL AND expiry_date::date <= CURRENT_DATE + 30`);
+            const visite = ultimeVisite.rows
+                .filter(v => v.in_scadenza || (v.status != null && esitoInChiaro(v.status) !== IDONEO))
+                .map(v => v.id);
+            const c = {
+                visite: visite.length,
+                corsi: corsiInScadenza.rowCount,
+                persone: new Set([...visite, ...corsiInScadenza.rows.map(r => r.user_id)]).size
+            };
             if (c.persone > 0) {
                 await accoda('volontari.sanitario', 'segreteria_riepilogo',
                     `Segreteria: ${c.persone} ${c.persone === 1 ? 'volontario' : 'volontari'} da sistemare`,
@@ -333,6 +338,7 @@ export async function cleanupRevokedTokens() {
         const rinnovi = await pool.query('DELETE FROM token_rinnovo WHERE scade_il < NOW()');
         if (rinnovi.rowCount > 0) logger.info(`[Manutenzione] Rimossi ${rinnovi.rowCount} token di rinnovo scaduti.`);
         await pulisciTokenAvvisi();
+        await scadenzaRegistro();
     } catch (error) {
         logger.error('[Manutenzione] Pulizia revoked_tokens fallita:', { error });
     }

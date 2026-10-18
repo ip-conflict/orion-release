@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import { conIdoneitaFisica } from './esitiVisite.js';
 import { registraAudit } from './audit.js';
 import { checkAdminRole, nomeUtente, nonEsterni, ruoliDi } from './autenticazione.js';
 import { sistemaBeniInCarico } from './beniInUscita.js';
@@ -102,14 +103,6 @@ async function getAvailableUsersQuery(client) {
     const query = `
         SELECT u.id, u.username, u.nome, u.cognome, u.role,
         COALESCE((
-            SELECT (umr.status = 'Idoneo' AND umr.expiry_date >= CURRENT_DATE) 
-            FROM user_medical_records umr 
-            JOIN medical_visit_types mvt ON umr.visit_type_id = mvt.id
-            WHERE umr.user_id = u.id AND LOWER(mvt.name) = 'visita di idoneità fisica'
-            ORDER BY umr.last_visit_date DESC 
-            LIMIT 1
-        ), FALSE) AS medical_ok,
-        COALESCE((
             SELECT TRUE 
             FROM user_courses uc 
             WHERE uc.user_id = u.id AND uc.course_id = 1 AND (uc.expiry_date IS NULL OR uc.expiry_date >= CURRENT_DATE) 
@@ -123,7 +116,7 @@ async function getAvailableUsersQuery(client) {
         ORDER BY in_sede DESC, u.cognome, u.nome;
     `;
     const result = await client.query(query, [activeEmergency?.id ?? null]);
-    return result.rows;
+    return conIdoneitaFisica(result.rows, client);
 }
 
 // Un errore qui non ferma l'operazione.
@@ -234,15 +227,7 @@ async function validateTeamMembers(client, usernames) {
 
 
     const checkQuery = `
-        SELECT u.username, u.nome, u.cognome,
-            COALESCE((
-            SELECT (umr.status = 'Idoneo' AND umr.expiry_date >= CURRENT_DATE) 
-            FROM user_medical_records umr 
-            JOIN medical_visit_types mvt ON umr.visit_type_id = mvt.id
-            WHERE umr.user_id = u.id AND LOWER(mvt.name) = 'visita di idoneità fisica'
-            ORDER BY umr.last_visit_date DESC 
-            LIMIT 1
-        ), FALSE) AS medical_ok,
+        SELECT u.id, u.username, u.nome, u.cognome,
             COALESCE((SELECT TRUE FROM user_courses uc WHERE uc.user_id = u.id AND uc.course_id = 1 AND (uc.expiry_date IS NULL OR uc.expiry_date >= CURRENT_DATE) LIMIT 1), FALSE) AS course_ok
         FROM users u
         WHERE u.username = ANY($1::text[]) AND u.role != 'esterno'
@@ -252,7 +237,7 @@ async function validateTeamMembers(client, usernames) {
     const invalidUsers = [];
 
 
-    for (const user of res.rows) {
+    for (const user of await conIdoneitaFisica(res.rows, client)) {
         if (config.block_on_medical && !user.medical_ok) {
             invalidUsers.push(`${user.nome} ${user.cognome} (manca la visita di idoneità valida)`);
         } else if (config.block_on_course && !user.course_ok) {
@@ -358,17 +343,6 @@ export function registraRotteSquadre(app) {
             const squadra = squadraResult.rows[0];
             const membriQuery = `
             SELECT u.id, u.username, u.nome, u.cognome, u.role, sm.caposquadra,
-            -- Conta l'ULTIMA visita di idoneita' fisica, come il tesserino e le
-            -- assegnazioni: prima bastava una visita qualsiasi ancora valida, e
-            -- chi era stato giudicato non idoneo dopo risultava idoneo qui.
-            COALESCE((
-                SELECT (umr.status = 'Idoneo' AND umr.expiry_date >= CURRENT_DATE)
-                FROM user_medical_records umr
-                JOIN medical_visit_types mvt ON umr.visit_type_id = mvt.id
-                WHERE umr.user_id = u.id AND LOWER(mvt.name) = 'visita di idoneità fisica'
-                ORDER BY umr.last_visit_date DESC
-                LIMIT 1
-            ), FALSE) AS medical_ok,
             COALESCE((SELECT TRUE FROM user_courses uc WHERE uc.user_id = u.id AND uc.course_id = 1 AND (uc.expiry_date IS NULL OR uc.expiry_date >= CURRENT_DATE) LIMIT 1), FALSE) AS course_ok
             FROM squadra_membri sm
             JOIN users u ON sm.username = u.username 
@@ -377,7 +351,7 @@ export function registraRotteSquadre(app) {
         `;
             const membriResult = await pool.query(membriQuery, [squadraId]);
             const esterno = ruoliDi(req.user).includes('esterno');
-            const membri = membriResult.rows.map(m => ({ 
+            const membri = (await conIdoneitaFisica(membriResult.rows)).map(m => ({ 
                  id: m.id,
                  username: m.username, 
                  nome: m.nome,

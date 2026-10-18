@@ -16,13 +16,12 @@ import { annotaRegistroSquadre, avvisaEntratiInSquadra } from './squadre.js';
 import { registraPresenzeEmergenza, registraPresenzeSimulazione } from './presenze.js';
 import { activeEmergency, impostaEmergenzaAttiva } from './statoEmergenza.js';
 import { avvisaClienti, notifiche, wss } from './tempoReale.js';
-import { fileURLToPath } from 'url';
 import { inviaFile, leggiFile, proteggiCaricati } from './cifratura.js';
 import { sigillaChiusura } from './integrita.js';
 import { copiaCopione, copioniDisponibili } from './copione.js';
 import { allegaBollettinoInVigore } from './allerta.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Le squadre rimaste vuote si chiudono d'ufficio, tranne quelle con materiale in
 // carico: lì decide una persona.
@@ -221,6 +220,8 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
         })), req, chiusa.id);
 
         temporaneiChiusi = await chiudiEsterniTemporanei(client, chiusa.id);
+        // Dove sono i volontari serve solo durante l'emergenza: chiusa questa, non si tiene.
+        await client.query('DELETE FROM posizioni_squadre');
 
         const daTenere = simulazione ? [] : tieni;
         if (daTenere) {
@@ -291,7 +292,7 @@ function completaChiusura(chiusa, req, interrotta) {
 export function registraRotteEmergenze(app) {
 
     app.get('/uploads/documents/:filename', async (req, res) => {
-        const documentsDir = path.resolve(__dirname, '..', 'protected_uploads', 'documents');
+        const documentsDir = path.resolve(RADICE_DATI, 'protected_uploads', 'documents');
         const safePath = path.resolve(documentsDir, req.params.filename);
         if (!safePath.startsWith(documentsDir + path.sep)) {
             return res.status(403).json({ message: 'Accesso negato' });
@@ -622,7 +623,7 @@ export function registraRotteEmergenze(app) {
                     logger.warn(`[FS Cleanup] Skipping invalid or unexpected URL format: ${relativeUrl}`);
                     continue;
                 }
-                const filePath = path.join(__dirname, '..', 'protected_uploads', relativeUrl.replace('/uploads/', 'images/'));
+                const filePath = path.join(RADICE_DATI, 'protected_uploads', relativeUrl.replace('/uploads/', 'images/'));
                 try {
                     await fs.promises.access(filePath); 
                     await fs.promises.unlink(filePath);
@@ -880,7 +881,7 @@ export function registraRotteEmergenze(app) {
             await client.query('COMMIT');
 
 
-            const fullPath = path.join(__dirname, '..', 'protected_uploads', file_path.replace('/uploads/', ''));
+            const fullPath = path.join(RADICE_DATI, 'protected_uploads', file_path.replace('/uploads/', ''));
             fs.unlink(fullPath, (err) => {
                 if (err) {
 

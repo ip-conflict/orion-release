@@ -22,6 +22,8 @@
     "test:cifratura": "node tests/cifratura.mjs",
     "test:mfa": "node tests/mfa.mjs",
     "test:telefoni": "node tests/telefoni.mjs",
+    "test:protezione-dati": "node tests/protezione-dati.mjs",
+    "test:container": "node tests/container.mjs",
     "test:caposquadra": "node tests/caposquadra.mjs",
     "test:rischi": "node tests/rischi.mjs",
     "test:strade": "node tests/strade.mjs",

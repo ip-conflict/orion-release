@@ -1,0 +1,52 @@
+# Pubblica l'immagine di ORION sul registro di GitHub a ogni release: la scaricano le istanze in
+# container (vedi "ORION in container" nel manuale tecnico).
+name: Immagine
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      versione:
+        description: Versione da pubblicare (per esempio 1.2.4)
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  immagine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versione e nome dell'immagine
+        id: v
+        env:
+          RICHIESTA: ${{ github.event.release.tag_name || inputs.versione }}
+        run: |
+          VERSIONE="${RICHIESTA#v}"
+          [[ $VERSIONE =~ ^[0-9]+(\.[0-9]+){1,3}([-+][0-9A-Za-z.]+)?$ ]] || { echo "Versione non valida: $VERSIONE"; exit 1; }
+          # L'agente controlla che il package.json dell'immagine dica la versione chiesta.
+          npm version "$VERSIONE" --no-git-tag-version --allow-same-version
+          echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
+          echo "immagine=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orion" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.v.outputs.immagine }}:${{ steps.v.outputs.versione }}
+          labels: |
+            org.opencontainers.image.title=ORION
+            org.opencontainers.image.version=${{ steps.v.outputs.versione }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

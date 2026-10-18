@@ -7,13 +7,12 @@ import { pool } from './db.js';
 import { vociDiarioSala } from './diarioSala.js';
 import { ETICHETTE_MOVIMENTO } from './magazzino.js';
 import { sigilloAttuale, testoSigillo } from './integrita.js';
-import { fileURLToPath } from 'url';
 import { cifra, cifraturaPronta } from './cifratura.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Un .txt a larghezza fissa: si apre anche fra dieci anni, senza database né browser.
-export const CARTELLA_RESOCONTI = path.join(__dirname, '..', 'protected_uploads', 'emergency_logs');
+export const CARTELLA_RESOCONTI = path.join(RADICE_DATI, 'protected_uploads', 'emergency_logs');
 const FUSO_ORARIO_RESOCONTO = process.env.TZ || 'Europe/Rome';
 const LARGHEZZA_RESOCONTO = 80;
 

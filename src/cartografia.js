@@ -4,11 +4,10 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 import { richiedePermesso } from './permessi.js';
+import { RADICE_DATI } from './percorsi.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const CARTELLA_CARTOGRAFIA = process.env.ORION_CARTOGRAFIA_DIR || path.join(__dirname, '..', 'protected_uploads', 'cartografia');
+export const CARTELLA_CARTOGRAFIA = process.env.ORION_CARTOGRAFIA_DIR || path.join(RADICE_DATI, 'protected_uploads', 'cartografia');
 const FILE = () => path.join(CARTELLA_CARTOGRAFIA, 'territorio.mbtiles');
 const INFO = () => path.join(CARTELLA_CARTOGRAFIA, 'territorio.json');
 
