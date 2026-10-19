@@ -1,44 +1,25 @@
-# Pubblica whisper.cpp già compilato per l'immagine di ORION (docker/whisper.Dockerfile), una volta
-# per versione: così chi costruisce ORION non compila niente.
-name: Whisper
+ARG WHISPER_VERSIONE=v1.9.5
+ARG WHISPER_COMMIT=d1be6fde11ac6e0407606b4e42fe72d34add8037
 
-on:
-  push:
-    branches: [master]
-    paths: [docker/whisper.Dockerfile]
-  workflow_dispatch:
+FROM node:24-trixie-slim AS compila
+ARG WHISPER_VERSIONE
+ARG WHISPER_COMMIT
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git cmake g++ make \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "$WHISPER_VERSIONE" https://github.com/ggml-org/whisper.cpp /src \
+ && [ "$(git -C /src rev-parse HEAD)" = "$WHISPER_COMMIT" ] \
+ && sed -i -E '/ggml_add_cpu_backend_variant\((sse42|sandybridge|ivybridge|piledriver|cannonlake|cascadelake|icelake|cooperlake|zen4|alderlake|sapphirerapids)[ )]/d' /src/ggml/src/CMakeLists.txt \
+ && cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
+      -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=ON \
+      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF \
+ && lavori=$(awk -v n="$(nproc)" '/MemAvailable/ { j = int($2 / 700000); print (j < 1 ? 1 : (j > n ? n : j)) }' /proc/meminfo) \
+ && cmake --build /build -j"$lavori" --target whisper-cli \
+ && mkdir /opt/whisper && cp -P /build/bin/whisper-cli /build/bin/*.so* /opt/whisper/
 
-permissions:
-  contents: read
-  packages: write
-
-jobs:
-  whisper:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Versione e nome dell'immagine
-        id: v
-        run: |
-          VERSIONE=$(sed -n -E 's/^ARG WHISPER_VERSIONE=(.+)$/\1/p' docker/whisper.Dockerfile)
-          [[ $VERSIONE =~ ^v[0-9]+(\.[0-9]+){1,3}$ ]] || { echo "Versione non valida: $VERSIONE"; exit 1; }
-          echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
-          echo "immagine=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orion-whisper" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: docker
-          file: docker/whisper.Dockerfile
-          push: true
-          tags: ${{ steps.v.outputs.immagine }}:${{ steps.v.outputs.versione }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+FROM scratch
+ARG WHISPER_VERSIONE
+COPY --from=compila /opt/whisper /opt/whisper
+LABEL org.opencontainers.image.title="whisper.cpp per ORION" \
+      org.opencontainers.image.version="$WHISPER_VERSIONE" \
+      org.opencontainers.image.licenses="MIT"
