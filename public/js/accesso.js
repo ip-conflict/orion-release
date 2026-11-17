@@ -4,7 +4,10 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const $ = (id) => document.getElementById(id);
     const contenuto = $('contenuto');
-    const codice = new URLSearchParams(window.location.search).get('c') || '';
+    // Dopo # il codice non arriva al server né ai suoi registri; ?c= resta per i link già consegnati.
+    const codice = new URLSearchParams(window.location.hash.slice(1)).get('c')
+        || new URLSearchParams(window.location.search).get('c') || '';
+    if (codice) history.replaceState(null, '', '/accesso.html');
 
     const aggiungi = (tag, testo, classe) => {
         const e = document.createElement(tag);

@@ -25,3 +25,13 @@ export async function loadActiveEmergency() {
         activeEmergency = null;
     }
 }
+
+// Senza il blocco sulla riga dell'emergenza due creazioni insieme leggono lo stesso massimo e
+// prendono lo stesso numero; dura fino al COMMIT. NO KEY: FOR UPDATE va in stallo con le
+// transazioni che hanno già scritto una riga che rimanda all'emergenza (la regia lo fa).
+export async function prossimoNumeroSegnalazione(client, emergenzaId) {
+    await client.query('SELECT id FROM emergencies WHERE id = $1 FOR NO KEY UPDATE', [emergenzaId]);
+    const { rows } = await client.query(
+        'SELECT COALESCE(MAX(emergency_report_number), 0) + 1 AS n FROM reports WHERE emergency_id = $1', [emergenzaId]);
+    return rows[0].n;
+}

@@ -20,13 +20,11 @@
         .then(d => { if (d?.necessario) mostra(true); })
         .catch(() => { /* il server risponde all'accesso normale */ });
 
-    let usernameToccato = false;
-    $('pa-username').addEventListener('input', () => { usernameToccato = true; });
+    const spiegazione = $('pa-username').textContent;
     const proponi = () => {
-        if (usernameToccato) return;
-        const pulisci = (v) => v.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
-        const proposta = [pulisci($('pa-nome').value), pulisci($('pa-cognome').value)].filter(Boolean).join('.');
-        $('pa-username').value = proposta;
+        const pulisci = (v) => v.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+        const proposta = pulisci($('pa-cognome').value) + pulisci($('pa-nome').value).slice(0, 1);
+        $('pa-username').textContent = proposta ? `Il tuo nome utente sarà ${proposta}: cognome e iniziale del nome, come per tutti. Si entra anche con l'email.` : spiegazione;
     };
     $('pa-nome').addEventListener('input', proponi);
     $('pa-cognome').addEventListener('input', proponi);
@@ -36,9 +34,9 @@
         messaggio('');
         const dati = {
             codice: $('pa-codice').value, nome: $('pa-nome').value, cognome: $('pa-cognome').value,
-            username: $('pa-username').value.trim().toLowerCase(), email: $('pa-email').value, password: $('pa-password').value
+            email: $('pa-email').value, password: $('pa-password').value
         };
-        if (!dati.codice.trim() || !dati.nome.trim() || !dati.cognome.trim() || !dati.username || !dati.password) {
+        if (!dati.codice.trim() || !dati.nome.trim() || !dati.cognome.trim() || !dati.password) {
             return messaggio('Compila tutti i campi (l\'email è facoltativa).', true);
         }
         if (dati.password !== $('pa-conferma').value) return messaggio('Le due password non coincidono.', true);
@@ -53,11 +51,10 @@
                 return;
             }
             modulo.reset();
-            mostra(false);
-            $('username').value = corpo.username || dati.username;
-            const esito = $('login-message');
-            if (esito) { esito.textContent = corpo.message; esito.style.color = 'green'; }
-            $('password').focus();
+            modulo.hidden = true;
+            $('username').value = corpo.username;
+            // Entra subito: la verifica in due passaggi la chiederà l'accesso successivo.
+            entra(corpo, corpo.username, corpo.avviso, { conferma: true });
         } catch {
             messaggio('Il server non risponde. Riprova.', true);
         } finally {

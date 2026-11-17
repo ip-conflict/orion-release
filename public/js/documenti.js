@@ -1,5 +1,5 @@
 // Il server decide chi vede cosa: la pagina mostra quello che riceve.
-document.addEventListener('DOMContentLoaded', () => {
+quandoPronto(() => {
     const $ = (id) => document.getElementById(id);
     const RUOLI = [['volontario', 'Volontari'], ['coordinatore', 'Coordinatori'], ['segreteria', 'Segreteria'], ['magazziniere', 'Magazzinieri'], ['admin', 'Amministratori']];
     const NOMI_RUOLI = Object.fromEntries(RUOLI);
@@ -93,8 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
             box.appendChild(sezione);
         }
         if (!mostrati && !box.children.length) {
-            box.appendChild(elemento('p', 'nota', cerca ? 'Nessun documento corrisponde alla ricerca.'
-                : 'Non ci sono ancora documenti che puoi consultare.'));
+            box.appendChild(cerca ? elemento('p', 'nota', 'Nessun documento corrisponde alla ricerca.')
+                : paginaVuota('Qui il gruppo tiene regolamenti, procedure e moduli, sempre all\'ultima versione.',
+                    archivio.gestisce ? { etichetta: 'Carica il primo documento', suClick: () => document.getElementById('btn-carica')?.click() } : null));
         }
     }
 

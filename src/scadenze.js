@@ -8,6 +8,7 @@ import { pulisciTokenAvvisi } from './avvisi.js';
 import { scadenzaRegistro } from './integrita.js';
 import { sqlHaPermesso } from './permessi.js';
 import { IDONEO, esitoInChiaro } from './esitiVisite.js';
+import { leggiConfigSegreteria } from './configSegreteria.js';
 
 // Uno solo valido alla volta, e solo se i numeri sono cambiati: un avviso identico ogni
 // mattina non si legge.
@@ -95,8 +96,7 @@ export async function runDailyExpiryCheck(forceAdminReport = false, { soloReport
 
         const confRes = await client.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
         const configGrezza = confRes.rowCount > 0 ? confRes.rows[0].setting_value : null;
-        const config = !configGrezza ? null
-            : (typeof configGrezza === 'string' ? JSON.parse(configGrezza) : configGrezza);
+        const config = configGrezza ? leggiConfigSegreteria(configGrezza) : null;
         const segreteriaAttiva = !!config?.enabled;
         esitoReport.segreteria_attiva = segreteriaAttiva;
 

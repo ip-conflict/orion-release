@@ -9,7 +9,7 @@ import { pool } from './db.js';
 import { leggiGeometria } from './mappaElementi.js';
 import { haPermesso } from './permessi.js';
 import { aggiornaRischi } from './rischiZone.js';
-import { activeEmergency } from './statoEmergenza.js';
+import { activeEmergency, prossimoNumeroSegnalazione } from './statoEmergenza.js';
 import { avvisaClienti, notifiche, wss } from './tempoReale.js';
 
 const TIPI = ['segnalazione', 'aggravamento', 'comunicazione', 'imprevisto', 'strada', 'pericolo'];
@@ -223,8 +223,7 @@ async function esci(emergenza, evento, chi, { automatico = false } = {}) {
                     promemoria = true;
                     nota = 'Da telefonare alla sala: la segnalazione la inserisce chi risponde.';
                 } else {
-                    const n = (await client.query(
-                        'SELECT COALESCE(MAX(emergency_report_number), 0) + 1 AS n FROM reports WHERE emergency_id = $1', [emergenza.id])).rows[0].n;
+                    const n = await prossimoNumeroSegnalazione(client, emergenza.id);
                     creata = (await client.query(
                         `INSERT INTO reports (title, description, location_address, priority, creator_user_id, reporter_name, reporter_contact,
                                               status, emergency_id, emergency_report_number, latitude, longitude, created_at, updated_at)

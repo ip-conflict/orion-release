@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schermo a parete - ORION</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/parete.css">
+</head>
+<body>
+    <header class="parete-testa">
+        <div class="parete-titolo">
+            <img id="parete-logo" src="/logo.png" alt="">
+            <span id="parete-emergenza">ORION</span>
+        </div>
+        <div class="parete-conti" id="parete-conti" hidden>
+            <div><strong id="conto-aperte">0</strong><span>aperte</span></div>
+            <div class="da-assegnare"><strong id="conto-da-assegnare">0</strong><span>da assegnare</span></div>
+            <div><strong id="conto-con-squadra">0</strong><span>con squadra</span></div>
+        </div>
+        <div class="parete-ora" id="parete-ora"></div>
+    </header>
+    <main class="parete-mappa"><div id="mappa-parete"></div>
+        <div class="parete-vuota" id="parete-vuota" hidden></div>
+        <div class="parete-drone" id="parete-drone" hidden><video id="parete-drone-video" autoplay muted playsinline></video><span id="parete-drone-nome"></span></div>
+    </main>
+    <footer class="parete-squadre" id="parete-squadre"></footer>
+
+    <script src="/leaflet/leaflet.js"></script>
+    <script src="/vendor/js-cookie/js.cookie.min.js"></script>
+    <script src="/js/apiHelper.js"></script>
+    <script src="/js/qualifiche.js"></script>
+    <script src="/websocket.js"></script>
+    <script src="/js/drone-video.js"></script>
+    <script src="/js/parete.js"></script>
+</body>
+</html>

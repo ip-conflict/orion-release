@@ -6,6 +6,7 @@ const TESTI = ['titolo', 'qualifica'];
 const ELEMENTI = ['fascia_alta', 'fascia_ente', 'fascia_qualifica', 'foto', 'qr', 'titolo', 'loghi', 'codice',
     'nome', 'distretto', 'ente', 'qualifica', 'bandiera_it', 'bandiera_ue'];
 const NASCONDIBILI = ['fascia_alta', 'fascia_ente', 'fascia_qualifica', 'titolo', 'loghi', 'distretto', 'ente', 'qualifica', 'bandiera_it', 'bandiera_ue'];
+const SUL_RETRO = ['qr', 'codice', 'titolo', 'loghi', 'bandiera_it', 'bandiera_ue'];
 const LATO_MASSIMO = 260;
 const LUNGHEZZA_MASSIMA = 8000;
 
@@ -49,5 +50,7 @@ export function validaModelloTesserino(valore) {
     }
     if (m.nascosti !== undefined && !Array.isArray(m.nascosti)) throw new ModelloNonValido('Elenco degli elementi nascosti non valido.');
     const nascosti = [...new Set((m.nascosti || []).filter(id => NASCONDIBILI.includes(id)))];
-    return JSON.stringify({ colori, testi, posizioni, nascosti });
+    if (m.retro !== undefined && !Array.isArray(m.retro)) throw new ModelloNonValido('Elenco degli elementi sul retro non valido.');
+    const retro = [...new Set((m.retro || []).filter(id => SUL_RETRO.includes(id)))];
+    return JSON.stringify({ colori, testi, posizioni, nascosti, retro });
 }

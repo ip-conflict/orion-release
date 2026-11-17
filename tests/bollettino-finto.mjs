@@ -97,6 +97,14 @@ function pdf(testo) {
 
 const giorno = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
+// Il bollettino vero scrive l'ora italiana con il suo scostamento, che cambia fra ora legale e solare.
+function scostamentoRoma(aaaammgg, ora) {
+    const istante = new Date(`${aaaammgg.slice(0, 4)}-${aaaammgg.slice(4, 6)}-${aaaammgg.slice(6, 8)}T${ora}:00Z`);
+    const gmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Rome', timeZoneName: 'longOffset' })
+        .formatToParts(istante).find(p => p.type === 'timeZoneName').value;
+    return gmt === 'GMT' ? '+00:00' : gmt.replace('GMT', '');
+}
+
 export function creaBollettino({ data = new Date(), ora = '14:10', tipo = 'first', livelli = {} } = {}) {
     const g = giorno(data).replace(/-/g, '');
     const chiave = `${g}_${ora.replace(':', '')}`;
@@ -111,7 +119,7 @@ export function creaBollettino({ data = new Date(), ora = '14:10', tipo = 'first
         zip: zip({
             [`${chiave}_today.dbf`]: dbf(righe('oggi')),
             [`${chiave}_tomorrow.dbf`]: dbf(righe('domani')),
-            [`Cap_${chiave}.xml`]: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><alert xmlns="urn:oasis:names:tc:emergency:cap:1.2"><sent>${a}-${m}-${d}T${ora}:00+02:00</sent></alert>`),
+            [`Cap_${chiave}.xml`]: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><alert xmlns="urn:oasis:names:tc:emergency:cap:1.2"><sent>${a}-${m}-${d}T${ora}:00${scostamentoRoma(g, ora)}</sent></alert>`),
             [`cf_centrale_${g}_${tipo}_1.pdf`]: pdf(`Bollettino di criticita di prova del ${d}/${m}/${a} ore ${ora}`),
             'README.txt': Buffer.from('Bollettino di prova.')
         })

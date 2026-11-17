@@ -3,26 +3,25 @@
     const menu = document.querySelector('.admin-sidebar .sidebar-menu');
     if (!menu || typeof haRuolo !== 'function') return;
 
-    const ruoli = typeof ruoliUtente === 'function' ? ruoliUtente() : [];
-    const admin = haRuolo('admin');
-    const esterno = !admin && ruoli.includes('esterno');
-    const puo = (...codici) => (typeof haPermesso === 'function' ? haPermesso(...codici) : admin);
+    const admin = () => haRuolo('admin');
+    const esterno = () => !admin() && (typeof ruoliUtente === 'function' ? ruoliUtente() : []).includes('esterno');
+    const puo = (...codici) => (typeof haPermesso === 'function' ? haPermesso(...codici) : admin());
 
     // [id, indirizzo, icona, testo, chi la vede]. Finché non si sa se il modulo è acceso, la voce
     // resta nascosta.
     const VOCI = [
         ['sidebar-centro', '/centro-operativo.html', 'fa-tachometer-alt', 'Centro Operativo', () => true],
         ['sidebar-segreteria', '/admin-segreteria.html', 'fa-folder-open', 'Segreteria', (m) => m.segreteria && puo('volontari.sanitario', 'volontari.anagrafica')],
-        ['sidebar-magazzino', '/magazzino.html', 'fa-boxes-stacked', 'Magazzino', (m) => m.magazzino && !esterno],
-        ['sidebar-teams', '/admin/squadre.html', 'fa-truck-pickup', 'Squadre', () => !esterno],
-        ['sidebar-calendario', '/calendario.html', 'fa-calendar-days', 'Calendario', (m) => m.attivita && !esterno],
-        ['sidebar-simulazioni', '/simulazioni.html', 'fa-clapperboard', 'Simulazioni', (m) => m.attivita && !esterno && puo('gruppo.attivita')],
+        ['sidebar-magazzino', '/magazzino.html', 'fa-boxes-stacked', 'Magazzino', (m) => m.magazzino && !esterno()],
+        ['sidebar-teams', '/admin/squadre.html', 'fa-truck-pickup', 'Squadre', () => !esterno()],
+        ['sidebar-calendario', '/calendario.html', 'fa-calendar-days', 'Calendario', (m) => m.attivita && !esterno()],
+        ['sidebar-simulazioni', '/simulazioni.html', 'fa-clapperboard', 'Simulazioni', (m) => m.attivita && !esterno() && puo('gruppo.attivita')],
         ['sidebar-documenti', '/documenti.html', 'fa-book', 'Documenti', () => true],
         ['sidebar-users', '/admin/admin.html', 'fa-users', 'Utenti', () => puo('volontari.anagrafica')],
         ['sidebar-archive', '/admin/archive.html', 'fa-archive', 'Archivio emergenze', () => puo('emergenze.archivio')],
         ['sidebar-funzioni', '/admin/funzioni.html', 'fa-sitemap', 'Funzioni', (m) => m.funzioni && puo('emergenze.funzioni')],
-        ['sidebar-settings', '/admin/dashboard-admin.html', 'fa-cogs', 'Impostazioni', () => admin],
-        ['sidebar-sistema', '/admin/sistema.html', 'fa-shield-halved', 'Sistema', () => admin],
+        ['sidebar-settings', '/admin/dashboard-admin.html', 'fa-cogs', 'Impostazioni', () => admin()],
+        ['sidebar-sistema', '/admin/sistema.html', 'fa-shield-halved', 'Sistema', () => admin()],
         ['sidebar-profilo', '/profile.html', 'fa-user-circle', 'Il mio profilo', () => true]
     ];
     const indirizzi = new Set(VOCI.map(v => v[1]));
@@ -84,9 +83,13 @@
     separatoreEsci.setAttribute('role', 'separator');
     menu.append(separatoreEsci, esci);
 
+    let moduliAttuali = null;
     function mostra(moduli) {
+        moduliAttuali = moduli;
         voci.forEach(({ li, vede }) => { li.style.display = vede(moduli) ? 'block' : 'none'; });
     }
+    document.addEventListener('orion:permessi', () => { if (moduliAttuali) mostra(moduliAttuali); });
+    window.permessiPronti?.then(() => { if (moduliAttuali) mostra(moduliAttuali); });
 
     // Per non far lampeggiare il menu mentre arrivano le impostazioni.
     const CHIAVE = 'orion.menu.moduli';
@@ -129,9 +132,6 @@
             };
             mostra(moduli);
             try { localStorage.setItem(CHIAVE, JSON.stringify(moduli)); } catch { /* niente */ }
-            if (typeof fetchApi === 'function' && typeof salvaRuoliEPermessi === 'function') {
-                fetchApi('/api/me/status').then(stato => { salvaRuoliEPermessi(stato); mostra(moduli); }).catch(() => {});
-            }
         })
         .catch(() => { /* senza impostazioni restano le voci di base */ });
 })();

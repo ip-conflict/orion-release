@@ -6,11 +6,12 @@ import cookieParser from 'cookie-parser';
 import logger from './logger.js';
 import { creaNotifiche } from './appMobile.js';
 import { svegliaTelefoni } from './firebase.js';
-import { ruoliDi, tokenSuperato } from './autenticazione.js';
+import { quandoSiChiudonoLeSessioni, ruoliDi, tokenSuperato } from './autenticazione.js';
 import { mfaRichiesta, permessiDi } from './permessi.js';
 import { verifyJwtToken } from './authHelper.js';
 import { telefonoCollegato, telefonoScollegato, tokenAvvisiDa, utenteDaTokenAvvisi } from './avvisi.js';
 import { cookieSecret } from './config.js';
+import { allowedOrigins } from './costanti.js';
 import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { WebSocketServer } from 'ws';
@@ -173,8 +174,127 @@ export function avvisaTelefoniInAscolto(azione = 'avvisi_configurazione') {
     });
 }
 
+// Il cookie lo manda il browser anche quando il collegamento lo apre la pagina di un altro sito
+// dello stesso dominio (SameSite guarda il dominio, non il sottodominio): conta da dove viene.
+function origineAmmessa(request) {
+    const origine = request.headers.origin;
+    if (!origine || allowedOrigins.includes(origine)) return true;
+    logger.warn(`WS Upgrade: origine '${String(origine).slice(0, 100)}' non ammessa per un collegamento con il cookie.`);
+    return false;
+}
+
+function tokenDellaRichiesta(request) {
+    try {
+        const rawCookies = request.headers.cookie;
+        if (rawCookies) {
+            const rawTokenCookie = cookie.parse(rawCookies)['__Secure-token'];
+            let daCookie = null;
+            if (rawTokenCookie && cookieSecret) {
+                const unsignedToken = cookieParser.signedCookie(rawTokenCookie, cookieSecret);
+                if (unsignedToken !== false && unsignedToken) daCookie = unsignedToken;
+            } else if (rawTokenCookie) {
+                daCookie = rawTokenCookie;
+            }
+            if (daCookie) return origineAmmessa(request) ? daCookie : null;
+        }
+    } catch (e) { logger.error("WS Upgrade: Errore parsing cookies:", e); }
+    const authHeader = request.headers['authorization'];
+    if (authHeader?.toLowerCase().startsWith('bearer ')) return authHeader.substring(7) || null;
+    return null;
+}
+
+// Gli stessi controlli di authenticateToken: un collegamento aperto con una sessione revocata
+// continuerebbe a ricevere tutto.
+const STATO_DELLA_SESSIONE = `
+    EXISTS (SELECT 1 FROM revoked_tokens WHERE token = x.token) AS revocato,
+    (SELECT COALESCE(is_active, true) FROM users WHERE id = x.uid) AS attivo,
+    (SELECT (EXTRACT(EPOCH FROM sessioni_valide_dal) * 1000)::bigint FROM users WHERE id = x.uid) AS valide_dal,
+    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = x.uid) AS ruoli,
+    ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = x.uid) AS permessi_in_piu`;
+
+function motivoSessioneNonValida(utente, { revocato, attivo, valide_dal, ruoli, permessi_in_piu }) {
+    if (revocato) return 'token revocato';
+    if (attivo !== true) return 'account non attivo';
+    if (tokenSuperato(utente, valide_dal)) return 'sessioni chiuse';
+    if (mfaRichiesta(ruoli, permessiDi(ruoli, permessi_in_piu)) && utente.mfa !== true) return 'verifica in due passaggi mancante';
+    if (Number.isInteger(utente.exp) && utente.exp * 1000 <= Date.now()) return 'token scaduto';
+    return null;
+}
+
+export async function utenteDiSessione(request) {
+    const token = tokenDellaRichiesta(request);
+    if (!token) {
+        logger.warn("WS Upgrade: Token non trovato. Connessione rifiutata.");
+        return null;
+    }
+    try {
+        const decodedUser = await verifyJwtToken(token);
+        const stato = await pool.query(`SELECT ${STATO_DELLA_SESSIONE} FROM (SELECT $1::text AS token, $2::int AS uid) x`, [token, decodedUser.id]);
+        const motivo = motivoSessioneNonValida(decodedUser, stato.rows[0]);
+        if (motivo) {
+            logger.warn(`WS Upgrade: sessione non più valida per ${decodedUser.username} (${motivo}).`);
+            return null;
+        }
+        logger.info(`WS Upgrade: Autenticazione OK per ${decodedUser.username}. Procedo.`);
+        return { utente: decodedUser, token };
+    } catch (err) {
+        logger.warn("WS Upgrade: Autenticazione fallita:", err.message);
+        return null;
+    }
+}
+
+export function chiudiCollegamentiDi(userId) {
+    for (const ws of wss.clients) {
+        if (Number(ws.user?.id) === Number(userId)) ws.close(4001, 'Sessione chiusa');
+    }
+}
+quandoSiChiudonoLeSessioni(chiudiCollegamentiDi);
+
+// Uscita, scadenza o revoca di un solo token non passano da chiudiSessioni: qui si ritrovano entro un minuto.
+async function controllaCollegamenti() {
+    const conSessione = [], conAvvisi = [];
+    for (const ws of wss.clients) {
+        if (ws.avvisi) conAvvisi.push(ws);
+        else if (ws.token) conSessione.push(ws);
+    }
+    if (conSessione.length) {
+        const { rows } = await pool.query(
+            `SELECT x.i, ${STATO_DELLA_SESSIONE} FROM unnest($1::text[], $2::int[]) WITH ORDINALITY AS x(token, uid, i)`,
+            [conSessione.map(ws => ws.token), conSessione.map(ws => ws.user.id)]);
+        for (const riga of rows) {
+            const ws = conSessione[Number(riga.i) - 1];
+            const motivo = motivoSessioneNonValida(ws.user, riga);
+            if (motivo) {
+                logger.warn(`WS: chiudo il collegamento di ${ws.user.username} (${motivo}).`);
+                ws.close(4001, 'Sessione non più valida');
+            }
+        }
+    }
+    if (conAvvisi.length) {
+        const { rows } = await pool.query(
+            `SELECT t.id FROM token_avvisi t JOIN users u ON u.id = t.user_id
+              WHERE t.id = ANY($1::int[]) AND t.scade_il > NOW() AND COALESCE(u.is_active, true) = true AND u.eliminato_il IS NULL`,
+            [conAvvisi.map(ws => ws.avvisi.token_id)]);
+        const validi = new Set(rows.map(r => r.id));
+        for (const ws of conAvvisi) {
+            if (!validi.has(ws.avvisi.token_id)) ws.close(4001, 'Token degli avvisi non più valido');
+        }
+    }
+}
+
+const percorsiUpgrade = new Map();
+
+export function aggiungiPercorsoUpgrade(percorso, gestore) {
+    percorsiUpgrade.set(percorso, gestore);
+}
+
 export function avviaTempoReale(server) {
+    setInterval(() => controllaCollegamenti().catch(e => logger.error('WS: controllo dei collegamenti non riuscito:', e)), 60 * 1000).unref();
     server.on('upgrade', async (request, socket, head) => {
+        let percorso = '/';
+        try { percorso = new URL(request.url, 'http://orion').pathname; } catch { /* resta la radice */ }
+        const altro = percorsiUpgrade.get(percorso);
+        if (altro) return altro(request, socket, head);
         const tokenAvvisi = tokenAvvisiDa(request.headers['authorization']);
         if (tokenAvvisi) {
             try {
@@ -197,67 +317,17 @@ export function avviaTempoReale(server) {
             }
             return;
         }
-        let token = null;
-        try {
-            const rawCookies = request.headers.cookie;
-            if (rawCookies) {
-                const parsedCookies = cookie.parse(rawCookies);
-                let rawTokenCookie = parsedCookies['__Secure-token'];
-                if (rawTokenCookie && cookieSecret) {
-                    const unsignedToken = cookieParser.signedCookie(rawTokenCookie, cookieSecret);
-                    token = (unsignedToken !== false) ? unsignedToken : null;
-                } else {
-                    token = rawTokenCookie;
-                }
-                if(token) logger.debug("WS Upgrade: Token trovato nel cookie.");
-            }
-        } catch (e) { logger.error("WS Upgrade: Errore parsing cookies:", e); }
-
-
-        if (!token) {
-            const authHeader = request.headers['authorization'];
-            if (authHeader?.toLowerCase().startsWith('bearer ')) {
-                token = authHeader.substring(7);
-                if(token) logger.debug("WS Upgrade: Token trovato nell'header Authorization.");
-            }
-        }
-
-
-        if (!token) {
-            logger.warn("WS Upgrade: Token non trovato. Connessione rifiutata.");
+        const sessione = await utenteDiSessione(request);
+        if (!sessione) {
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
             socket.destroy();
             return;
         }
-
-        try {
-            const decodedUser = await verifyJwtToken(token);
-
-            const stato = await pool.query(
-                `SELECT EXISTS (SELECT 1 FROM revoked_tokens WHERE token = $1) AS revocato,
-                    (SELECT COALESCE(is_active, true) FROM users WHERE id = $2) AS attivo,
-                    (SELECT (EXTRACT(EPOCH FROM sessioni_valide_dal) * 1000)::bigint FROM users WHERE id = $2) AS valide_dal,
-                    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = $2) AS ruoli,
-                    ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = $2) AS permessi_in_piu`,
-                [token, decodedUser.id]);
-            const { revocato, attivo, valide_dal, ruoli, permessi_in_piu } = stato.rows[0];
-            const verificaMancante = mfaRichiesta(ruoli, permessiDi(ruoli, permessi_in_piu)) && decodedUser.mfa !== true;
-            if (revocato || attivo !== true || tokenSuperato(decodedUser, valide_dal) || verificaMancante) {
-                logger.warn(`WS Upgrade: sessione non più valida per ${decodedUser.username} (${revocato ? 'token revocato' : 'account non attivo'}).`);
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
-                return;
-            }
-            logger.info(`WS Upgrade: Autenticazione OK per ${decodedUser.username}. Procedo.`);
-            wss.handleUpgrade(request, socket, head, (ws) => {
-                ws.user = decodedUser;
-                ws.app = request.headers['x-orion-client'] === 'app';
-                wss.emit('connection', ws, request);
-            });
-        } catch (err) {
-            logger.warn("WS Upgrade: Autenticazione fallita:", err.message);
-            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-            socket.destroy();
-        }
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            ws.user = sessione.utente;
+            ws.token = sessione.token;
+            ws.app = request.headers['x-orion-client'] === 'app';
+            wss.emit('connection', ws, request);
+        });
     });
 }

@@ -12,6 +12,7 @@ import { registraRotteApp } from './appMobile.js';
 import { avviaAllerta, registraRotteAllerta } from './allerta.js';
 import { registraAudit } from './audit.js';
 import { creaIdempotenza } from './middleware/idempotenza.js';
+import { mandaPaginaNegata } from './paginaNegata.js';
 import { authenticateToken, checkAdminRole, chiudiSessioni, haRuolo, nomeUtente, nonEsterni, ruoliDi, ruoloPrincipale, scriviRuoli } from './autenticazione.js';
 import { verifyJwtToken } from './authHelper.js';
 import { CARTELLA_BACKUP_APP, CARTELLA_BACKUP_CRON, CARTELLA_BACKUP_FILE, backupDiRecupero, eseguiBackupDatabase, impostaManutenzione, manutenzioneInCorso } from './backup.js';
@@ -37,6 +38,9 @@ import { registraRotteSegnalazioni } from './segnalazioni.js';
 import { registraRotteLetture } from './letture.js';
 import { registraRotteSegreteria } from './segreteria.js';
 import { registraRotteSessioni } from './sessioni.js';
+import { registraRotteEsportazioni } from './esportazioni.js';
+import { controllaSegnalazioniInRitardo, registraRotteAvvisiSala } from './avvisiSala.js';
+import { controllaDirette, raccogliRegistrazioni, registraRotteDrone, registraRotteDronePubbliche } from './drone.js';
 import { registraRotteAvvisi, registraRotteAvvisiTelefono } from './avvisi.js';
 import { registraRotteFirebase, registraRotteFirebaseTelefono } from './firebase.js';
 import { registraRotteGestionePermessi } from './gestionePermessi.js';
@@ -44,7 +48,7 @@ import { richiedePermesso } from './permessi.js';
 import { registraRotteFunzioni } from './funzioni.js';
 import { registraRotteMappaElementi } from './mappaElementi.js';
 import { registraRotteCartografia } from './cartografia.js';
-import { registraRotteMfa } from './mfa.js';
+import { registraRotteMfa, usaNotificheMfa } from './mfa.js';
 import { registraRotteConfermeTelefono, registraRotteTelefoni, registraRotteTelefoniPubbliche } from './telefoniChiave.js';
 import { preparaPrimoAccesso, registraRottePrimoAccesso } from './primoAccesso.js';
 import { avviaIntegrita, registraIntegrita } from './integrita.js';
@@ -63,6 +67,7 @@ import { annotaRegistroSquadre, nomiRadioBloccati, registraRotteSquadre } from '
 import { activeEmergency, loadActiveEmergency } from './statoEmergenza.js';
 import { avviaTempoReale, avvisaClienti, avvisaTelefoniInAscolto, notifiche } from './tempoReale.js';
 import { registraRotteUtenti } from './utenti.js';
+import { avviaVoce, registraRotteVoce } from './voce.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +85,7 @@ process.on('uncaughtException', (err) => {
 });
 
 avviaTempoReale(server);
+avviaVoce();
 
 app.set('trust proxy', 1);
 
@@ -103,8 +109,8 @@ app.use(helmet({
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             "script-src": ["'self'"],
             "style-src": ["'self'", "'unsafe-inline'"],
-            "img-src": ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "*.tile.osm.org", "server.arcgisonline.com"],
-            "connect-src": ["'self'", "nominatim.openstreetmap.org", "photon.komoot.io", "router.project-osrm.org", `wss://${domainName}`]
+            "img-src": ["'self'", "data:", "blob:", "*.tile.openstreetmap.org", "*.tile.osm.org", "server.arcgisonline.com", "radar-geowebcache.protezionecivile.it"],
+            "connect-src": ["'self'", "nominatim.openstreetmap.org", "photon.komoot.io", "router.project-osrm.org", "radar-api.protezionecivile.it", "s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com", `wss://${domainName}`]
         }
     },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
@@ -135,12 +141,23 @@ app.use((req, res, next) => {
 const PAGINE_RISERVATE = new Set([
     '/centro-operativo.html', '/profile.html', '/admin-segreteria.html',
     '/magazzino.html', '/magazzino-etichette.html', '/magazzino-verbale.html',
-    '/print-report.html', '/situazione.html', '/rubrica.html', '/documenti.html', '/calendario.html',
+    '/print-report.html', '/situazione.html', '/parete.html', '/rubrica.html', '/documenti.html', '/calendario.html',
     '/chiamata.html', '/copione.html', '/simulazioni.html'
+]);
+// Le rotte di queste pagine rifiutano già gli esterni: senza questo si aprirebbero vuote, con pulsanti che falliscono.
+const PAGINE_NON_PER_ESTERNI = new Set([
+    '/admin-segreteria.html', '/magazzino.html', '/magazzino-etichette.html', '/simulazioni.html', '/copione.html'
 ]);
 app.use(async (req, res, next) => {
     if (!PAGINE_RISERVATE.has(req.path)) return next();
-    if (!manutenzioneInCorso) return authenticateToken(req, res, next);
+    if (!manutenzioneInCorso) {
+        return authenticateToken(req, res, () => {
+            if (PAGINE_NON_PER_ESTERNI.has(req.path) && ruoliDi(req.user).includes('esterno')) {
+                return mandaPaginaNegata(res, "Con l'accesso esterno si usano la mappa del centro operativo e la propria squadra.");
+            }
+            next();
+        });
+    }
     // Durante un ripristino il database può non rispondere: basta un token valido.
     const token = req.signedCookies['__Secure-token'] || req.headers['authorization']?.split(' ')[1];
     try {
@@ -193,6 +210,7 @@ app.use((req, res, next) => {
 });
 
 registraRottePubbliche(app);
+registraRotteDronePubbliche(app);
 registraRottePrimoAccesso(app);
 registraRotteInformativaPubblica(app);
 registraRotteTelefoniPubbliche(app, { notifiche, cartellaApk: CARTELLA_APK });
@@ -205,7 +223,13 @@ registraRotteFirebaseTelefono(app);
 registraRotteConfermeTelefono(app, { notifiche });
 app.use(authenticateToken);
 app.use('/api/', apiLimiter);
-app.use('/api/', creaIdempotenza({ pool, logger, escluse: ['/magazzino/'] }));
+// Le rotte che rispondono con un segreto (token di rinnovo, codici, chiave di recupero, link
+// di attivazione) restano fuori: la risposta finirebbe in chiaro nel database e nei backup.
+// Anche tutta /sistema/: le sue richieste portano la password nel corpo, e se ne salverebbe l'impronta.
+app.use('/api/', creaIdempotenza({
+    pool, logger,
+    escluse: ['/magazzino/', '/app/rinnovo', '/mfa/', '/telefoni', '/sistema/', '/esterni-temporanei', '/users', '/admin/users/', '/voce/token', '/sessioni/']
+}));
 
 registraRotteAvvisi(app, { notifiche });
 registraRotteFirebase(app, { avvisaTelefoni: () => avvisaTelefoniInAscolto() });
@@ -216,6 +240,8 @@ registraRotteEsterniTemporanei(app, {
     scriviRuoli, annotaRegistroSquadre, nomiRadioBloccati, NOMI_RADIO, avvisaClienti,
     inviaEmail: sendEmailUtility, dominio: domainName, chiudiSessioni
 });
+
+registraRotteVoce(app);
 
 registraRotteDiarioSala(app, {
     pool, logger, nonEsterni, nomeUtente, avvisaClienti, emergenzaAttiva: () => activeEmergency
@@ -297,20 +323,26 @@ const manutenzione = registraRotteManutenzione(app, {
 });
 
 const pagina = (cartella, nome) => (req, res) => res.sendFile(path.join(cartella, nome));
+const nonEsternoPagina = (req, res, next) => (ruoliDi(req.user).includes('esterno')
+    ? mandaPaginaNegata(res, "Con l'accesso esterno si usano la mappa del centro operativo e la propria squadra.") : next());
 const PUBBLICA = path.join(__dirname, '..', 'public');
 const ADMIN = path.join(__dirname, 'admin');
 app.get('/centro-operativo.html', authenticateToken, pagina(PUBBLICA, 'centro-operativo.html'));
 app.get('/profile.html', authenticateToken, pagina(PUBBLICA, 'profile.html'));
 app.get('/admin/admin.html', authenticateToken, richiedePermesso('volontari.anagrafica'), pagina(ADMIN, 'admin.html'));
 app.get('/admin/dashboard-admin.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'dashboard-admin.html'));
-app.get('/admin/squadre.html', authenticateToken, pagina(ADMIN, 'squadre.html'));
+app.get('/admin/squadre.html', authenticateToken, nonEsternoPagina, pagina(ADMIN, 'squadre.html'));
 app.get('/admin/archive.html', authenticateToken, richiedePermesso('emergenze.archivio'), pagina(ADMIN, 'archive.html'));
 app.get('/admin/sistema.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'sistema.html'));
 app.get('/admin/funzioni.html', authenticateToken, richiedePermesso('emergenze.funzioni'), pagina(ADMIN, 'funzioni.html'));
 app.get('/admin/tesserino.html', authenticateToken, checkAdminRole, pagina(ADMIN, 'tesserino.html'));
 
 registraRotteSessioni(app);
+registraRotteEsportazioni(app);
+registraRotteAvvisiSala(app);
+registraRotteDrone(app);
 registraRotteInformativa(app);
+usaNotificheMfa(notifiche);
 registraRotteMfa(app);
 registraRotteTelefoni(app, { notifiche });
 registraRotteImpostazioni(app);
@@ -353,6 +385,9 @@ app.use((err, req, res, next) => {
         avviaIntegrita();
         runDailyExpiryCheck();
         setInterval(runDailyExpiryCheck, 3600000);
+        setInterval(controllaSegnalazioniInRitardo, 60000);
+        setInterval(() => raccogliRegistrazioni().catch(e => logger.error('[Drone] Raccolta non riuscita:', e)), parseInt(process.env.ORION_DRONE_RACCOLTA_MS, 10) || 60000);
+        setInterval(controllaDirette, 10000);
         cleanupRevokedTokens();
         setInterval(cleanupRevokedTokens, 24 * 3600000);
         notifiche.pulisci();

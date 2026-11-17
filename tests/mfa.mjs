@@ -1,6 +1,6 @@
 // La verifica in due passaggi: attivarla dal profilo, entrare con il codice o
 // con un codice di riserva, lo stesso codice che non vale due volte, la sfida
-// che cade dopo troppi errori, l'impronta dell'app, l'amministratore che deve
+// che cade dopo troppi errori, la pausa dei codici dell'app per l'account, l'impronta dell'app, l'amministratore che deve
 // averla (anche chi lo diventa mentre è collegato) e che la azzera a un altro.
 //
 // Crea ed elimina un utente di prova: va lanciata su un'istanza di collaudo.
@@ -93,6 +93,29 @@ try {
     r = await secondoPasso(sfida, 'AAAAA-AAAAA');
     verifica('dopo cinque codici sbagliati la sfida cade', r.stato === 401 && r.corpo?.sfida_scaduta === true, r.corpo);
 
+    const sbagliato = String((Number(codiceTotp(segreto)) + 500000) % 1000000).padStart(6, '0');
+    const sfideInsieme = [];
+    for (let i = 0; i < 4; i++) sfideInsieme.push((await login(username, password)).corpo.sfida);
+    // Il codice giusto per ultimo: dopo il decimo errore le risposte sono 429 comunque, conta se ci arriva.
+    const giusto = await codiceNuovo(BASE, username, segreto);
+    const ondata = await Promise.all([
+        ...sfideInsieme.slice(0, 3).flatMap(s => Array.from({ length: 5 }, () => secondoPasso(s, sbagliato))),
+        ...Array.from({ length: 4 }, () => secondoPasso(sfideInsieme[3], sbagliato)),
+        secondoPasso(sfideInsieme[3], giusto)
+    ]);
+    verifica("venti codici mandati insieme: il giusto, ultimo, non arriva al controllo", ondata.every(x => x.stato === 401 || x.stato === 429)
+        && !ondata.some(x => x.corpo?.token), ondata.map(x => x.stato));
+    verifica('chi si ferma (429) legge che può usare un codice di riserva', ondata.some(x => x.stato === 429 && /codice di riserva/.test(x.corpo?.message || '')), ondata.map(x => x.corpo?.message));
+    sfida = (await login(username, password)).corpo.sfida;
+    r = await secondoPasso(sfida, await codiceNuovo(BASE, username, segreto));
+    verifica('durante la pausa nemmeno il codice giusto passa', r.stato === 429, r.corpo);
+    r = await secondoPasso(sfida, codiceRiserva(2));
+    verifica('ma un codice di riserva fa entrare', r.stato === 200 && !!r.corpo?.token, r.corpo);
+    const poolAudit = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
+    r = await poolAudit.query("SELECT count(*)::int AS n FROM audit_log WHERE action = 'mfa.molti_codici_sbagliati' AND entity_id = $1", [id]).catch(e => ({ errore: e.message }));
+    await poolAudit.end();
+    verifica('e la pausa resta nel registro', r.rows?.[0]?.n === 1, r.errore || r.rows);
+
     r = await chiama('/api/app/rinnovo', { method: 'POST', token: sessioneConCodice, body: { dispositivo: 'prova' } });
     const rinnovo = r.corpo?.rinnovo;
     r = await chiama('/api/app/rinnovo/accesso', { method: 'POST', body: { rinnovo } });
@@ -101,6 +124,9 @@ try {
     r = await chiama('/api/mfa/codici', { method: 'POST', token: sessioneConCodice, body: { password } });
     const nuoviCodici = r.corpo?.codici_riserva || [];
     verifica('si rifanno i codici di riserva', r.stato === 200 && nuoviCodici.length === 10, r.corpo);
+    const avvisiMfa = ((await chiama('/api/notifiche', { token: sessioneConCodice })).corpo?.notifiche || []).filter(n => n.tipo === 'mfa_cambiata');
+    verifica("ogni cambio della verifica arriva alla persona nell'app (attivazione e codici nuovi)",
+        avvisiMfa.length >= 2 && avvisiMfa.some(n => /codici di riserva/.test(n.testo || '')), avvisiMfa.map(n => n.testo));
     sfida = (await login(username, password)).corpo.sfida;
     r = await secondoPasso(sfida, codiceRiserva(1));
     verifica('un codice della serie vecchia non vale più', r.stato === 401, r.corpo);

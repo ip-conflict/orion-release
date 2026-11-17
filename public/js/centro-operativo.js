@@ -1,7 +1,8 @@
 
 import DOMPurify from '/js/lib/purify.es.js';
-import { creaRicerca, calcolaPercorso, distanzaMetri, distanzaLeggibile, durataLeggibile } from '/js/mappa-strumenti.js';
+import { creaRicerca, calcolaPercorso, cercaIndirizzi, distanzaMetri, distanzaLeggibile, durataLeggibile } from '/js/mappa-strumenti.js';
 import { montaElementiMappa, creaControlloLivelli, aggiungiCartografia } from '/js/mappa-elementi.js';
+import { aggiungiRadar } from '/js/radar-meteo.js';
 
 let elementiMappa = null;
 
@@ -234,29 +235,12 @@ setInterval(() => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("Pagina Centro Operativo caricata.");
-    const topMenuBtn = document.getElementById('top-menu-btn');
-    const topMenuContent = document.getElementById('top-menu-content');
-    if (topMenuBtn && topMenuContent) {
-        topMenuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            topMenuContent.style.display = topMenuContent.style.display === 'none' ? 'block' : 'none';
-        });
-        document.addEventListener('click', (e) => {
-            if (!topMenuBtn.contains(e.target) && !topMenuContent.contains(e.target)) {
-                topMenuContent.style.display = 'none';
-            }
-        });
-    }
+    preparaMenuScorrevole();
     await loadAndApplyBranding();
     try {
         const meResponse = await fetchApi('/api/me/status');
-        currentUserRole = meResponse.role; 
-        
-        localStorage.setItem('userRole', currentUserRole);
-        localStorage.setItem('userRuoli', JSON.stringify(
-            Array.isArray(meResponse.ruoli) && meResponse.ruoli.length ? meResponse.ruoli : [currentUserRole]
-        ));
-        localStorage.setItem('userPermessi', JSON.stringify(Array.isArray(meResponse.permessi) ? meResponse.permessi : []));
+        currentUserRole = meResponse.role;
+        salvaRuoliEPermessi(meResponse);
     } catch (error) {
         // In manutenzione il velo è già a schermo: niente rimando all'accesso.
         if (error?.manutenzione || window.__orionManutenzione) return;
@@ -360,6 +344,9 @@ function setupEventListeners() {
     }
 
     if (bottomPanelCloseBtn) bottomPanelCloseBtn.addEventListener('click', closeBottomPanel);
+    document.getElementById('torna-elenco-btn')?.addEventListener('click', closeBottomPanel);
+    collocaDettaglio();
+    colonnaStretta.addEventListener('change', collocaDettaglio);
     if (bottomPanelAddUpdateForm) bottomPanelAddUpdateForm.addEventListener('submit', handleAddUpdateSubmit);
     if (bottomPanelNewUpdateText) {
         bottomPanelNewUpdateText.addEventListener('keydown', (event) => {
@@ -502,40 +489,11 @@ setInterval(() => {
     });
 }, 30000); 
 
-L.Control.Logo = L.Control.extend({
-    options: {
-        position: 'topleft'
-    },
-
-    onAdd: function (map) {
-        const container = L.DomUtil.create('div', 'leaflet-control-logo leaflet-bar');
-        L.DomEvent.disableClickPropagation(container);
-
-        const logoImg = L.DomUtil.create('img', '', container);
-        logoImg.src = brandingSettings.logoUrl;
-        logoImg.alt = 'Logo';
-        logoImg.style.maxWidth = '80px';
-        logoImg.style.height = 'auto';
-        logoImg.style.display = 'block';
-
-        return container;
-    },
-
-    onRemove: function (map) {
-    }
-});
-
-L.control.logo = function(opts) {
-    return new L.Control.Logo(opts);
-}
-
 function updateUserInterfaceForRole(role) {
     currentUserRole = role;
     console.log(`[UI Update] Applicazione permessi per ruolo: ${currentUserRole}`);
 
     const isEsterno = currentUserRole === 'esterno';
-    const isAdmin = currentUserRole === 'admin';
-    const isSegreteria = currentUserRole === 'segreteria';
 
     if (createNewReportBtn) createNewReportBtn.style.display = isEsterno ? 'none' : 'inline-block';
     
@@ -549,6 +507,13 @@ function updateUserInterfaceForRole(role) {
     if (rubricaBtn) rubricaBtn.style.display = '';
     window.Funzioni?.inizia({ interno: !isEsterno });
     if (!isEsterno) preparaScorciatoieSquadre();
+    mostraVociDelMenu();
+}
+
+// Si richiama anche quando i permessi cambiano mentre la pagina è aperta (evento orion:permessi).
+function mostraVociDelMenu() {
+    const isAdmin = haRuolo('admin');
+    const isEsterno = !isAdmin && ruoliUtente().includes('esterno');
     if (adminDashboardBtn) adminDashboardBtn.style.display = (isEsterno || !isAdmin) ? 'none' : 'block';
     const segreteriaMenuBtn = document.getElementById('segreteria-menu-btn');
     if (segreteriaMenuBtn) {
@@ -612,10 +577,10 @@ function initMap() {
         "Posizione Squadre": teamMarkersLayer
     };
 
-    L.control.logo({ position: 'topleft' }).addTo(map);
     creaRicerca(map, { cercaLocale: cercaSullaMappa, suScelta: usaRisultatoRicerca });
     const controlloLivelli = creaControlloLivelli(baseMaps, overlayMaps, { position: 'bottomleft' }).addTo(map);
     aggiungiCartografia(map, controlloLivelli, [osmLayer, satelliteLayer]);
+    aggiungiRadar(map, controlloLivelli);
     livelloPercorso = L.layerGroup().addTo(map);
     elementiMappa = montaElementiMappa(map, controlloLivelli, {
         calcolaPercorso,
@@ -749,9 +714,38 @@ function htmlSquadreAssegnate(assegnate) {
         const capo = allTeamsList.find(s => s.id === t.id)?.caposquadra;
         const contatto = capo ? `<span class="contatto-caposquadra squadra-assegnata-capo"><i class="fas fa-star" aria-hidden="true"></i> ${escapeHTML(nomePersona(capo))}` +
             (capo.telefono ? ` · <a href="tel:${escapeHTML(capo.telefono.replace(/[^0-9+]/g, ''))}" title="Chiama ${escapeHTML(nomePersona(capo))}">${escapeHTML(capo.telefono)}</a>` : '') + '</span>' : '';
-        return `<span class="squadra-assegnata"><span style="background: rgba(139, 92, 246, 0.15); color: #6d28d9; padding: 4px 10px; border-radius: 50px; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="fas fa-truck-pickup"></i> ${escapeHTML(t.nome_radio || t.nome || '?')}</span>${contatto}</span>`;
+        const cartellino = window.Qualifiche?.cartellino(t.qualifica, t.nome_radio || t.nome || '?')
+            || `<span class="cartellino-squadra"><i class="fas fa-truck-pickup"></i> ${escapeHTML(t.nome_radio || t.nome || '?')}</span>`;
+        return `<span class="squadra-assegnata">${cartellino}${sceltaStatoSquadra(t)}${contatto}</span>`;
     }).join(' ');
 }
+
+const STATI_SQUADRA = [['assegnata', 'Assegnata'], ['partita', 'Partita'], ['sul_posto', 'Sul posto'], ['conclusa', 'Intervento concluso'], ['rientrata', 'Rientrata']];
+const ETICHETTE_STATO_SQUADRA = Object.fromEntries(STATI_SQUADRA);
+// Gli interni correggono anche all'indietro (lo stesso controllo del server); gli esterni della squadra solo avanti.
+function sceltaStatoSquadra(t) {
+    if (t.id == null) return '';
+    const attuale = STATI_SQUADRA.findIndex(([c]) => c === (t.stato || 'assegnata'));
+    const soloAvanti = ruoliUtente().includes('esterno') && !haRuolo('admin');
+    const opzioni = STATI_SQUADRA.map(([codice, nome], i) =>
+        `<option value="${codice}"${i === attuale ? ' selected' : ''}${soloAvanti && i < attuale ? ' disabled' : ''}>${nome}</option>`).join('');
+    return `<select class="stato-squadra stato-${escapeHTML(t.stato || 'assegnata')}" data-team-id="${escapeHTML(String(t.id))}" data-prima="${escapeHTML(t.stato || 'assegnata')}" aria-label="Stato della squadra ${escapeHTML(t.nome_radio || '')}">${opzioni}</select>`;
+}
+document.addEventListener('change', async (e) => {
+    const scelta = e.target.closest?.('select.stato-squadra');
+    if (!scelta || !currentlyDisplayedReportId) return;
+    const prima = scelta.dataset.prima;
+    try {
+        await fetchApi(`/api/reports/${currentlyDisplayedReportId}/teams/${scelta.dataset.teamId}/stato`, {
+            method: 'POST', body: JSON.stringify({ stato: scelta.value }), coda: `stato della squadra: ${ETICHETTE_STATO_SQUADRA[scelta.value]}`
+        });
+        scelta.dataset.prima = scelta.value;
+        scelta.className = `stato-squadra stato-${scelta.value}`;
+    } catch (err) {
+        scelta.value = prima;
+        notifica(err.message, 'errore');
+    }
+});
 
 function testoMittente(teamId, squadra) {
     const da = mittentiPosizione.get(teamId);
@@ -900,7 +894,7 @@ async function mostraPercorso(squadra, meta, { inquadra }) {
     L.circleMarker(meta.posizione, { radius: 18, color: '#d4453c', weight: 3, fill: false, interactive: false, className: 'meta-percorso' }).addTo(livelloPercorso);
     mostraInfoPercorso(squadra, meta, percorso);
     if (inquadra) {
-        const aperti = document.body.classList.contains('eventi-aperti') ? 330 : 40;
+        const aperti = 40 + (document.body.classList.contains('eventi-aperti') ? 290 : 0) + (document.body.classList.contains('voce-aperta') ? 340 : 0);
         const alta = map.getSize().y >= 500;
         map.fitBounds(linea.getBounds().extend(da), {
             paddingTopLeft: alta ? [60, 250] : [70, 70],
@@ -961,6 +955,8 @@ function aggiornaPercorsoSeServe(teamId) {
 
 function updateEmergencyStatusUI(emergencyData) {
     activeEmergency = emergencyData ? emergencyData.emergency : null;
+    mostraPrimiPassi();
+    aggiornaMiaSquadra();
 
     elementiMappa?.carica();
     const esterniBtn = document.getElementById('esterni-temporanei-btn');
@@ -1154,6 +1150,7 @@ function createReportDivIcon(report) {
     const [w, h] = alta ? [34, 47] : [28, 39];
     const classi = ['pin-segnalazione', `sit-${situazioneSegnalazione(report)}`];
     if (alta) classi.push('prio-alta');
+    if (dellaMiaSquadra(report)) classi.push('mia-squadra');
     if (haNovita(report.id)) classi.push('con-novita');
     const numero = report.emergency_report_number ?? report.id ?? '?';
     const html = `<div class="${escapeHTML(classi.join(' '))}"><span class="anello-novita"></span>`
@@ -1188,18 +1185,22 @@ function iconaGruppoSegnalazioni(gruppo) {
     });
 }
 
+// Le squadre di fuori hanno un cerchio nel colore dell'ente, con l'anello bianco e la sigla sotto: in mezzo ai
+// cerchi arancioni del gruppo si vedono subito, e la lettera resta unica come il nome radio.
 function createTeamDivIcon(teamData, isStale = false) {
     const prefix = teamData?.nome_radio || '';
     const letter = prefix ? prefix.charAt(0).toUpperCase() : '?';
     const letterClass = `prefix-letter-${letter}`;
     const staleClass = isStale ? ' team-marker-stale' : '';
+    const qualifica = allTeamsList.find(s => s.id === (teamData?.squadra_id ?? teamData?.id))?.qualifica;
+    const esterna = window.Qualifiche?.stile(qualifica);
 
-    const iconHtml = `<span class="marker-letter">${letter}</span>`;
+    const iconHtml = esterna ? Qualifiche.segnaposto(qualifica, letter) : `<span class="marker-letter">${letter}</span>`;
     const iconWidth = 30;
     const iconHeight = 30;
 
     return L.divIcon({
-        className: `team-marker-div-icon ${letterClass}${staleClass}`,
+        className: `team-marker-div-icon ${esterna ? 'squadra-esterna-marker' : letterClass}${staleClass}`,
         html: iconHtml,
         iconSize: [iconWidth, iconHeight],
         iconAnchor: [iconWidth / 2, iconHeight / 2],
@@ -1489,7 +1490,9 @@ function closeBottomPanel() {
         }
     }
     
-    sidePanel.style.left = '-100%'; 
+    sidePanel.style.left = '-100%';
+    // Fuori dallo schermo ma non nascosto: senza inert il Tab finirebbe nei suoi pulsanti invisibili.
+    sidePanel.inert = true;
     document.body.classList.remove('dettaglio-aperto');
     highlightTableRow(null);
     currentlyDisplayedReportId = null;
@@ -1530,7 +1533,7 @@ async function showReportDetails(reportId) {
     bottomPanelUpdatesList.innerHTML = '<li>Caricamento aggiornamenti...</li>';
     if (bottomPanelNewUpdateText) bottomPanelNewUpdateText.value = '';
     bottomPanel.style.display = 'flex';
-    if (sidePanel) sidePanel.style.left = '0px'; 
+    if (sidePanel) { sidePanel.style.left = '0px'; sidePanel.inert = false; }
     document.body.classList.add('dettaglio-aperto');
 
     try {
@@ -1841,12 +1844,43 @@ function initiateCoordinateUpdateFromPanel(reportId) {
 }
 
 // Un punto dentro un'area aprirebbe il riquadro dell'area invece di sceglierlo.
-function sceltaPunto(si) {
+// La finestra sparisce mentre si sceglie: la fascia sulla mappa dice cosa fare e come tornare indietro.
+let annullaSceltaPunto = null;
+function sceltaPunto(si, { annulla = null } = {}) {
     if (!map) return;
-    map.getContainer().style.cursor = si ? 'crosshair' : '';
-    map.getContainer().classList.toggle('lm-disegnando', si);
+    const contenitore = map.getContainer();
+    contenitore.style.cursor = si ? 'crosshair' : '';
+    contenitore.classList.toggle('lm-disegnando', si);
+    contenitore.classList.toggle('scelta-punto', si && !!annulla);
+    let fascia = document.getElementById('fascia-scelta-punto');
+    if (si && annulla) {
+        if (!fascia) {
+            fascia = document.createElement('div');
+            fascia.id = 'fascia-scelta-punto';
+            fascia.className = 'fascia-scelta-punto';
+            fascia.setAttribute('role', 'status');
+            const testo = document.createElement('span');
+            testo.textContent = 'Clicca sulla mappa dove si trova la segnalazione · Esc per annullare';
+            const pulsante = document.createElement('button');
+            pulsante.type = 'button';
+            pulsante.className = 'button-style button-secondary button-small';
+            pulsante.textContent = 'Annulla';
+            pulsante.addEventListener('click', (e) => { e.stopPropagation(); annullaSceltaPunto?.(); });
+            fascia.append(testo, pulsante);
+            L.DomEvent.disableClickPropagation(fascia);
+            contenitore.appendChild(fascia);
+        }
+        fascia.hidden = false;
+        annullaSceltaPunto = annulla;
+    } else {
+        if (fascia) fascia.hidden = true;
+        annullaSceltaPunto = null;
+    }
     if (si) map.closePopup();
 }
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && annullaSceltaPunto) { e.preventDefault(); annullaSceltaPunto(); }
+});
 
 function cancelCoordinateUpdateFromPanel() {
     if (!isUpdatingCoordsFromPanel) return; 
@@ -2012,6 +2046,9 @@ async function handleSaveStatus(report, newStatus, feedbackElement, buttonElemen
 function openCreateModal() {
     if (!createReportModal || !createReportForm) return;
     createReportForm.reset();
+    disegnaSceltaTipo('altro');
+    const avvisoVicine = document.getElementById('vicine-avviso');
+    if (avvisoVicine) { avvisoVicine.hidden = true; delete avvisoVicine.dataset.confermata; }
     mapSelectionFeedback.textContent = '';
     deactivateMapSelectionMode();
     createReportModal.style.display = 'flex';
@@ -2040,8 +2077,8 @@ function activateMapSelectionMode(){
     isSelectingOnMap = true;
     createReportModal.style.display = 'none';
     map.on('click', onMapClickSelectCoord);
-    sceltaPunto(true);
-    mapSelectionFeedback.textContent = 'Clicca sulla mappa per scegliere le coordinate...';
+    sceltaPunto(true, { annulla: () => { deactivateMapSelectionMode(); createReportModal.style.display = 'flex'; } });
+    mapSelectionFeedback.textContent = '';
     if(createSelectOnMapBtn) createSelectOnMapBtn.textContent = 'Annulla Selezione';
     console.log("Modalità selezione su mappa ATTIVATA, modale nascosto.");
 }
@@ -2095,6 +2132,16 @@ async function handleCreateReportSubmit(event) {
          return;
     }
 
+    // Prima di creare, le aperte entro 100 metri: due telefonate per lo stesso albero non diventano due segnalazioni.
+    const avvisoVicine = document.getElementById('vicine-avviso');
+    if (finalLat !== null && avvisoVicine && avvisoVicine.dataset.confermata !== `${finalLat},${finalLon}`) {
+        const vicine = await fetchApi(`/api/reports/vicine?lat=${finalLat}&lon=${finalLon}`).catch(() => []);
+        if (Array.isArray(vicine) && vicine.length) {
+            mostraVicine(vicine, `${finalLat},${finalLon}`);
+            return;
+        }
+    }
+
     const reportData = {
         title,
         description: document.getElementById('create-description').value.trim() || null,
@@ -2103,7 +2150,8 @@ async function handleCreateReportSubmit(event) {
         latitude: finalLat,
         longitude: finalLon,
         reporter_name: reporterName,
-        reporter_contact: reporterContact
+        reporter_contact: reporterContact,
+        tipo: document.querySelector('#create-tipo [aria-checked="true"]')?.dataset.tipo || 'altro'
     };
     const submitButton = event.target.querySelector('button[type="submit"]');
     try {
@@ -2141,6 +2189,7 @@ async function openEditModal(reportId) {
         document.getElementById('edit-title').value = report.title || '';
         document.getElementById('edit-description').value = report.description || '';
         document.getElementById('edit-priority').value = report.priority || 'Medium';
+        riempiTipi(document.getElementById('edit-tipo'), report.tipo || 'altro');
         const editStatusSelect = document.getElementById('edit-status');
         if (editStatusSelect) {
             editStatusSelect.innerHTML = `
@@ -2179,8 +2228,8 @@ function activateMapSelectionModeEdit(){
     isSelectingOnMap = true;
     editReportModal.style.display = 'none';
     map.on('click', onMapClickSelectCoordEdit);
-    sceltaPunto(true);
-    if(editMapSelectionFeedback) editMapSelectionFeedback.textContent = 'Clicca sulla mappa per scegliere le coordinate...';
+    sceltaPunto(true, { annulla: () => { deactivateMapSelectionModeEdit(); editReportModal.style.display = 'flex'; } });
+    if(editMapSelectionFeedback) editMapSelectionFeedback.textContent = '';
     if(editSelectOnMapBtn) editSelectOnMapBtn.textContent = 'Annulla Selezione';
     console.log("Modalità selezione su mappa ATTIVATA (Edit), modale nascosto.");
 }
@@ -2252,6 +2301,7 @@ async function handleEditReportSubmit(event) {
         title: document.getElementById('edit-title').value.trim(),
         description: document.getElementById('edit-description').value.trim(),
         priority: document.getElementById('edit-priority').value,
+        tipo: document.getElementById('edit-tipo').value || 'altro',
         status: document.getElementById('edit-status').value,
         stato_atteso: document.getElementById('edit-status').dataset.statoAtteso || undefined,
         location_address: document.getElementById('edit-location').value.trim(),
@@ -2401,8 +2451,8 @@ async function updateTeamStatusPanel() {
     teamStatusContentDiv.innerHTML = '';
 
     if (!allTeamsList || !allTeamsList.length) {
-        teamStatusContentDiv.innerHTML = '<span>Nessuna squadra configurata.</span>';
-        console.log("[updateTeamStatusPanel] Nessuna squadra in allTeamsList.");
+        teamStatusContentDiv.innerHTML = ruoliUtente().includes('esterno') ? '<span>Nessuna squadra.</span>'
+            : '<span>Nessuna squadra: si compongono da <a href="/admin/squadre.html">Squadre</a>.</span>';
         return;
     }
 
@@ -2446,18 +2496,19 @@ async function updateTeamStatusPanel() {
                 const progressiveNumber = targetInfo.target_report_progressive_number;
                 const reportTitle = targetInfo.target_report_title;
 
+                const statoSquadra = ETICHETTE_STATO_SQUADRA[targetInfo.stato] || 'Assegnata';
                 if (progressiveNumber !== null && progressiveNumber !== undefined) {
-                    statusText = `(Assegnata &rarr; #${progressiveNumber})`;
+                    statusText = `(${statoSquadra} &rarr; #${progressiveNumber})`;
                 } else {
                     statusText = `(Assegnata &rarr; ID: ${targetInfo.report_id})`;
                     console.warn(`[updateTeamStatusPanel] Num. progressivo per report ${targetInfo.report_id} non trovato in active_target_info. Mostro ID.`);
                 }
             }
 
-            const newInnerHTML = `<strong>${escapeHTML(prefix)}</strong>${escapeHTML(optionalName)} <span class="team-current-status">${statusText}</span>`;
+            const newInnerHTML = `${window.Qualifiche?.bollino(team.qualifica) || ''}<strong>${escapeHTML(prefix)}</strong>${escapeHTML(optionalName)} <span class="team-current-status">${statusText}</span>`;
             const capo = team.caposquadra ? `\nCaposquadra: ${nomePersona(team.caposquadra)}${team.caposquadra.telefono ? ' · ' + team.caposquadra.telefono : ''}` : '';
             const newTitle = `Squadra: ${prefix}${optionalName}\nID: ${team.id}\nStato: ${statusText.replace('&rarr;', '→')}\nMembri: ${team.membri?.length || 0}${capo}`;
-            const newClassName = `team-status-item ${statusClass}${isStale ? ' team-marker-stale' : ''}`;
+            const newClassName = `team-status-item ${statusClass}${team.qualifica ? ' squadra-esterna' : ''}${isStale ? ' team-marker-stale' : ''}`;
 
             if (teamSpan) {
                 if (teamSpan.innerHTML !== newInnerHTML) teamSpan.innerHTML = newInnerHTML;
@@ -2488,11 +2539,26 @@ async function updateTeamStatusPanel() {
         console.log(`[updateTeamStatusPanel] Rimuovo span obsoleto per team ID ${span.dataset.teamId}`);
         span.remove();
     });
+    // Prima la COC, poi le impegnate, poi le libere; dentro ogni gruppo per nome radio.
+    const gruppo = (t) => (t.coc ? 0 : t.active_target_info ? 1 : 2);
+    [...allTeamsList].filter(t => t?.id != null)
+        .sort((a, b) => gruppo(a) - gruppo(b) || String(a.nome_radio || '').localeCompare(String(b.nome_radio || ''), 'it'))
+        .forEach(t => {
+            const span = teamStatusContentDiv.querySelector(`.team-status-item[data-team-id="${t.id}"]`);
+            if (span) teamStatusContentDiv.appendChild(span);
+        });
+    aggiornaFrecceSquadre();
 
     if (teamStatusContentDiv.children.length === 0 && allTeamsList.length > 0) {
          teamStatusContentDiv.innerHTML = '<span>Errore: nessuna squadra da visualizzare?</span>';
     } else if (allTeamsList.length === 0){
          teamStatusContentDiv.innerHTML = '<span>Nessuna squadra configurata.</span>';
+    }
+    window.voceSala?.decoraBarraSquadre();
+    // Un segnaposto nato prima dell'elenco delle squadre non sapeva della qualifica.
+    for (const t of allTeamsList) {
+        const marker = t?.id != null ? teamMarkerReferences[t.id] : null;
+        if (marker) marker.setIcon(createTeamDivIcon({ squadra_id: t.id, nome_radio: t.nome_radio }, marker.getElement()?.classList.contains('team-marker-stale')));
     }
 
     console.log("[updateTeamStatusPanel] Pannello UI aggiornato.");
@@ -2649,7 +2715,7 @@ async function chiediChiusuraEmergenza(codice) {
         const titolo = document.createElement('h2');
         titolo.textContent = `Chiudere l'emergenza ${codice}?`;
         const spiega = document.createElement('p');
-        spiega.textContent = 'Le segnalazioni aperte vengono chiuse e archiviate, le squadre sciolte e gli accessi esterni chiusi.';
+        spiega.textContent = 'Le segnalazioni aperte vengono chiuse e archiviate e gli accessi esterni finiscono. Le squadre restano formate; si chiudono solo quelle rimaste vuote.';
         finestra.append(titolo, spiega);
         const caselle = [];
         if (inVigore.length) {
@@ -3248,6 +3314,10 @@ function setupWebSocketListeners() {
     }
 });
     
+    // Una squadra o una funzione cambiata può cambiare i ruoli e quello che questa pagina deve mostrare.
+    document.addEventListener('ws:reload_squadre', () => { rileggiPermessi(); aggiornaMiaSquadra(); });
+    document.addEventListener('ws:reload_funzioni', () => rileggiPermessi());
+    document.addEventListener('orion:permessi', () => mostraVociDelMenu());
     document.addEventListener('ws:reload_squadre', async (event) => {
         const detail = event.detail || {};
         console.log('Evento WS ricevuto: reload_squadre', detail);
@@ -3649,6 +3719,7 @@ async function apriMenuSquadra(squadra, ancora) {
         }));
     }
 
+    window.voceSala?.decoraMenuSquadra(menu, squadra);
     document.body.appendChild(menu);
     menuSquadraAperto = menu;
     const r = ancora.getBoundingClientRect();
@@ -3828,6 +3899,7 @@ function disegnaMembriSquadra(teamData) {
             tel.title = `Chiama ${chi}`;
             li.append(' ', tel);
         }
+        window.voceSala?.decoraMembro(li, { ...member, nome: chi });
         teamMembersModalList.appendChild(li);
     });
 }
@@ -3917,7 +3989,7 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
             clickedCard.dataset.maiAperta = 'no';
             azzeraNonLetti(clickedReportId);
 
-            if (sidePanel) sidePanel.style.left = '0px';
+            if (sidePanel) { sidePanel.style.left = '0px'; sidePanel.inert = false; }
             showReportDetails(clickedReportId);
         });
     } else {
@@ -3950,6 +4022,8 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
     card.dataset.situazione = situazioneSegnalazione(report);
     card.dataset.modificata = report.updated_at || '';
     card.dataset.terminale = terminale ? 'si' : 'no';
+    card.dataset.tipo = report.tipo || 'altro';
+    card.classList.toggle('della-mia-squadra', dellaMiaSquadra(report));
 
     const vistaIl = window.reportLastViewedLogTimestamp?.get(String(report.id));
     const modificataIl = report.updated_at ? new Date(report.updated_at) : null;
@@ -3959,7 +4033,7 @@ function createOrUpdateReportRow(report, appendToEnd = false) {
     card.innerHTML = `
         <div class="inbox-header">
             <span class="inbox-id-title" title="${escapeHTML(report.title || '')}">
-                <span style="color: var(--info-text);">#${displayValue}</span> ${escapeHTML(report.title || 'N/A')}
+                <span style="color: var(--info-text);">#${displayValue}</span> ${iconaTipo(report.tipo)} ${escapeHTML(report.title || 'N/A')}
             </span>
             <span class="inbox-time${attesaCritica ? ' attesa-critica' : ''}" title="Aperta ${attesa.testo} fa">${attesa.testo}</span>
         </div>
@@ -4227,6 +4301,19 @@ document.addEventListener('ws:nota_sala', (event) => {
     aggiungiEvento({ quando: messaggio.voce.creata_il, tipo: 'sala', chi: messaggio.voce.autore_nome, testo: messaggio.voce.testo });
 });
 
+document.addEventListener('ws:squadra_in_zona', (event) => {
+    const m = event.detail || {};
+    if (!activeEmergency || m.emergency_id !== activeEmergency.id) return;
+    const zona = m.zona?.nome ? `«${m.zona.nome}»` : 'senza nome';
+    // Entrare nella zona dove c'è il proprio intervento è il lavoro previsto: avviso sì, allarme no.
+    mostraAvviso({
+        titolo: `Squadra ${m.squadra} in zona interdetta`,
+        testo: m.intervento ? `Zona ${zona}, dove si trova l'intervento n. ${m.intervento.numero}.` : `È entrata nella zona ${zona}.`,
+        urgente: !m.intervento,
+        reportId: m.intervento?.id
+    });
+});
+
 async function caricaEventi() {
     aggiornaFormDiarioSala();
     if (!listaEventi || !activeEmergency) return;
@@ -4469,12 +4556,33 @@ function creaVoceLog(update, isMyOwnUpdate, nuova) {
         li.style.cssText = 'padding: 6px 10px; border-radius: 6px; max-width: 95%; margin-bottom: 4px;';
     }
 
+    if (update.voce_id) window.voceSala?.decoraNotaVocale(li, update);
     if (nuova) {
         li.classList.add('new-log-blink');
         li.addEventListener('click', (e) => e.currentTarget.classList.remove('new-log-blink'), { once: true });
     }
     return li;
 }
+
+let segnoVoce = null;
+window.orionCentro = {
+    feedback: (testo, tipo, durata) => showTemporaryFeedback(testo, tipo, durata),
+    apriSegnalazione: (id) => showReportDetails(id),
+    markerSquadra: (id) => teamMarkerReferences[id] || null,
+    mostraPunto(lat, lon, testo) {
+        if (!map) return;
+        segnoVoce?.remove();
+        segnoVoce = L.circleMarker([lat, lon], { radius: 14, color: '#dc2626', weight: 3, fillOpacity: 0.25 }).addTo(map);
+        segnoVoce.bindPopup(escapeHTML(testo)).openPopup();
+        map.setView([lat, lon], Math.max(map.getZoom(), 16));
+    },
+    scriviNota(testo) {
+        if (!bottomPanelNewUpdateText) return;
+        bottomPanelNewUpdateText.value = testo;
+        bottomPanelNewUpdateText.focus();
+        bottomPanelNewUpdateText.setSelectionRange(testo.length, testo.length);
+    }
+};
 
 function creaSeparatoreNuovi(quante) {
     const li = document.createElement('li');
@@ -4523,7 +4631,13 @@ function appendReportRows(reports) {
         const noReportsMsg = reportListBody.querySelector('.no-reports-msg');
         if (noReportsMsg) noReportsMsg.remove();
     } else if (reportListBody.children.length === 0) {
-        reportListBody.innerHTML = '<div class="no-reports-msg" style="padding: 20px; text-align: center; color: var(--text-muted);">Nessuna segnalazione trovata.</div>';
+        const interno = !ruoliUtente().includes('esterno');
+        const vuota = !activeEmergency
+            ? paginaVuota('Nessuna emergenza aperta: le segnalazioni compaiono qui quando se ne apre una.')
+            : paginaVuota('Qui arrivano le segnalazioni dell\'emergenza, dalle telefonate e dal campo.',
+                interno && createNewReportBtn ? { etichetta: 'Nuova segnalazione', suClick: () => createNewReportBtn.click() } : null);
+        vuota.classList.add('no-reports-msg');
+        reportListBody.replaceChildren(vuota);
     }
     reports.forEach(report => createOrUpdateReportRow(report, true));
 }
@@ -4545,7 +4659,7 @@ function aggiornaRiepilogo() {
     const schede = [...reportListBody.querySelectorAll('.inbox-card')];
     box.hidden = showOnlyClosedReports || schede.length === 0;
     const voce = VOCI_RIEPILOGO.find(v => v.id === filtroRiepilogo) || VOCI_RIEPILOGO[0];
-    schede.forEach(c => { c.hidden = !voce.prova(c); });
+    schede.forEach(c => { c.hidden = !voce.prova(c) || (filtroTipo !== '' && c.dataset.tipo !== filtroTipo); });
 
     box.replaceChildren(...VOCI_RIEPILOGO.flatMap(v => {
         const quante = schede.filter(v.prova).length;
@@ -4565,7 +4679,7 @@ function aggiornaRiepilogo() {
             aggiornaRiepilogo();
         });
         return [b];
-    }));
+    }), sceltaFiltroTipo(schede));
 }
 
 if (reportListBody) {
@@ -4575,4 +4689,335 @@ if (reportListBody) {
         inAttesaRiepilogo = true;
         requestAnimationFrame(() => { inAttesaRiepilogo = false; aggiornaRiepilogo(); });
     }).observe(reportListBody, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-situazione'] });
+}
+
+// Dopo l'installazione si arriva sulla mappa dell'Italia: il riquadro dice cosa sistemare, fuori dall'emergenza.
+async function mostraPrimiPassi() {
+    const riquadro = document.getElementById('primi-passi');
+    if (!riquadro) return;
+    if (!haRuolo('admin') || activeEmergency) { riquadro.hidden = true; return; }
+    let dati;
+    try { dati = await fetchApi('/api/admin/primi-passi'); } catch { riquadro.hidden = true; return; }
+    const daFare = (dati?.passi || []).filter(p => !p.fatto);
+    if (dati?.nascosto || !daFare.length) { riquadro.hidden = true; return; }
+    const titolo = document.createElement('h3');
+    titolo.id = 'primi-passi-titolo';
+    titolo.textContent = 'Primi passi';
+    const elenco = document.createElement('ol');
+    for (const passo of dati.passi) {
+        const li = document.createElement('li');
+        li.className = passo.fatto ? 'fatto' : '';
+        if (passo.fatto) {
+            li.textContent = passo.testo;
+        } else {
+            const a = document.createElement('a');
+            a.href = passo.dove;
+            a.textContent = passo.testo;
+            li.append(a);
+        }
+        elenco.append(li);
+    }
+    const nascondi = document.createElement('button');
+    nascondi.type = 'button';
+    nascondi.className = 'button-style button-secondary button-small';
+    nascondi.textContent = 'Nascondi';
+    nascondi.addEventListener('click', async () => {
+        try {
+            await fetchApi('/api/branding/settings', { method: 'PUT', body: JSON.stringify({ primi_passi_nascosti: 'true' }) });
+            riquadro.hidden = true;
+        } catch (e) {
+            notifica(e.message, 'errore');
+        }
+    });
+    const testa = document.createElement('div');
+    testa.className = 'primi-passi-testa';
+    testa.append(titolo, nascondi);
+    const spiega = document.createElement('p');
+    spiega.textContent = `Ancora ${daFare.length} ${daFare.length === 1 ? 'cosa' : 'cose'} da sistemare prima di usare ORION per davvero.`;
+    riquadro.replaceChildren(testa, spiega, elenco);
+    riquadro.hidden = false;
+}
+
+// Per chi prende una telefonata l'indirizzo è il punto: si cerca mentre si scrive, come con la lente della mappa.
+// Nominatim chiede al massimo una richiesta al secondo: si aspetta una pausa e ogni battuta annulla la ricerca prima.
+function preparaIndirizzoCreazione() {
+    const campo = document.getElementById('create-location');
+    if (!campo || campo.dataset.suggerimenti) return;
+    campo.dataset.suggerimenti = '1';
+    campo.setAttribute('autocomplete', 'off');
+    campo.setAttribute('role', 'combobox');
+    campo.setAttribute('aria-autocomplete', 'list');
+    campo.setAttribute('aria-expanded', 'false');
+    const elenco = document.createElement('ul');
+    elenco.id = 'create-location-suggerimenti';
+    elenco.className = 'suggerimenti-indirizzo';
+    elenco.setAttribute('role', 'listbox');
+    elenco.hidden = true;
+    campo.setAttribute('aria-controls', elenco.id);
+    campo.after(elenco);
+    let attesa = null, controllo = null, trovati = [], attivo = -1;
+    const chiudi = () => { elenco.hidden = true; campo.setAttribute('aria-expanded', 'false'); attivo = -1; };
+    const evidenzia = () => [...elenco.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === attivo)));
+    const scegli = (t) => {
+        createLatitudeInput.value = t.lat.toFixed(6);
+        createLongitudeInput.value = t.lng.toFixed(6);
+        mapSelectionFeedback.textContent = `Punto: ${t.nome}`;
+        if (map) {
+            const punto = L.latLng(t.lat, t.lng);
+            if (tempSelectionMarker) tempSelectionMarker.setLatLng(punto);
+            else tempSelectionMarker = L.marker(punto, { icon: defaultReportIcon }).addTo(map);
+        }
+        chiudi();
+    };
+    campo.addEventListener('input', () => {
+        clearTimeout(attesa);
+        controllo?.abort();
+        const testo = campo.value.trim();
+        if (testo.length < 4) return chiudi();
+        attesa = setTimeout(async () => {
+            controllo = new AbortController();
+            try {
+                trovati = (await cercaIndirizzi(testo, { centro: map?.getCenter(), limiti: map?.getBounds(), segnale: controllo.signal })).slice(0, 5);
+            } catch {
+                return chiudi();
+            }
+            elenco.replaceChildren(...trovati.map((t, i) => {
+                const li = document.createElement('li');
+                li.id = `create-location-scelta-${i}`;
+                li.setAttribute('role', 'option');
+                li.textContent = t.nome;
+                li.addEventListener('mousedown', (e) => { e.preventDefault(); scegli(t); });
+                return li;
+            }));
+            attivo = -1;
+            elenco.hidden = trovati.length === 0;
+            campo.setAttribute('aria-expanded', String(!elenco.hidden));
+        }, 400);
+    });
+    campo.addEventListener('keydown', (e) => {
+        if (elenco.hidden) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            attivo = (attivo + (e.key === 'ArrowDown' ? 1 : -1) + trovati.length) % trovati.length;
+            evidenzia();
+        } else if (e.key === 'Enter' && attivo >= 0) {
+            e.preventDefault();
+            scegli(trovati[attivo]);
+        } else if (e.key === 'Escape') {
+            e.stopPropagation();
+            chiudi();
+        }
+    });
+    campo.addEventListener('blur', () => setTimeout(chiudi, 150));
+}
+document.addEventListener('DOMContentLoaded', preparaIndirizzoCreazione);
+
+// Il volontario di una squadra operativa trova subito il suo intervento; la squadra COC lavora sulla sala intera.
+let miaSquadra = null;
+const dellaMiaSquadra = (report) => !!miaSquadra && (report?.assigned_teams || []).some(t => Number(t.id) === Number(miaSquadra.id));
+
+async function aggiornaMiaSquadra() {
+    const riquadro = document.getElementById('mia-squadra');
+    if (!riquadro) return;
+    let squadra = null;
+    try { squadra = (await fetchApi('/api/users/me/team'))?.team || null; } catch { /* 404: nessuna squadra */ }
+    const primaId = miaSquadra?.id;
+    miaSquadra = squadra && !squadra.coc ? squadra : null;
+    const soloVolontario = !haRuolo('admin') && permessiUtente().length === 0 && !ruoliUtente().includes('esterno');
+    if (!miaSquadra) {
+        riquadro.hidden = !(soloVolontario && activeEmergency && !squadra?.coc);
+        riquadro.className = 'mia-squadra senza';
+        riquadro.textContent = 'Non sei in una squadra: la sala ti assegna quando serve.';
+    } else {
+        const titolo = document.createElement('h3');
+        titolo.textContent = `La tua squadra: ${miaSquadra.nome_radio}${miaSquadra.nome ? ` · ${miaSquadra.nome}` : ''}`;
+        const capo = document.createElement('p');
+        const c = miaSquadra.caposquadra;
+        capo.textContent = c ? `Caposquadra: ${[c.nome, c.cognome].filter(Boolean).join(' ') || c.username}` : 'Senza caposquadra';
+        const parti = [titolo, capo];
+        const lavoro = miaSquadra.intervento;
+        if (lavoro) {
+            const riga = document.createElement('div');
+            riga.className = 'mia-squadra-intervento';
+            const testo = document.createElement('span');
+            testo.textContent = `#${lavoro.numero ?? lavoro.report_id} ${lavoro.titolo || ''}${lavoro.indirizzo ? ` · ${lavoro.indirizzo}` : ''}`;
+            const apri = document.createElement('button');
+            apri.type = 'button';
+            apri.className = 'button-style button-small';
+            apri.textContent = 'Apri';
+            apri.addEventListener('click', () => showReportDetails(lavoro.report_id));
+            riga.append(testo, apri);
+            parti.push(riga);
+        } else {
+            const libero = document.createElement('p');
+            libero.textContent = 'Nessun intervento in corso.';
+            parti.push(libero);
+        }
+        riquadro.className = 'mia-squadra';
+        riquadro.replaceChildren(...parti);
+        riquadro.hidden = false;
+    }
+    if (primaId !== miaSquadra?.id) {
+        reportListBody?.querySelectorAll('.inbox-card').forEach(card => {
+            const marker = reportMarkerReferences[card.dataset.reportId];
+            card.classList.toggle('della-mia-squadra', dellaMiaSquadra(marker?.datiReport));
+        });
+        for (const marker of Object.values(reportMarkerReferences)) {
+            if (marker?.datiReport) marker.setIcon(createReportDivIcon(marker.datiReport));
+        }
+    }
+}
+
+// Sotto i 1400 pixel, con la voce aperta, il dettaglio sopra la mappa ne lasciava una striscia: lì si apre
+// nella colonna dell'elenco, al suo posto. Sul telefono resta com'era.
+const colonnaStretta = window.matchMedia('(min-width: 761px) and (max-width: 1400px)');
+function collocaDettaglio() {
+    const colonna = document.getElementById('reports-inbox-sidebar');
+    if (!sidePanel || !colonna) return;
+    if (!sidePanel._casa) sidePanel._casa = { genitore: sidePanel.parentNode, dopo: sidePanel.nextSibling };
+    const inColonna = colonnaStretta.matches;
+    if (inColonna && sidePanel.parentNode !== colonna) colonna.appendChild(sidePanel);
+    else if (!inColonna && sidePanel.parentNode === colonna) sidePanel._casa.genitore.insertBefore(sidePanel, sidePanel._casa.dopo);
+    document.body.classList.toggle('dettaglio-in-colonna', inColonna);
+}
+
+// Quando le squadre non ci stanno la barra scorre; le frecce compaiono solo se c'è altro da vedere.
+function aggiornaFrecceSquadre() {
+    const barra = teamStatusContentDiv;
+    if (!barra) return;
+    const sinistra = document.getElementById('squadre-sinistra');
+    const destra = document.getElementById('squadre-destra');
+    if (sinistra) sinistra.hidden = barra.scrollLeft <= 2;
+    if (destra) destra.hidden = barra.scrollLeft + barra.clientWidth >= barra.scrollWidth - 2;
+}
+function preparaFrecceSquadre() {
+    const barra = teamStatusContentDiv;
+    if (!barra || document.getElementById('squadre-sinistra')) return;
+    const freccia = (id, icona, verso, etichetta) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.id = id;
+        b.className = 'freccia-squadre';
+        b.setAttribute('aria-label', etichetta);
+        b.innerHTML = `<i class="fas ${icona}" aria-hidden="true"></i>`;
+        b.hidden = true;
+        b.addEventListener('click', () => barra.scrollBy({ left: verso * barra.clientWidth * 0.7, behavior: 'smooth' }));
+        return b;
+    };
+    barra.before(freccia('squadre-sinistra', 'fa-chevron-left', -1, 'Squadre precedenti'));
+    barra.after(freccia('squadre-destra', 'fa-chevron-right', 1, 'Altre squadre'));
+    barra.addEventListener('scroll', aggiornaFrecceSquadre, { passive: true });
+    new ResizeObserver(aggiornaFrecceSquadre).observe(barra);
+}
+document.addEventListener('DOMContentLoaded', preparaFrecceSquadre);
+
+// Lo stesso menu delle altre pagine (menu-laterale.js), qui come pannello che scorre da sinistra.
+function preparaMenuScorrevole() {
+    const pulsante = document.getElementById('top-menu-btn');
+    const pannello = document.getElementById('menu-scorrevole');
+    const velo = document.getElementById('velo-menu');
+    if (!pulsante || !pannello || !velo) return;
+    const apri = (si) => {
+        pannello.hidden = !si;
+        velo.hidden = !si;
+        pulsante.setAttribute('aria-expanded', String(si));
+        if (si) pannello.querySelector('a, button')?.focus();
+        else pulsante.focus();
+    };
+    pulsante.addEventListener('click', () => apri(pannello.hidden));
+    velo.addEventListener('click', () => apri(false));
+    document.getElementById('chiudi-menu-btn')?.addEventListener('click', () => apri(false));
+    pannello.addEventListener('click', (e) => { if (e.target.closest('a')) setTimeout(() => apri(false), 0); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pannello.hidden) apri(false); });
+}
+
+// Le etichette dei tipi arrivano dal server (/api/segnalazioni/tipi); qui solo le icone.
+const ICONE_TIPO = { allagamento: 'fa-house-flood-water', albero: 'fa-tree', frana: 'fa-hill-rockslide', persona: 'fa-user-injured',
+    viabilita: 'fa-road-barrier', struttura: 'fa-building-circle-exclamation', altro: 'fa-circle-question' };
+let tipiSegnalazione = { altro: 'Altro' };
+let filtroTipo = '';
+fetch('/api/segnalazioni/tipi', { credentials: 'same-origin' }).then(r => (r.ok ? r.json() : null)).then(t => {
+    if (t) tipiSegnalazione = t;
+    disegnaSceltaTipo(document.querySelector('#create-tipo [aria-checked="true"]')?.dataset.tipo || 'altro');
+}).catch(() => {});
+
+function iconaTipo(tipo) {
+    const codice = Object.hasOwn(ICONE_TIPO, tipo) ? tipo : 'altro';
+    if (codice === 'altro') return '';
+    return `<i class="fas ${ICONE_TIPO[codice]} icona-tipo" title="${escapeHTML(tipiSegnalazione[codice] || codice)}" aria-label="${escapeHTML(tipiSegnalazione[codice] || codice)}"></i>`;
+}
+
+// Pulsanti e non una tendina: mentre si parla al telefono un tocco basta.
+function disegnaSceltaTipo(scelto) {
+    const box = document.getElementById('create-tipo');
+    if (!box) return;
+    box.replaceChildren(...Object.entries(tipiSegnalazione).map(([codice, nome]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tipo-scelta';
+        b.dataset.tipo = codice;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(codice === scelto));
+        b.innerHTML = `<i class="fas ${ICONE_TIPO[codice] || ICONE_TIPO.altro}" aria-hidden="true"></i><span></span>`;
+        b.querySelector('span').textContent = nome;
+        b.addEventListener('click', () => box.querySelectorAll('.tipo-scelta').forEach(x => x.setAttribute('aria-checked', String(x === b))));
+        return b;
+    }));
+}
+
+function riempiTipi(select, scelto) {
+    if (!select) return;
+    select.replaceChildren(...Object.entries(tipiSegnalazione).map(([codice, nome]) => new Option(nome, codice, false, codice === scelto)));
+}
+
+function sceltaFiltroTipo(schede) {
+    const presenti = new Set(schede.map(c => c.dataset.tipo || 'altro'));
+    const select = document.createElement('select');
+    select.className = 'filtro-tipo';
+    select.setAttribute('aria-label', 'Filtra per tipo');
+    select.append(new Option('Tutti i tipi', ''));
+    for (const [codice, nome] of Object.entries(tipiSegnalazione)) {
+        if (presenti.has(codice) || codice === filtroTipo) select.append(new Option(`${nome} (${schede.filter(c => (c.dataset.tipo || 'altro') === codice).length})`, codice));
+    }
+    select.value = filtroTipo;
+    select.addEventListener('change', () => { filtroTipo = select.value; aggiornaRiepilogo(); });
+    return select;
+}
+
+function mostraVicine(vicine, punto) {
+    const box = document.getElementById('vicine-avviso');
+    const titolo = document.createElement('p');
+    titolo.className = 'vicine-titolo';
+    titolo.textContent = vicine.length === 1 ? "C'è già una segnalazione aperta qui vicino:" : `Ci sono già ${vicine.length} segnalazioni aperte qui vicino:`;
+    const elenco = document.createElement('ul');
+    for (const v of vicine) {
+        const li = document.createElement('li');
+        const minuti = Math.max(0, Math.round((Date.now() - new Date(v.created_at)) / 60000));
+        const testo = document.createElement('span');
+        testo.textContent = `#${v.numero ?? v.id} ${v.title} · a ${v.metri} m · ${minuti < 60 ? `da ${minuti} min` : `da ${Math.round(minuti / 60)} h`}`;
+        const apri = document.createElement('button');
+        apri.type = 'button';
+        apri.className = 'button-style button-small';
+        apri.textContent = 'Apri quella';
+        apri.addEventListener('click', async () => {
+            const scritto = [document.getElementById('create-title').value.trim(), document.getElementById('create-description').value.trim()].filter(Boolean).join(': ');
+            closeCreateModal();
+            await showReportDetails(v.id);
+            const nota = document.getElementById('bottom-new-update-text');
+            if (nota && scritto) { nota.value = scritto; nota.focus(); }
+        });
+        li.append(testo, apri);
+        elenco.append(li);
+    }
+    const comunque = document.createElement('button');
+    comunque.type = 'button';
+    comunque.className = 'button-style button-secondary';
+    comunque.textContent = 'Crea comunque';
+    comunque.addEventListener('click', () => {
+        box.dataset.confermata = punto;
+        createReportForm.requestSubmit();
+    });
+    box.replaceChildren(titolo, elenco, comunque);
+    box.hidden = false;
+    box.scrollIntoView({ block: 'nearest' });
 }

@@ -1,0 +1,1682 @@
+{
+  "descrizione": "Esiti attesi per profilo: ok (2xx), negato (401 o 403), oppure il codice HTTP. Si cambiano solo con un cambio di permessi voluto, rilanciando la prova con --fotografa e guardando il diff.",
+  "operazioni": [
+    {
+      "metodo": "POST",
+      "percorso": "/api/reports",
+      "corpo": {
+        "title": "Matrice: nuova"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/reports/:segnalazione_altrui",
+      "corpo": {
+        "priority": "High"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/reports/:segnalazione_mia",
+      "corpo": {
+        "priority": "High"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/reports/:segnalazione_altrui/coordinates",
+      "corpo": {
+        "latitude": 45.405,
+        "longitude": 11.875
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/reports/:segnalazione_mia/coordinates",
+      "corpo": {
+        "latitude": 45.405,
+        "longitude": 11.875
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/reports/:segnalazione_altrui/updates",
+      "corpo": {
+        "update_text": "Nota della matrice"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/reports/:segnalazione_mia/updates",
+      "corpo": {
+        "update_text": "Nota della matrice"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/reports/:segnalazione_altrui/teams",
+      "corpo": {
+        "teamId": ":squadra_libera"
+      },
+      "dopo": {
+        "metodo": "DELETE",
+        "percorso": "/api/reports/:segnalazione_altrui/teams/:squadra_libera"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "DELETE",
+      "percorso": "/api/reports/:segnalazione_altrui/teams/:squadra_libera",
+      "prima": {
+        "metodo": "POST",
+        "percorso": "/api/reports/:segnalazione_altrui/teams",
+        "corpo": {
+          "teamId": ":squadra_libera"
+        }
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/reports/:segnalazione_altrui/incarichi",
+      "corpo": {
+        "funzione_id": ":funzione",
+        "motivazione": "Matrice"
+      },
+      "dopo": {
+        "metodo": "DELETE",
+        "percorso": "/api/incarichi/:id_creato"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/incarichi/:incarico/presa",
+      "corpo": {},
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/mappa/elementi",
+      "corpo": {
+        "tipo": "strada_chiusa",
+        "nome": "Matrice",
+        "geometria": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              11.87,
+              45.4
+            ],
+            [
+              11.88,
+              45.41
+            ]
+          ]
+        }
+      },
+      "dopo": {
+        "metodo": "DELETE",
+        "percorso": "/api/mappa/elementi/:id_creato"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/mappa/elementi/:elemento",
+      "corpo": {
+        "tipo": "strada_chiusa",
+        "nome": "Matrice modificata"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "DELETE",
+      "percorso": "/api/mappa/elementi/:id_prima",
+      "prima": {
+        "metodo": "POST",
+        "percorso": "/api/mappa/elementi",
+        "corpo": {
+          "tipo": "strada_chiusa",
+          "nome": "Da togliere",
+          "geometria": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                11.87,
+                45.4
+              ],
+              [
+                11.88,
+                45.41
+              ]
+            ]
+          }
+        }
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/situazione/quadro",
+      "corpo": {
+        "cosa_succede": "Matrice dei permessi"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/emergencies/diario-sala",
+      "corpo": {
+        "testo": "Nota di sala della matrice"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/rubrica",
+      "corpo": {
+        "nome": "Contatto nuovo",
+        "telefono": "049 111 111"
+      },
+      "dopo": {
+        "metodo": "DELETE",
+        "percorso": "/api/rubrica/:id_creato"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/rubrica/:contatto",
+      "corpo": {
+        "nome": "Contatto matrice",
+        "telefono": "049 000 000"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "DELETE",
+      "percorso": "/api/rubrica/:id_prima",
+      "prima": {
+        "metodo": "POST",
+        "percorso": "/api/rubrica",
+        "corpo": {
+          "nome": "Da togliere",
+          "telefono": "049 222 222"
+        }
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/disponibilita/:utente_bersaglio",
+      "corpo": {
+        "stato": "arrivato"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/letture/:segnalazione_altrui",
+      "corpo": {},
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/squadre",
+      "corpo": {
+        "nome_radio": "Nessuno",
+        "membri": []
+      },
+      "nota": "nome radio non valido: chi può riceve 400, senza creare niente",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "400",
+        "volontario_squadra": "400",
+        "coc": "400",
+        "funzione": "400",
+        "coordinatore": "400",
+        "segreteria": "400",
+        "magazziniere": "400",
+        "esterno": "negato",
+        "amministratore": "400"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/squadre/:squadra_mia",
+      "corpo": {
+        "nome_radio": ":nome_radio_mia",
+        "nome": "Matrice",
+        "membri": [
+          {
+            "username": ":username_squadra"
+          }
+        ]
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/squadre/:squadra_mia/caposquadra",
+      "corpo": {
+        "username": ":username_squadra"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "DELETE",
+      "percorso": "/api/squadre/999999",
+      "nota": "squadra inesistente: chi può riceve 404",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "404",
+        "volontario_squadra": "404",
+        "coc": "404",
+        "funzione": "404",
+        "coordinatore": "404",
+        "segreteria": "404",
+        "magazziniere": "404",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/esterni-temporanei",
+      "corpo": {
+        "nome": ""
+      },
+      "nota": "nome mancante: chi può riceve 400, senza creare un accesso",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "400",
+        "volontario_squadra": "400",
+        "coc": "400",
+        "funzione": "400",
+        "coordinatore": "400",
+        "segreteria": "400",
+        "magazziniere": "400",
+        "esterno": "negato",
+        "amministratore": "400"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/esterni-temporanei/:esterno/codice",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "DELETE",
+      "percorso": "/api/esterni-temporanei/999999",
+      "nota": "accesso inesistente: chi può riceve 404",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "404",
+        "volontario_squadra": "404",
+        "coc": "404",
+        "funzione": "404",
+        "coordinatore": "404",
+        "segreteria": "404",
+        "magazziniere": "404",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/funzioni/:funzione/membri",
+      "corpo": {
+        "user_id": ":utente_bersaglio"
+      },
+      "dopo": {
+        "metodo": "DELETE",
+        "percorso": "/api/funzioni/:funzione/membri/:utente_bersaglio"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PATCH",
+      "percorso": "/api/admin/users/:utente_bersaglio/toggle-status",
+      "corpo": {},
+      "dopo": {
+        "metodo": "PATCH",
+        "percorso": "/api/admin/users/:utente_bersaglio/toggle-status",
+        "corpo": {}
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/users",
+      "corpo": {
+        "nome": "Senza"
+      },
+      "nota": "cognome mancante: chi può riceve 400, senza creare una persona",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "400"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/branding/settings",
+      "corpo": {},
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/chiamate",
+      "corpo": {
+        "criterio": "nessuno"
+      },
+      "nota": "criterio non valido",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "400",
+        "volontario_squadra": "400",
+        "coc": "400",
+        "funzione": "400",
+        "coordinatore": "400",
+        "segreteria": "400",
+        "magazziniere": "400",
+        "esterno": "negato",
+        "amministratore": "400"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/reports",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/reports/:segnalazione_altrui",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/squadre",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/squadre/:squadra_mia",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users/unassigned",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/membri-disponibili/:squadra_mia",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/chiamate/candidati",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/disponibilita",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/situazione",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/situazione/quadro",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/emergencies/:emergenza/eventi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/emergencies/:emergenza/documents",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/rubrica",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/documenti",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/mappa/elementi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/funzioni",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/incarichi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/esterni-temporanei",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/letture",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/location",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/voce/stato",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/voce/messaggi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/allerta",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/notifiche",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/app/contesto",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/me/status",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users/me",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users/me/team",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/users",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "ok",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "ok",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/audit-log",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/branding/settings/full",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/permessi/catalogo",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/funzioni",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/emergencies/closed",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/segreteria/dashboard",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "ok",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users/:utente_bersaglio/libretto",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "ok",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/magazzino/beni",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/magazzino/verbali",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/magazzino/destinatari",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/attivita",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/presenze/riepilogo",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/assenze",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/reperibilita",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/scenari",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/avvisi/telefoni",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/backup",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/versione",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/cifratura",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/integrita",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/voce/statistiche",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/segnalazioni/tipi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/reports/vicine?lat=46.02&lon=11.91",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/users/me/avvisi-sala",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/users/me/avvisi-sala",
+      "corpo": {
+        "attivo": true
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/admin/emergencies/999999/segnalazioni.csv",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "404",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/qualifiche",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/drone/stato",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/drone/dirette",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/drone/chiavi",
+      "corpo": {
+        "nome": "Matrice"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/drone/registrazioni?emergenza=999999",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "ok",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    }
+  ]
+}

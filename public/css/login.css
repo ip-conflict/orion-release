@@ -92,19 +92,12 @@ body {
     background-color: var(--button-hover-bg, #0056b3);
 }
 
-#login-message {
-    margin-top: 1.5rem; 
-    min-height: 1.2em; /* Mantiene lo spazio anche se vuoto */
-    font-weight: bold;
-    color: var(--text-color); 
-    transition: color 0.3s ease;
-}
-#login-message.error { /* Classe aggiunta da JS */
-     color: var(--status-error-color, #dc3545);
-}
-#login-message.success { /* Classe aggiunta da JS */
-     color: var(--status-success-color, #28a745);
-}
+#login-message { font-weight: 600; }
+#login-message:empty { display: none; }
+
+.pagina-negata { text-align: center; }
+.pagina-negata-logo { height: 64px; width: auto; margin-bottom: 8px; }
+.pagina-negata .button-style { display: inline-block; margin-top: 10px; text-decoration: none; }
 
 @media (prefers-color-scheme: dark) {
     #login-form input:-webkit-autofill,
@@ -230,3 +223,7 @@ body { align-items: safe center; }
 }
 .non-sei-tu[hidden] { display: none; }
 .non-sei-tu a { color: var(--link-color, #2563eb); }
+
+/* Mentre si guarda se la sessione è ancora valida si vede solo il logo: il modulo compare solo se serve. */
+.controllo-sessione .login-box > :not(#login-form),
+.controllo-sessione #login-form > :not(#login-logo):not(#association-name-display) { visibility: hidden; }

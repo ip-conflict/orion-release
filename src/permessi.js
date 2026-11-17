@@ -1,3 +1,4 @@
+import { mandaPaginaNegata } from './paginaNegata.js';
 // Ogni controllo chiede un permesso, non un ruolo; i ruoli sono pacchetti. L'amministrazione
 // del sistema non è un permesso: chi può dare permessi potrebbe darseli tutti.
 
@@ -119,6 +120,6 @@ export function richiedePermesso(...codici) {
         const nomi = codici.map(c => PERMESSI.find(p => p.codice === c)?.nome || c);
         const messaggio = `Ti serve il permesso "${nomi.join('" o "')}".`;
         if (req.originalUrl.startsWith('/api')) return res.status(403).json({ message: messaggio, permesso_richiesto: codici });
-        return res.status(403).send(`<h1>Accesso negato</h1><p>${messaggio.replace(/[<>&"]/g, '')}</p><p><a href="/centro-operativo.html">Torna al Centro Operativo</a></p>`);
+        return mandaPaginaNegata(res, messaggio);
     };
 }

@@ -17,6 +17,8 @@ import { accediConFetch } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Nei container i dati stanno fuori dal codice: il server li cerca in ORION_DATI_DIR, e così la prova.
+const DATI = process.env.ORION_DATI_DIR ? path.resolve(process.env.ORION_DATI_DIR) : RADICE;
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
@@ -34,8 +36,8 @@ const chiama = async (percorso, { method = 'GET', body, token, modulo } = {}) =>
 };
 const fileSulDisco = (url) => {
     if (!url) return null;
-    if (url.startsWith('/api/photos/')) return path.join(RADICE, 'uploads', 'photos', path.basename(url));
-    if (url.startsWith('/api/documents/certificates/')) return path.join(RADICE, 'protected_uploads', 'certificates', path.basename(url));
+    if (url.startsWith('/api/photos/')) return path.join(DATI, 'uploads', 'photos', path.basename(url));
+    if (url.startsWith('/api/documents/certificates/')) return path.join(DATI, 'protected_uploads', 'certificates', path.basename(url));
     return null;
 };
 

@@ -9,12 +9,18 @@ import { applicaMigrazioniMancanti, modificheDaAnnullare } from './migrazioni.js
 import { fetchEsterno, controllaIndirizzo } from './indirizziEsterni.js';
 import { leggiNomeBackup, nomeDaScaricare } from './nomiBackup.js';
 import { ripristinaDatabase as ripristinaDatabaseCon, verificaArchivio } from './ripristinoDb.js';
+import { MODELLI } from './voceTrascrizione.js';
 
 // Qualunque altro carattere è un tentativo di uscire dalla cartella.
 const NOME_BACKUP_VALIDO = /^[A-Za-z0-9._-]+\.sql\.gz$/;
 
 // Un "sei sicuro?" con due pulsanti lo si clicca per abitudine.
 const PAROLA_CONFERMA = 'RIPRISTINA';
+
+// La versione di scripts/docker/orion-agente.sh che questa versione di ORION si aspetta: l'agente
+// sta sull'host e non si aggiorna con l'immagine.
+const AGENTE_ATTESO = 2;
+const INSTALLA_AGENTE = 'sudo install -m 755 scripts/docker/orion-agente.sh /usr/local/sbin/orion-agente';
 
 export function registraRotteManutenzione(app, ctx) {
     const {
@@ -84,7 +90,7 @@ export function registraRotteManutenzione(app, ctx) {
     async function statoAgente() {
         const letto = await leggiJson(agente.stato);
         const vivo = !!letto?.visto_il && Date.now() - new Date(letto.visto_il).getTime() < 3 * 60000;
-        return { vivo, politica: letto?.politica || null };
+        return { vivo, politica: letto?.politica || null, versione: Number(letto?.agente) || 1, sa: letto?.sa || ['aggiornamento', 'ritorno'], memoria: letto?.memoria || null };
     }
 
     const VALORE_RICHIESTA = /^[0-9A-Za-z._+-]{0,80}$/;
@@ -489,13 +495,28 @@ export function registraRotteManutenzione(app, ctx) {
     }
 
     // 3.24.0 viene dopo 3.9.1, che fra stringhe non sarebbe vero.
+    // Come semver: 1.4.2-test.3 viene prima di 1.4.2, così un'istanza di prova vede arrivare la release.
     function versionePiuRecente(candidata, riferimento) {
-        const pezzi = (v) => String(v).replace(/^v/, '').split(/[.-]/).map(n => parseInt(n, 10) || 0);
-        const a = pezzi(candidata);
-        const b = pezzi(riferimento);
-        for (let i = 0; i < Math.max(a.length, b.length); i++) {
-            if ((a[i] || 0) > (b[i] || 0)) return true;
-            if ((a[i] || 0) < (b[i] || 0)) return false;
+        const parti = (v) => {
+            const [nucleo, prova] = String(v).replace(/^v/, '').split('+')[0].split(/-(.*)/s);
+            return { nucleo: nucleo.split('.').map(n => parseInt(n, 10) || 0), prova: prova ? prova.split('.') : null };
+        };
+        const a = parti(candidata);
+        const b = parti(riferimento);
+        for (let i = 0; i < Math.max(a.nucleo.length, b.nucleo.length); i++) {
+            if ((a.nucleo[i] || 0) !== (b.nucleo[i] || 0)) return (a.nucleo[i] || 0) > (b.nucleo[i] || 0);
+        }
+        if (!a.prova || !b.prova) return !a.prova && !!b.prova;
+        for (let i = 0; i < Math.max(a.prova.length, b.prova.length); i++) {
+            const x = a.prova[i];
+            const y = b.prova[i];
+            if (x === undefined || y === undefined) return y === undefined;
+            if (x === y) continue;
+            const nx = /^\d+$/.test(x);
+            const ny = /^\d+$/.test(y);
+            if (nx && ny) return Number(x) > Number(y);
+            if (nx !== ny) return ny;
+            return x > y;
         }
         return false;
     }
@@ -529,15 +550,18 @@ export function registraRotteManutenzione(app, ctx) {
         if (!agente) {
             problemi.push('Questa installazione non ha l\'agente degli aggiornamenti: ORION si aggiorna solo quando gira nei container (vedi il manuale tecnico).');
         } else {
-            const { vivo, politica } = await statoAgente();
+            const { vivo, politica, versione } = await statoAgente();
             if (!vivo) problemi.push('L\'agente degli aggiornamenti sul server non risponde: avvisa chi gestisce il server.');
             else if (politica === 'bloccati') problemi.push('Chi gestisce il server ha bloccato gli aggiornamenti di questa installazione.');
             else if (politica === 'chiedi') avvertenze.push('L\'aggiornamento parte quando lo approva chi gestisce il server.');
+            if (vivo && versione < AGENTE_ATTESO) {
+                avvertenze.push(`L'agente sul server è di una versione precedente: chi gestisce il server lo aggiorni, dalla cartella di questa versione di ORION, con ${INSTALLA_AGENTE}`);
+            }
         }
 
         const emergenza = emergenzaAttiva();
         if (emergenza) {
-            problemi.push(`C'è un'emergenza aperta (${emergenza.code}): si aggiorna dopo averla chiusa.`);
+            problemi.push(`C'è un'emergenza aperta (${emergenza.code}): ORION non si ferma finché non è chiusa.`);
         }
 
         return { pronto: problemi.length === 0, problemi, avvertenze };
@@ -793,6 +817,47 @@ export function registraRotteManutenzione(app, ctx) {
         return mandaAllAgente(res, 'ritorno',
             { versione: scelta.versione, dati: dati ? 'si' : 'no', backup: dati ? scelta.dati.nome : '' },
             'Ritorno chiesto al server.');
+    });
+
+    // I limiti li calcola l'agente, che vede tutte le istanze del server; qui servono alla pagina e
+    // a rifiutare subito una richiesta fuori misura, ma è l'agente a ricontrollarli prima di agire.
+    async function statoMemoria() {
+        const stato = agente ? await statoAgente() : null;
+        const orion_mb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        const modelli = Object.entries(MODELLI).map(([id, m]) => ({ id, nome: m.nome, memoria_mb: m.memoria_mb }));
+        if (!stato) return { disponibile: false, motivo: 'Questa installazione non gira nei container: la memoria la decide il sistema.', orion_mb, modelli };
+        if (!stato.vivo) return { disponibile: false, motivo: 'L\'agente sul server non risponde: avvisa chi gestisce il server.', orion_mb, modelli };
+        if (!stato.sa.includes('memoria') || !stato.memoria) {
+            return {
+                disponibile: false, orion_mb, modelli,
+                motivo: `L'agente sul server è di una versione che non sa cambiare la memoria: chi gestisce il server lo aggiorni, dalla cartella di questa versione di ORION, con ${INSTALLA_AGENTE}`
+            };
+        }
+        return { disponibile: true, ...stato.memoria, politica: stato.politica, orion_mb, modelli };
+    }
+
+    app.get('/api/sistema/memoria', soloAdmin, async (req, res) => {
+        res.json(await statoMemoria());
+    });
+
+    app.post('/api/sistema/memoria', soloAdmin, async (req, res) => {
+        const { password } = req.body || {};
+        const richiesta = Number(req.body?.memoria_mb);
+        const stato = await statoMemoria();
+        if (!stato.disponibile) return res.status(409).json({ message: stato.motivo });
+        if (!Number.isInteger(richiesta)) return res.status(400).json({ message: 'Indica la memoria in MB.' });
+        if (richiesta < stato.minimo_mb) return res.status(400).json({ message: `Con meno di ${stato.minimo_mb} MB ORION non lavora bene.` });
+        if (richiesta > stato.attuale_mb && richiesta > stato.massimo_mb) {
+            return res.status(400).json({ message: `Da qui ORION può avere al massimo ${stato.massimo_mb} MB su questo server: oltre lo decide chi gestisce il server.` });
+        }
+        if (richiesta === stato.attuale_mb) return res.status(400).json({ message: `ORION ha già ${richiesta} MB.` });
+        if (!password) return res.status(400).json({ message: 'Serve la tua password per confermare.' });
+        if (!await passwordGiusta(req, password)) return res.status(403).json({ message: 'Password errata.' });
+        const requisiti = await verificaRequisiti();
+        if (!requisiti.pronto) return res.status(409).json({ message: `Non si può cambiare adesso: ${requisiti.problemi.join(' ')}` });
+        registraAudit(req, 'sistema.memoria', { dettagli: { da: stato.attuale_mb, a: richiesta } });
+        logger.warn(`[Manutenzione] Memoria di ORION da ${stato.attuale_mb} a ${richiesta} MB, richiesta da ${req.user.username}.`);
+        return mandaAllAgente(res, 'memoria', { memoria: String(richiesta) }, 'Cambio della memoria chiesto al server.');
     });
 
     return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico };

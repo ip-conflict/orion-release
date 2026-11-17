@@ -57,7 +57,7 @@ if (typeof fetchApi !== 'function' || typeof getToken !== 'function') {
     notifica("Errore critico nella configurazione della pagina. Contattare l'amministratore.", 'errore');
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+quandoPronto(async () => {
     console.log("Pagina Gestione Utenti: DOM caricato e script avviato.");
     await loadAndApplyBranding();
 
@@ -88,15 +88,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // "Esterno" non si combina con nulla: la stessa regola sta nel server e nel database, qui
     // evita solo un errore.
-    const ETICHETTE_RUOLI = {
-        admin: 'Amministratore',
-        coordinatore: 'Coordinatore',
-        segreteria: 'Segreteria',
-        magazziniere: 'Magazziniere',
-        volontario: 'Volontario',
-        esterno: 'Esterno'
-    };
-
     function caselleRuoli(box) {
         return box ? Array.from(box.querySelectorAll('input[type="checkbox"]')) : [];
     }
@@ -233,7 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let ordine = { chiave: 'cognome', verso: 1 };
 
     const eEsterno = (u) => u.temporaneo === true || (u.ruoli && u.ruoli.length ? u.ruoli : [u.role]).includes('esterno');
-    const ruoliTesto = (u) => (u.ruoli && u.ruoli.length ? u.ruoli : [u.role]).map(r => ETICHETTE_RUOLI[r] || r).join(', ');
+    const ruoliTesto = nomiRuoli;
 
     const COLONNE = {
         interni: [
@@ -405,7 +396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 : '<span class="gu-tipo">Permanente</span>';
             tr.innerHTML = `
                 ${persona}
-                <td>${escapeHTML(user.ente || '—')}</td>
+                <td>${window.Qualifiche?.bollino(user.qualifica) || ''}${escapeHTML(user.ente || (user.qualifica ? '' : '—'))}</td>
                 <td>${tipo}</td>
                 <td style="text-align: center;">${stato}</td>${date}`;
         } else {
@@ -521,12 +512,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     function openAddUserModal() {
         if (addUserForm) addUserForm.reset();
         impostaRuoliSelezionati(addRuoliBox, ['volontario']);
+        aggiornaProvenienzaNuovo?.();
         if(addUserModal) addUserModal.style.display = 'flex';
         if(addNomeInput) addNomeInput.focus();
     }
     function closeAddUserModal() {
         if (addUserModal) addUserModal.style.display = 'none';
     }
+
+    // Ente e qualifica servono solo a chi viene da fuori: il riquadro compare con il ruolo Esterno.
+    function preparaProvenienza(pre, box) {
+        const riquadro = document.getElementById(`${pre}-provenienza`);
+        if (!riquadro || !box) return;
+        const aggiorna = () => { riquadro.hidden = !leggiRuoliSelezionati(box).includes('esterno'); };
+        box.addEventListener('change', aggiorna);
+        aggiorna();
+        return aggiorna;
+    }
+    function provenienza(pre, box) {
+        if (!leggiRuoliSelezionati(box).includes('esterno')) return {};
+        return { ente: document.getElementById(`${pre}-ente`)?.value.trim() || null, qualifica: document.getElementById(`${pre}-qualifica`)?.value || null };
+    }
+    const aggiornaProvenienzaNuovo = preparaProvenienza('add', addRuoliBox);
+    const aggiornaProvenienzaModifica = preparaProvenienza('edit', editRuoliBox);
+    if (document.getElementById('add-qualifica')) Qualifiche.riempiScelta(document.getElementById('add-qualifica'), '');
 
     function openEditUserModal(user) {
         if (!editUserModal || !editUserForm || !user) {
@@ -539,6 +548,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         editCognomeInput.value = user.cognome || '';
         editEmailInput.value = user.email || '';
         impostaRuoliSelezionati(editRuoliBox, user.ruoli && user.ruoli.length ? user.ruoli : (user.role ? [user.role] : []));
+        if (document.getElementById('edit-ente')) document.getElementById('edit-ente').value = user.ente || '';
+        if (document.getElementById('edit-qualifica')) Qualifiche.riempiScelta(document.getElementById('edit-qualifica'), user.qualifica || '');
+        aggiornaProvenienzaModifica?.();
         preparaPermessi(user);
 
         editUserModal.style.display = 'flex';
@@ -553,7 +565,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const submitButton = addUserForm.querySelector('button[type="submit"]');
         const ruoli = leggiRuoliSelezionati(addRuoliBox);
         if (ruoli.length === 0) { notifica('Scegli almeno un ruolo.', 'attenzione'); return; }
-        const userData = { nome: addNomeInput.value.trim(), cognome: addCognomeInput.value.trim(), email: addEmailInput.value.trim(), ruoli };
+        const userData = { nome: addNomeInput.value.trim(), cognome: addCognomeInput.value.trim(), email: addEmailInput.value.trim(), ruoli, ...provenienza('add', addRuoliBox) };
 
         try {
             if(submitButton) { submitButton.disabled = true; submitButton.textContent = "Aggiungo..."; }
@@ -589,7 +601,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const updatedUserData = { nome, cognome, email, ruoli };
+        const updatedUserData = { nome, cognome, email, ruoli, ...provenienza('edit', editRuoliBox) };
         console.log(`Invio modifiche per utente ID ${userId}:`, updatedUserData);
         const submitButton = editUserForm.querySelector('button[type="submit"]');
 

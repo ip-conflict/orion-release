@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       versione:
-        description: Versione da pubblicare (per esempio 1.2.4)
+        description: Versione da pubblicare (per esempio 1.2.4, o 1.4.2-test.1 per una prova)
         required: true
 
 permissions:
@@ -16,7 +16,12 @@ permissions:
   packages: write
 
 jobs:
+  # Un'immagine con le prove rosse non esce.
+  prove:
+    uses: ./.github/workflows/prove.yml
+
   immagine:
+    needs: prove
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +35,11 @@ jobs:
           [[ $VERSIONE =~ ^[0-9]+(\.[0-9]+){1,3}([-+][0-9A-Za-z.]+)?$ ]] || { echo "Versione non valida: $VERSIONE"; exit 1; }
           # L'agente controlla che il package.json dell'immagine dica la versione chiesta.
           npm version "$VERSIONE" --no-git-tag-version --allow-same-version
+          # Solo orion-release pubblica "orion", quella che scaricano le associazioni; il repository
+          # di sviluppo pubblica "orion-dev", privata, così le due non si sovrascrivono.
+          if [ "${GITHUB_REPOSITORY,,}" = "${GITHUB_REPOSITORY_OWNER,,}/orion-release" ]; then NOME=orion; else NOME=orion-dev; fi
           echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
-          echo "immagine=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orion" >> "$GITHUB_OUTPUT"
+          echo "immagine=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$NOME" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -41,11 +49,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # La cache di GitHub tiene gli strati delle dipendenze: si rifanno solo se cambia package-lock.json.
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.v.outputs.immagine }}:${{ steps.v.outputs.versione }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.title=ORION
             org.opencontainers.image.version=${{ steps.v.outputs.versione }}

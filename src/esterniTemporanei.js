@@ -2,6 +2,7 @@
 // disattivato, perché i registri lo citano.
 
 import crypto from 'crypto';
+import { leggiQualifica } from './costanti.js';
 
 const GIORNI_CODICE = 7;
 const impronta = (valore) => crypto.createHash('sha256').update(String(valore)).digest('hex');
@@ -110,7 +111,7 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         inviaEmail, dominio, chiudiSessioni
     } = ctx;
 
-    const indirizzo = (codice) => `https://${dominio}/accesso.html?c=${encodeURIComponent(codice)}`;
+    const indirizzo = (codice) => `https://${dominio}/accesso.html#c=${encodeURIComponent(codice)}`;
 
     async function inviaInvito(email, nome, link, emergenza) {
         if (!email || typeof inviaEmail !== 'function') return false;
@@ -137,6 +138,8 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         const ente = testo(req.body?.ente, 100) || null;
         const email = testo(req.body?.email, 100);
         if (!nome) return res.status(400).json({ message: 'Serve almeno un nome.' });
+        const qualifica = leggiQualifica(req.body?.qualifica);
+        if (qualifica.errore) return res.status(400).json({ message: qualifica.errore });
         if (email && !EMAIL.test(email)) return res.status(400).json({ message: "L'indirizzo email non sembra valido." });
 
         const [primo, ...resto] = nome.split(' ');
@@ -152,9 +155,9 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                 username = usernameDa(nome);
             }
             const u = await client.query(
-                `INSERT INTO users (username, password, role, nome, cognome, is_active, temporaneo, ente, temporaneo_emergenza_id)
-                 VALUES ($1, NULL, 'esterno', $2, $3, true, true, $4, $5) RETURNING id`,
-                [username, nomeU, cognomeU, ente, emergenza.id]);
+                `INSERT INTO users (username, password, role, nome, cognome, is_active, temporaneo, ente, temporaneo_emergenza_id, voce_parla, qualifica)
+                 VALUES ($1, NULL, 'esterno', $2, $3, true, true, $4, $5, $6, $7) RETURNING id`,
+                [username, nomeU, cognomeU, ente, emergenza.id, req.body?.voce_parla !== false, qualifica.valore]);
             const userId = u.rows[0].id;
             await scriviRuoli(client, userId, ['esterno']);
 
@@ -173,9 +176,12 @@ export function registraRotteEsterniTemporanei(app, ctx) {
                 }
                 const usato = await client.query('SELECT 1 FROM squadre WHERE nome_radio = $1', [nomeRadio]);
                 if (usato.rowCount) throw erroreRichiesta(`Il nome radio ${nomeRadio} è già di un'altra squadra.`);
+                // La squadra nuova prende la qualifica di chi la forma, se non ne è scelta un'altra.
+                const qualificaSquadra = nuova.qualifica === undefined ? qualifica : leggiQualifica(nuova.qualifica);
+                if (qualificaSquadra.errore) throw erroreRichiesta(qualificaSquadra.errore);
                 const s = await client.query(
-                    'INSERT INTO squadre (nome_radio, nome, created_at) VALUES ($1, $2, NOW()) RETURNING id, nome_radio, nome',
-                    [nomeRadio, testo(nuova.nome, 100) || ente || null]);
+                    'INSERT INTO squadre (nome_radio, nome, qualifica, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id, nome_radio, nome',
+                    [nomeRadio, testo(nuova.nome, 100) || ente || null, qualificaSquadra.valore]);
                 squadra = s.rows[0];
             }
             if (squadra) {
@@ -234,8 +240,8 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         if (!emergenza) return res.json([]);
         try {
             const r = await pool.query(
-                `SELECT u.id, u.username, u.nome, u.cognome, u.ente, COALESCE(u.is_active, true) AS attivo,
-                        s.id AS squadra_id, s.nome_radio, s.nome AS squadra_nome,
+                `SELECT u.id, u.username, u.nome, u.cognome, u.ente, u.qualifica, COALESCE(u.is_active, true) AS attivo,
+                        s.id AS squadra_id, s.nome_radio, s.nome AS squadra_nome, s.qualifica AS squadra_qualifica,
                         a.creato_il, a.creato_da, a.scade_il, a.usato_il
                  FROM users u
                  LEFT JOIN accessi_temporanei a ON a.user_id = u.id
@@ -284,6 +290,8 @@ export function registraRotteEsterniTemporanei(app, ctx) {
             const codice = r.rowCount ? decifra(r.rows[0].codice_cifrato) : null;
             if (!codice) return res.status(409).json({ message: 'Questo codice non si può rivedere: generane uno nuovo.', rigenera: true });
             if (new Date(r.rows[0].scade_il) <= new Date()) return res.status(409).json({ message: 'Il codice è scaduto: generane uno nuovo.', rigenera: true });
+            // Con il codice si entra al posto dell'esterno: chi l'ha riletto resta scritto prima di averlo, il codice no.
+            await registraAudit(req, 'esterno_temporaneo.codice_riletto', { tipo: 'utente', id, dettagli: { username: u.username } });
             res.json({ codice, link: indirizzo(codice), scade_il: r.rows[0].scade_il, usato_il: r.rows[0].usato_il });
         } catch (e) {
             logger.error('Errore lettura codice temporaneo:', e);
@@ -320,6 +328,8 @@ export function registraRotteEsterniTemporanei(app, ctx) {
         const ente = testo(req.body?.ente, 100) || null;
         const email = testo(req.body?.email, 100);
         if (!nome) return res.status(400).json({ message: 'Serve il nome di chi subentra.' });
+        const qualifica = leggiQualifica(req.body?.qualifica);
+        if (qualifica.errore) return res.status(400).json({ message: qualifica.errore });
         if (email && !EMAIL.test(email)) return res.status(400).json({ message: "L'indirizzo email non sembra valido." });
         const [primo, ...resto] = nome.split(' ');
         const nomeU = primo.slice(0, 50);
@@ -329,7 +339,7 @@ export function registraRotteEsterniTemporanei(app, ctx) {
             const u = await temporaneoAttivo(id);
             if (!u) return res.status(404).json({ message: "Accesso temporaneo non trovato, revocato o di un'altra emergenza." });
             await client.query('BEGIN');
-            await client.query('UPDATE users SET nome = $1, cognome = $2, ente = $3 WHERE id = $4', [nomeU, cognomeU, ente, id]);
+            await client.query('UPDATE users SET nome = $1, cognome = $2, ente = $3, qualifica = $4 WHERE id = $5', [nomeU, cognomeU, ente, qualifica.valore, id]);
             const membro = await client.query(
                 `UPDATE squadra_membri sm SET nome = $1, cognome = $2 FROM squadre s
                  WHERE sm.username = $3 AND s.id = sm.squadra_id RETURNING s.id, s.nome_radio, s.nome`,

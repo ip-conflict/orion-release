@@ -2,13 +2,15 @@
 // interpretano altro.
 
 export function datiOrganizzazione(impostazioni) {
-    return { associazione: String(impostazioni.association_name || '').trim() || "l'organizzazione che lo usa" };
+    const nome = String(impostazioni.association_name || '').trim();
+    if (nome) return { associazione: nome, di_associazione: `di ${nome}`, da_associazione: `da ${nome}` };
+    return { associazione: "l'organizzazione che lo usa", di_associazione: "dell'organizzazione che lo usa", da_associazione: "dall'organizzazione che lo usa" };
 }
 
 export function condizioniPredefinite(d) {
     return `# Condizioni d'uso di ORION
 
-Queste condizioni valgono per chiunque usi ORION per conto di ${d.associazione}, dal browser o dall'app.
+Queste condizioni valgono per chiunque usi ORION per conto ${d.di_associazione}, dal browser o dall'app.
 
 ## Che cos'è ORION e chi ne risponde
 
@@ -20,7 +22,7 @@ Il programma è distribuito dal suo autore con la licenza PolyForm Noncommercial
 
 ORION tiene i dati personali delle persone solo finché servono all'attività: anagrafica, contatti, idoneità, formazione, materiali ricevuti. Quando una persona viene eliminata, i suoi dati personali si cancellano, insieme alla foto e ai certificati caricati. Restano soltanto il nome e il cognome legati alle operazioni che ha svolto (le segnalazioni e i loro aggiornamenti, il registro delle operazioni, il diario di sala, i verbali di consegna, i movimenti del magazzino, la composizione delle squadre nelle emergenze), perché servono all'integrità dello storico e al non ripudio: chi ha fatto che cosa, e quando, non deve poter essere alterato né negato. Le copie di sicurezza li contengono finché non vengono sovrascritte.
 
-I dati restano sul server scelto da ${d.associazione}. ORION non usa servizi centrali del suo autore e non manda dati a terzi per notifiche, statistiche o pubblicità. La mappa si appoggia a servizi esterni (OpenStreetMap, Esri e altri), che ricevono la zona visualizzata o l'indirizzo cercato, non i dati delle persone.
+I dati restano sul server scelto ${d.da_associazione}. ORION non usa servizi centrali del suo autore e non manda dati a terzi per notifiche, statistiche o pubblicità. La mappa si appoggia a servizi esterni (OpenStreetMap, Esri e altri), che ricevono la zona visualizzata o l'indirizzo cercato, non i dati delle persone.
 
 ## Cookie e memoria del browser
 

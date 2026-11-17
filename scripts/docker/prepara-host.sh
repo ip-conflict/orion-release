@@ -8,8 +8,17 @@ QUI=$(cd "$(dirname "$0")" && pwd)
 [ "$(id -u)" -eq 0 ] || { echo "Va lanciato con sudo." >&2; exit 1; }
 
 apt-get update
-apt-get install -y ca-certificates jq rsync openssl nginx certbot python3-certbot-nginx ufw
+apt-get install -y ca-certificates curl jq rsync openssl nginx certbot python3-certbot-nginx ufw
 command -v docker > /dev/null || apt-get install -y docker.io docker-compose-v2
+# Senza buildx "docker build" usa il vecchio costruttore, deprecato. Il pacchetto si chiama in
+# modo diverso se Docker viene dal repository di Ubuntu o da quello di Docker.
+docker buildx version > /dev/null 2>&1 || apt-get install -y docker-buildx || apt-get install -y docker-buildx-plugin
+# Senza limite i log dei container crescono finché c'è disco.
+if [ ! -f /etc/docker/daemon.json ]; then
+    mkdir -p /etc/docker
+    echo '{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }' > /etc/docker/daemon.json
+    systemctl restart docker 2> /dev/null || true
+fi
 systemctl enable --now docker nginx
 
 ufw allow OpenSSH

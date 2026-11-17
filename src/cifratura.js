@@ -27,6 +27,7 @@ export const CARTELLE_PROTETTE = [
     path.join(RADICE_DATI, 'protected_uploads', 'magazzino'),
     path.join(RADICE_DATI, 'protected_uploads', 'documenti-gruppo'),
     path.join(RADICE_DATI, 'protected_uploads', 'emergency_logs'),
+    path.join(RADICE_DATI, 'protected_uploads', 'voce'),
     path.join(RADICE_DATI, 'uploads', 'photos')
 ];
 
@@ -199,6 +200,22 @@ export async function leggiFile(percorso) {
     return decifra(await fs.promises.readFile(percorso));
 }
 
+// Un file caricato non deve poter essere servito come pagina o script: con un elenco di
+// estensioni vietate ne restava sempre fuori qualcuna (.ecma, .xht, .svgz), qui si elencano le ammesse.
+const TIPI_IN_LINEA = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
+    '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8', '.ogg': 'audio/ogg'
+};
+// L'app Android sceglie con il tipo l'applicazione che apre il documento: questi escono col loro tipo, ma da scaricare.
+const TIPI_DA_SCARICARE = {
+    '.doc': 'application/msword', '.xls': 'application/vnd.ms-excel', '.ppt': 'application/vnd.ms-powerpoint',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.odt': 'application/vnd.oasis.opendocument.text', '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+    '.odp': 'application/vnd.oasis.opendocument.presentation', '.csv': 'text/csv; charset=utf-8'
+};
+
 // Il tag GCM si controlla prima di mandare un solo byte: un file alterato non arriva a metà.
 export async function inviaFile(res, percorso, { headers = {} } = {}) {
     let dati;
@@ -210,7 +227,17 @@ export async function inviaFile(res, percorso, { headers = {} } = {}) {
         return res.status(500).json({ message: 'Il file non si legge: è danneggiato o cifrato con un\'altra chiave.' });
     }
     Object.entries(headers).forEach(([k, v]) => res.set(k, v));
-    res.type(path.extname(percorso) || 'application/octet-stream');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+    const estensione = path.extname(percorso).toLowerCase();
+    if (Object.hasOwn(TIPI_IN_LINEA, estensione)) {
+        res.set('Content-Type', TIPI_IN_LINEA[estensione]);
+    } else {
+        res.set('Content-Type', TIPI_DA_SCARICARE[estensione] || 'application/octet-stream');
+        // Chi chiama a volte ha già messo il nome originale: si tiene, cambia solo inline in attachment.
+        const disposizione = res.get('Content-Disposition');
+        res.set('Content-Disposition', disposizione ? disposizione.replace(/^\s*inline\b/i, 'attachment') : 'attachment');
+    }
     res.send(dati);
 }
 

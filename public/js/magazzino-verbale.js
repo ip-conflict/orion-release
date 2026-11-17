@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', async () => {
+quandoPronto(async () => {
     const $ = (id) => document.getElementById(id);
 
     const ETICHETTE_STATO = {

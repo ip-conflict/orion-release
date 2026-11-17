@@ -111,11 +111,11 @@
             } else {
                 corpo.append(el('p', { class: 'al-vuoto', testo: "L'ultimo bollettino letto non vale più per oggi: quello nuovo esce di norma entro le 16." }));
             }
-            corpo.append(el('p', { class: 'al-fonte', testo: `${b.titolo}, emesso ${quando(b.emesso_il)}. Sintesi delle valutazioni del ${r.ente}, pubblicata dal Dipartimento della Protezione Civile. Vale come informazione: l'allerta ufficiale è quella che la Regione comunica al Comune.` }));
+            corpo.append(el('p', { class: 'al-fonte', testo: `${b.titolo}, emesso ${quando(b.emesso_il)}. Sintesi delle valutazioni del ${r.ente || 'Centro Funzionale competente'}, pubblicata dal Dipartimento della Protezione Civile. Vale come informazione: l'allerta ufficiale è quella che la Regione comunica al Comune.` }));
         }
         corpo.append(el('div', { class: 'al-azioni' },
             b?.pdf ? el('a', { class: 'button-style', href: `/api/allerta/bollettini/${b.id}/pdf`, target: '_blank', rel: 'noopener', testo: 'Apri il bollettino (PDF)' }) : null,
-            el('a', { class: 'button-style button-secondary', href: r.pagina_ufficiale, target: '_blank', rel: 'noopener noreferrer', testo: `Avvisi della Regione ${r.nome}` })));
+            r.pagina_ufficiale ? el('a', { class: 'button-style button-secondary', href: r.pagina_ufficiale, target: '_blank', rel: 'noopener noreferrer', testo: `Avvisi della Regione ${r.nome}` }) : null));
 
         const versioni = dati.aggiornamenti || [];
         if (versioni.length > 1 || (versioni.length && versioni[0].id !== b?.id)) {

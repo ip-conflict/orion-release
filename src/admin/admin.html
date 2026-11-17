@@ -38,6 +38,9 @@
         .gu-etichetta { font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; display: block; }
         .gu-aiuto { font-weight: 400; font-size: 0.8rem; color: var(--text-muted); }
         .gu-ruoli { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+        .gu-provenienza { display: grid; gap: 6px; margin: 12px 0 18px; padding: 12px; border: 1px dashed var(--border-color); border-radius: 8px; }
+        .gu-provenienza[hidden] { display: none; }
+        .gu-provenienza small { color: var(--text-muted); }
         .gu-ruolo { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color); cursor: pointer; }
         .gu-ruolo:has(input:checked) { border-color: var(--primary-color); background: var(--info-soft-bg, var(--bg-color)); }
         .gu-ruolo input { margin-top: 3px; }
@@ -188,8 +191,15 @@
                         </label>
                     </div>
                 </div>
+                <div id="add-provenienza" class="gu-provenienza" hidden>
+                    <label for="add-ente">Ente</label>
+                    <input type="text" id="add-ente" maxlength="100" placeholder="Es. Comando VVF di Belluno">
+                    <label for="add-qualifica">Qualifica (facoltativa)</label>
+                    <select id="add-qualifica"></select>
+                    <small>Le sue squadre si riconoscono in sala dal colore e dall'icona.</small>
+                </div>
                  <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 10px 15px; border-radius: 4px; margin-bottom: 20px;">
-                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-color);">Lo Username e la Password verranno generati automaticamente dal sistema.
+                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-color);">ORION crea il nome utente e un link personale con cui la persona sceglie da sé la password.
                     </p>
                  </div>
 
@@ -254,6 +264,13 @@
                         </label>
                     </div>
                 </div>
+                <div id="edit-provenienza" class="gu-provenienza" hidden>
+                    <label for="edit-ente">Ente</label>
+                    <input type="text" id="edit-ente" maxlength="100" placeholder="Es. Comando VVF di Belluno">
+                    <label for="edit-qualifica">Qualifica (facoltativa)</label>
+                    <select id="edit-qualifica"></select>
+                    <small>Le sue squadre si riconoscono in sala dal colore e dall'icona.</small>
+                </div>
                 <!-- I permessi in più, oltre a quelli dei ruoli (src/permessi.js): li compila admin-users.js. -->
                 <fieldset id="edit-permessi" class="gu-permessi" hidden>
                     <legend>Permessi in più</legend>
@@ -307,6 +324,7 @@
 
     <script src="/vendor/js-cookie/js.cookie.min.js"></script>
     <script src="/js/apiHelper.js"></script>
+    <script src="/js/qualifiche.js"></script>
     <script src="/js/menu-laterale.js"></script> 
     <script src="/vendor/qrcode/qrcode.min.js"></script>
     <script src="/js/fogli-attivazione.js"></script>

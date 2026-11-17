@@ -57,12 +57,22 @@ export async function annullaModifiche(quante) {
     });
 }
 
+// La migrazione dei numeri non crea l'indice se trova doppioni già esistenti (vedi la migrazione).
+async function avvisaSeMancaIndiceNumeri() {
+    const { rowCount } = await pool.query("SELECT 1 FROM pg_indexes WHERE indexname = 'reports_numero_unico'");
+    if (!rowCount) {
+        logger.warn('[Migrazioni] Ci sono segnalazioni con lo stesso numero nella stessa emergenza (da prima della correzione): '
+            + "l'indice che li impedisce non c'è, ma i numeri nuovi non si ripetono più.");
+    }
+}
+
 export async function applicaMigrazioniMancanti() {
     try {
         const applicate = await applicaMigrazioni();
         if (applicate.length > 0) {
             logger.warn(`[Migrazioni] Applicate all'avvio: ${applicate.join(', ')}.`);
         }
+        await avvisaSeMancaIndiceNumeri();
         return applicate.length;
     } catch (e) {
         // L'applicazione parte lo stesso: l'amministratore deve poter ripristinare un altro backup.

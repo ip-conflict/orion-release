@@ -237,6 +237,36 @@
                     </div>
                     <p id="mfa-profilo-messaggio" class="mfa-messaggio" role="status"></p>
                 </div>
+
+                <div id="avvisi-sala" class="mfa mfa-scheda" hidden>
+                    <h2>Avvisi della sala</h2>
+                    <label class="riga-avvisi-sala">
+                        <input type="checkbox" id="avvisi-sala-attivo">
+                        <span>Avvisami delle novità della sala: segnalazioni ad alta priorità, segnalazioni senza squadra oltre i minuti critici, squadre in zona interdetta. Arrivano nell'app anche se non sei in sala.</span>
+                    </label>
+                    <p id="avvisi-sala-messaggio" class="mfa-messaggio" role="status"></p>
+                </div>
+
+                <div id="dispositivi" class="mfa mfa-scheda">
+                    <h2>I miei dispositivi</h2>
+                    <p class="mfa-spiega">Dove sei entrato con l'impronta dell'app, e i telefoni che usi per la verifica in due passaggi.
+                        Se non riconosci qualcosa, scollegalo e cambia la password.</p>
+                    <h3 class="dispositivi-titolo">Accesso con l'impronta</h3>
+                    <ul id="dispositivi-rinnovi" class="mfa-telefoni"></ul>
+                    <p id="dispositivi-rinnovi-vuoto" class="mfa-spiega" hidden>Nessun telefono entra con l'impronta.</p>
+                    <h3 class="dispositivi-titolo">Telefoni per la verifica in due passaggi</h3>
+                    <ul id="dispositivi-telefoni" class="mfa-telefoni"></ul>
+                    <p id="dispositivi-telefoni-vuoto" class="mfa-spiega" hidden>Nessun telefono collegato.</p>
+                    <p id="dispositivi-telefoni-nota" class="mfa-spiega" hidden>Si scollegano con la password dalla scheda Verifica in due passaggi, qui sopra.</p>
+                    <form id="dispositivi-altri-form" novalidate>
+                        <label for="dispositivi-password">Per uscire da tutti gli altri dispositivi, la tua password</label>
+                        <input type="password" id="dispositivi-password" class="mfa-password" autocomplete="current-password">
+                        <div class="mfa-azioni">
+                            <button type="submit" class="button-style button-secondary">Esci da tutti gli altri dispositivi</button>
+                        </div>
+                    </form>
+                    <p id="dispositivi-messaggio" class="mfa-messaggio" role="status"></p>
+                </div>
             </section>
 
         </main>
@@ -253,5 +283,6 @@
     <script src="/js/profile.js" defer></script>
     <script src="/js/mfa-comune.js" defer></script>
     <script src="/js/profilo-mfa.js" defer></script>
+    <script src="/js/profilo-dispositivi.js" defer></script>
 </body>
 </html>

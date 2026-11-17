@@ -16,6 +16,8 @@ import { annotaRegistroSquadre, avvisaEntratiInSquadra } from './squadre.js';
 import { registraPresenzeEmergenza, registraPresenzeSimulazione } from './presenze.js';
 import { activeEmergency, impostaEmergenzaAttiva } from './statoEmergenza.js';
 import { avvisaClienti, notifiche, wss } from './tempoReale.js';
+import { eliminaAudioEmergenza } from './voce.js';
+import { chiudiDiretteEmergenza, eliminaRegistrazioniDrone } from './drone.js';
 import { inviaFile, leggiFile, proteggiCaricati } from './cifratura.js';
 import { sigillaChiusura } from './integrita.js';
 import { copiaCopione, copioniDisponibili } from './copione.js';
@@ -254,6 +256,7 @@ export async function chiudiEmergenza(req, { tieni = null, interrotta = false } 
         await registraPresenzeEmergenza(chiusa.id, req).catch(e => logger.error('[Presenze] Presenze dell\'emergenza non registrate:', e));
     }
     avvisaClienti?.('reload_mappa');
+    chiudiDiretteEmergenza(chiusa.id).catch(e => logger.error('[Drone] Dirette non chiuse:', e));
     if (temporaneiChiusi.length) logger.info(`[Esterni temporanei] Chiusi ${temporaneiChiusi.length} accessi con l'emergenza.`);
     logger.info(`${simulazione ? 'SIMULAZIONE' : 'EMERGENZA'} CHIUSA: ID=${chiusa.id}, Code=${chiusa.code}${interrotta ? ' (interrotta)' : ''}`);
 
@@ -588,7 +591,8 @@ export function registraRotteEmergenze(app) {
                 `SELECT jsonb_build_object(
                     'report_updates', COALESCE((SELECT jsonb_agg(u.id ORDER BY u.id) FROM report_updates u JOIN reports r ON r.id = u.report_id WHERE r.emergency_id = $1), '[]'::jsonb),
                     'diario_sala', COALESCE((SELECT jsonb_agg(id ORDER BY id) FROM diario_sala WHERE emergency_id = $1), '[]'::jsonb),
-                    'emergency_team_log', COALESCE((SELECT jsonb_agg(id ORDER BY id) FROM emergency_team_log WHERE emergency_id = $1), '[]'::jsonb)
+                    'emergency_team_log', COALESCE((SELECT jsonb_agg(id ORDER BY id) FROM emergency_team_log WHERE emergency_id = $1), '[]'::jsonb),
+                    'stati_squadra', COALESCE((SELECT jsonb_agg(x.id ORDER BY x.id) FROM stati_squadra x JOIN reports r ON r.id = x.report_id WHERE r.emergency_id = $1), '[]'::jsonb)
                  ) AS righe`, [emergencyId])).rows[0].righe;
             await client.query("SELECT set_config('orion.cancellazione_emergenza', $1, true)", [String(emergencyId)]);
 
@@ -614,6 +618,8 @@ export function registraRotteEmergenze(app) {
 
             await client.query('COMMIT');
             logger.debug(`[DB] Commit eseguito per eliminazione emergenza ${emergencyId}.`);
+            eliminaAudioEmergenza(emergencyId).catch(e => logger.error(`[FS Cleanup] Messaggi vocali dell'emergenza ${emergencyId} non eliminati:`, e));
+            eliminaRegistrazioniDrone(emergencyId).catch(e => logger.error(`[FS Cleanup] Riprese del drone dell'emergenza ${emergencyId} non eliminate:`, e));
 
 
             logger.debug(`[FS Cleanup] Inizio eliminazione di ${imageFilesToDelete.length} file immagine...`);

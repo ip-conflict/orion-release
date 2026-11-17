@@ -1,5 +1,5 @@
-// Istanza in container: aggiornamento e ritorno chiesti dalla pagina Sistema ed eseguiti
-// dall'agente, versione che non parte, separazione da un'altra istanza. Come root, con due
+// Istanza in container: aggiornamento, ritorno e memoria chiesti dalla pagina Sistema ed eseguiti
+// dall'agente, versione che non parte, memoria divisa con l'altra istanza, separazione fra le due. Come root, con due
 // istanze appena create da scripts/docker/nuova-istanza.sh e le immagini <nuova> e <rotta>.
 //   ORION_BASE=... PROVA_ISTANZA=alfa PROVA_ALTRA=beta PROVA_NUOVA=1.2.4 PROVA_ROTTA=1.2.5 node tests/container.mjs
 
@@ -24,6 +24,9 @@ const verifica = (descr, ok, dettaglio = '') => {
     if (!ok) falliti++;
 };
 const chiama = async (percorso, { method = 'GET', body, token } = {}) => {
+    // Dopo un execFileSync lungo (backup, giro dell'agente) la connessione tenuta aperta è già chiusa
+    // dal server: senza cedere un attimo fetch la riusa, e una POST fallisce (le GET le riprova da sé).
+    await new Promise(r => setTimeout(r, 20));
     try {
         const r = await fetch(URL_ISTANZA + percorso, {
             method, body: body ? JSON.stringify(body) : undefined,
@@ -60,9 +63,10 @@ console.log(`\nContainer: istanza ${ISTANZA}`);
 
 const password = `Turno!${Date.now().toString().slice(-6)}Lampione1`;
 const codice = fs.readFileSync(path.join(DIR, 'dati', 'PRIMO-ACCESSO.txt'), 'utf8').match(/[A-Z0-9]{4}(-[A-Z0-9]{4}){3}/)?.[0];
-let r = await chiama('/api/primo-accesso', { method: 'POST', body: { codice, nome: 'Prova', cognome: 'Container', username: 'admin', password } });
-verifica('il primo amministratore si crea con il codice scritto nella cartella dei dati', r.stato === 201 || r.stato === 200, r);
-const { token } = await accediConFetch(URL_ISTANZA, 'admin', password);
+let r = await chiama('/api/primo-accesso', { method: 'POST', body: { codice, nome: 'Prova', cognome: 'Container', password } });
+verifica('il primo amministratore si crea con il codice scritto nella cartella dei dati', r.stato === 201 && r.corpo?.username === 'containerp', r);
+const AMMINISTRATORE = r.corpo?.username;
+const { token } = await accediConFetch(URL_ISTANZA, AMMINISTRATORE, password);
 
 const versionePrima = (await chiama('/api/sistema/versione', { token })).corpo;
 verifica('la pagina Sistema vede l\'agente e non chiede npm né tar', versionePrima?.requisiti?.pronto === true, versionePrima?.requisiti);
@@ -109,7 +113,7 @@ verifica(`ritorno alla ${versionePrima.versione_installata} completato tenendo i
 r = await chiama('/api/sistema/versione', { token });
 verifica('gira di nuovo la versione di prima', r.corpo?.versione_installata === versionePrima.versione_installata, r.corpo?.versione_installata);
 verifica('la tabella della versione nuova è stata tolta', sql("SELECT to_regclass('prova_container') IS NULL") === 't');
-verifica('l\'amministratore c\'è ancora', sql("SELECT count(*) FROM users WHERE username = 'admin'") === '1');
+verifica('l\'amministratore c\'è ancora', sql(`SELECT count(*) FROM users WHERE username = '${AMMINISTRATORE}'`) === '1');
 await chiama('/api/sistema/operazione', { method: 'DELETE', token });
 
 sql(`UPDATE branding_settings SET setting_value = '{"versione":"${ROTTA}","pacchetto":"immagine"}' WHERE setting_key = 'aggiornamenti_stato'`);
@@ -137,7 +141,7 @@ giro();
 await attendiServer();
 op = await operazioneFinita(token);
 verifica('ritorno con i dati di allora: database com\'era prima dell\'aggiornamento', op?.esito === 'fatto'
-    && sql("SELECT to_regclass('prova_container') IS NULL") === 't' && sql("SELECT count(*) FROM users WHERE username = 'admin'") === '1', op);
+    && sql("SELECT to_regclass('prova_container') IS NULL") === 't' && sql(`SELECT count(*) FROM users WHERE username = '${AMMINISTRATORE}'`) === '1', op);
 await chiama('/api/sistema/operazione', { method: 'DELETE', token });
 
 const logo = new FormData();
@@ -189,6 +193,85 @@ op = await operazioneFinita(token);
 verifica('rifiutata dal gestore, non cambia niente', op?.esito === 'errore' && (await chiama('/api/sistema/versione', { token })).corpo?.versione_installata === versionePrima.versione_installata, op);
 await chiama('/api/sistema/operazione', { method: 'DELETE', token });
 fs.writeFileSync(path.join(DIR, '.env'), fs.readFileSync(path.join(DIR, '.env'), 'utf8').replace(/^ORION_AGGIORNAMENTI=.*$/m, 'ORION_AGGIORNAMENTI=automatici'));
+
+const memoriaHost = Math.floor(Number(fs.readFileSync('/proc/meminfo', 'utf8').match(/^MemTotal:\s+(\d+)/m)[1]) / 1024);
+const riserva = Math.max(1024, Math.floor(memoriaHost * 15 / 100));
+const massimoAtteso = (altra) => Math.max(0, Math.floor((memoriaHost - riserva - altra - 512) / 64) * 64);
+const TETTO_PAGINA = 3072;
+const elencoMemoria = () => execFileSync(AGENTE, ['memoria'], { encoding: 'utf8', env: process.env });
+const liberaPer = (istanza) => Number(elencoMemoria().match(new RegExp(`^${istanza}\\s.*libera fino a\\s+(\\d+) MB`, 'm'))?.[1]);
+const scriviEnv = (nome, valore) => {
+    const file = path.join(DIR, '.env');
+    const senza = fs.readFileSync(file, 'utf8').replace(new RegExp(`^${nome}=.*\\n`, 'm'), '');
+    fs.writeFileSync(file, valore === null ? senza : `${senza}${nome}=${valore}\n`);
+};
+const limiteContainer = () => Number(execFileSync('docker', ['inspect', '-f', '{{.HostConfig.Memory}}', compose(DIR, 'ps', '-q', 'app').trim()], { encoding: 'utf8' }).trim()) / 1048576;
+const chiediDirettamente = (mb) => compose(DIR, 'exec', '-T', 'app', 'sh', '-c',
+    `printf 'id=%s\\ntipo=memoria\\nmemoria=${mb}\\n' "$(od -An -N8 -tx1 /dev/urandom | tr -d ' \\n')" > /agente/richieste/richiesta`);
+
+r = await chiama('/api/sistema/memoria', { token });
+let mem = r.corpo;
+verifica('la pagina vede la memoria di serie e il massimo, dentro il tetto e quello che lascia l\'altra istanza',
+    mem?.disponibile === true && mem.attuale_mb === 1024 && mem.massimo_mb === Math.min(TETTO_PAGINA, massimoAtteso(1536)), mem);
+verifica('ma non la memoria della macchina né quella delle altre istanze', ['host_mb', 'riserva_mb', 'altre_istanze_mb'].every(c => !(c in mem))
+    && !/altre_istanze|host_mb/.test(fs.readFileSync(path.join(DIR, 'agente', 'stato', 'agente.json'), 'utf8')), mem);
+r = await chiama('/api/sistema/memoria', { method: 'POST', token, body: { memoria_mb: mem.massimo_mb + 1024, password } });
+verifica('oltre il massimo la pagina rifiuta', r.stato === 400 && /al massimo/.test(r.corpo?.message), r);
+r = await chiama('/api/sistema/memoria', { method: 'POST', token, body: { memoria_mb: 512, password } });
+verifica('sotto il minimo la pagina rifiuta', r.stato === 400, r);
+chiediDirettamente(mem.massimo_mb + 1024);
+giro();
+op = await operazioneFinita(token);
+verifica('anche scavalcando la pagina, l\'agente non va oltre il massimo', op?.esito === 'errore' && /al massimo/.test(op?.messaggio)
+    && !/^ORION_MEMORIA=/m.test(fs.readFileSync(path.join(DIR, '.env'), 'utf8')), op);
+await chiama('/api/sistema/operazione', { method: 'DELETE', token });
+
+const nuovaMemoria = mem.massimo_mb >= 1280 ? 1280 : 768;
+r = await chiama('/api/sistema/memoria', { method: 'POST', token, body: { memoria_mb: nuovaMemoria, password } });
+verifica(`il cambio a ${nuovaMemoria} MB diventa una richiesta all'agente`, r.stato === 200 && /chiesto al server/.test(r.corpo?.message), r);
+giro();
+op = await operazioneFinita(token);
+verifica('l\'agente ricrea il container con la memoria nuova', op?.esito === 'fatto' && leggiEnv(DIR, 'ORION_MEMORIA') === `${nuovaMemoria}m`
+    && limiteContainer() === nuovaMemoria, { op, limite: limiteContainer() });
+verifica('ORION risponde di nuovo e la pagina mostra la memoria nuova', await attendiServer()
+    && (await chiama('/api/sistema/memoria', { token })).corpo?.attuale_mb === nuovaMemoria);
+verifica('all\'altra istanza resta di meno', liberaPer(ALTRA) === massimoAtteso(nuovaMemoria + 512), elencoMemoria());
+await chiama('/api/sistema/operazione', { method: 'DELETE', token });
+verifica('chi gestisce il server la rimette di serie da riga di comando',
+    /1024 MB/.test(execFileSync(AGENTE, ['memoria', ISTANZA, '1024'], { encoding: 'utf8', env: process.env })) && limiteContainer() === 1024);
+await attendiServer();
+verifica('e da riga di comando vede il conto di tutte le istanze', /^Server: \d+ MB/m.test(elencoMemoria()));
+
+scriviEnv('ORION_MEMORIA_MASSIMA', '1536m');
+giro();
+r = await chiama('/api/sistema/memoria', { token });
+verifica('chi gestisce il server abbassa il tetto della pagina con ORION_MEMORIA_MASSIMA', r.corpo?.massimo_mb === 1536, r.corpo);
+chiediDirettamente(2048);
+giro();
+op = await operazioneFinita(token);
+verifica('e l\'agente non lo supera nemmeno scavalcando la pagina', op?.esito === 'errore' && limiteContainer() === 1024, op);
+await chiama('/api/sistema/operazione', { method: 'DELETE', token });
+verifica('da riga di comando invece si va oltre il tetto, dentro la memoria libera',
+    /2048 MB/.test(execFileSync(AGENTE, ['memoria', ISTANZA, '2048'], { encoding: 'utf8', env: process.env })) && limiteContainer() === 2048);
+await attendiServer();
+r = await chiama('/api/sistema/memoria', { method: 'POST', token, body: { memoria_mb: 1792, password } });
+verifica('sopra il tetto la pagina lascia solo abbassare', r.stato === 200, r);
+giro();
+op = await operazioneFinita(token);
+verifica('e l\'agente abbassa', op?.esito === 'fatto' && limiteContainer() === 1792, op);
+await chiama('/api/sistema/operazione', { method: 'DELETE', token });
+scriviEnv('ORION_MEMORIA_MASSIMA', null);
+execFileSync(AGENTE, ['memoria', ISTANZA, '1024'], { encoding: 'utf8', env: process.env });
+await attendiServer();
+
+const fileAgente = path.join(DIR, 'agente', 'stato', 'agente.json');
+const { agente: _versione, sa: _sa, memoria: _memoria, ...agenteDiPrima } = JSON.parse(fs.readFileSync(fileAgente, 'utf8'));
+fs.writeFileSync(fileAgente, JSON.stringify(agenteDiPrima));
+r = await chiama('/api/sistema/memoria', { token });
+verifica('con l\'agente di prima la pagina dice di reinstallarlo invece di offrire il cambio', r.corpo?.disponibile === false && /orion-agente/.test(r.corpo?.motivo), r.corpo);
+r = await chiama('/api/sistema/versione', { token });
+verifica('e lo dice anche fra le avvertenze degli aggiornamenti', (r.corpo?.requisiti?.avvertenze || []).some(a => /versione precedente/.test(a)), r.corpo?.requisiti);
+giro();
 
 const disco = fs.mkdtempSync(path.join(BASE, 'disco-'));
 execFileSync(AGENTE, ['disco', 'copia'], { encoding: 'utf8', env: { ...process.env, ORION_DISCO_CARTELLA: disco } });

@@ -256,6 +256,7 @@
             </div>
             ${sezioneQuadro(d.quadro, chiusa)}
             <div class="st-sintesi">${sintesi.join('')}</div>
+            ${(d.per_tipo || []).length ? `<p class="st-per-tipo"><strong>Per tipo:</strong> ${d.per_tipo.map(t => `${e(t.nome)} ${Number(t.quante)}`).join(' · ')}</p>` : ''}
             <section class="st-sezione"><h2>Segnalazioni ${chiusa ? 'rimaste aperte' : 'aperte'} <span class="st-conta">(${aperte.length})</span></h2>${tabellaAperte(aperte)}</section>
             ${sezioneMappa(d.mappa, chiusa)}
             ${sezioneFunzioni(d.funzioni)}
@@ -276,6 +277,13 @@
             if (emergenzaRichiesta) q.set('emergenza', emergenzaRichiesta);
             if (completo) q.set('completo', '1');
             const url = '/api/situazione' + (q.toString() ? `?${q}` : '');
+            if (!emergenzaRichiesta && !(await fetchApi('/api/emergencies/status').catch(() => null))?.active) {
+                document.getElementById('st-stampa').hidden = true;
+                document.getElementById('st-quadro-apri').hidden = true;
+                foglio.innerHTML = '<div class="st-errore"><p><strong>Nessuna emergenza aperta.</strong></p><p>Il punto di situazione si prepara durante un\'emergenza. Quelli delle emergenze chiuse si stampano dall\'archivio.</p></div>';
+                foglio.setAttribute('aria-busy', 'false');
+                return;
+            }
             const [dati, marchio] = await Promise.all([
                 fetchApi(url),
                 fetchApi('/api/branding').catch(() => null)

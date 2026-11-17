@@ -30,8 +30,61 @@ const INNOCUE = [
     /\.(id|length|rowCount)\s*$/,
     /^(Number|parseInt|parseFloat|Math\.|String\()/,
     /^(escapeHTML|encodeURIComponent|DOMPurify)/,
-    /^[A-Z_]{3,}$/           // costanti tutte maiuscole
+    /^e\(/,                  // alias locale di escapeHTML (situazione.js)
+    /^[\w.]+\.length\s*[-+]\s*\w+$/,
+    // .map che restituisce un template: le sue ${...} si controllano una per una.
+    /^[\w.]+\.map\(\s*\(?\w+(\s*,\s*\w+)?\)?\s*=>\s*`/,
+    /^[A-Z_]{3,}$/,          // costanti tutte maiuscole
+    // Costruiscono markup e scappano dentro il testo che ci mettono: se una cambia, va
+    // riguardata prima di lasciarla qui.
+    /^(getStatusBadgeHTML|bollinoPriorita|diario|iconaTipo|(window\.)?Funzioni\??\.etichette|(window\.)?Qualifiche\??\.(bollino|cartellino|segnaposto)|ora)\(/
 ];
+
+// Salta una stringa o un template che comincia in i; restituisce l'indice della chiusura.
+function finePezzo(e, i) {
+    const chiusa = e[i];
+    for (let j = i + 1; j < e.length; j++) {
+        if (e[j] === '\\') { j++; continue; }
+        if (chiusa === '`' && e[j] === '$' && e[j + 1] === '{') {
+            let livello = 0;
+            for (j += 2; j < e.length; j++) {
+                if (e[j] === '`' || e[j] === "'" || e[j] === '"') j = finePezzo(e, j);
+                else if (e[j] === '{') livello++;
+                else if (e[j] === '}') { if (livello === 0) break; livello--; }
+            }
+            continue;
+        }
+        if (e[j] === chiusa) return j;
+    }
+    return e.length;
+}
+
+// In "a ? b : c" in pagina finisce b o c, non a: si guardano solo i due rami.
+function rami(e) {
+    let livello = 0, domanda = -1, annidate = 0;
+    for (let i = 0; i < e.length; i++) {
+        const c = e[i];
+        if (c === '`' || c === "'" || c === '"') i = finePezzo(e, i);
+        else if ('([{'.includes(c)) livello++;
+        else if (')]}'.includes(c)) livello--;
+        else if (livello === 0 && c === '?' && e[i + 1] !== '.' && e[i + 1] !== '?' && e[i - 1] !== '?') {
+            if (domanda === -1) domanda = i; else annidate++;
+        } else if (livello === 0 && c === ':' && domanda !== -1) {
+            if (annidate) annidate--; else return [e.slice(domanda + 1, i), e.slice(i + 1)];
+        }
+    }
+    return null;
+}
+
+function innocua(e) {
+    e = e.trim();
+    // Un letterale, o un template annidato: le ${...} di quest'ultimo si controllano da sole.
+    if (!e || /^'[^']*'$|^"[^"]*"$/.test(e) || e.startsWith('`')) return true;
+    if (INNOCUE.some(x => x.test(e))) return true;
+    const r = rami(e);
+    if (r) return r.every(innocua);
+    return !DATI_DAL_SERVER.test(e);
+}
 
 // I dati che arrivano dal server stanno quasi sempre su questi oggetti: sono
 // loro a poter contenere quello che qualcuno ha scritto in un campo.
@@ -47,6 +100,20 @@ function segnala(file, riga, testo, messaggio, grave = true) {
 }
 
 const ATTRIBUTO = /\b([a-zA-Z-]+)\s*=\s*"([^"]*\$\{[^}]*\}[^"]*)"/g;
+
+// Ogni ${...} della riga, con le graffe bilanciate: anche quelli dentro un template annidato.
+function espressioni(riga) {
+    const trovate = [];
+    for (let i = riga.indexOf('${'); i !== -1; i = riga.indexOf('${', i + 2)) {
+        let livello = 0, j = i + 2;
+        for (; j < riga.length; j++) {
+            if (riga[j] === '{') livello++;
+            else if (riga[j] === '}') { if (livello === 0) break; livello--; }
+        }
+        trovate.push({ testo: riga.slice(i + 2, j).trim(), chiusa: j < riga.length });
+    }
+    return trovate;
+}
 
 for (const nome of fs.readdirSync(CARTELLA).filter(n => n.endsWith('.js'))) {
     const file = path.join(CARTELLA, nome);
@@ -72,6 +139,18 @@ for (const nome of fs.readdirSync(CARTELLA).filter(n => n.endsWith('.js'))) {
                         `dentro l'attributo ${trovato[1]}="..." il valore \${${e.slice(0, 40)}} va passato da escapeHTML.`);
                 }
             }
+        }
+
+        // Anche il testo fra i tag: <strong>${c.name}</strong> sfuggiva al solo controllo
+        // degli attributi.
+        if (!/<\/?[a-zA-Z][^>]*>/.test(riga)) return;
+        const fuoriDagliAttributi = riga.replace(ATTRIBUTO, '');
+        for (const { testo: e, chiusa } of espressioni(fuoriDagliAttributi)) {
+            // Un'espressione che continua a capo non si giudica da un pezzo: le sue
+            // ${...} interne stanno sulle righe dopo e si controllano lì.
+            if (!chiusa || innocua(e)) continue;
+            segnala(file, numero, riga,
+                `nel testo della pagina il valore \${${e.slice(0, 40)}} va passato da escapeHTML.`);
         }
     });
 }

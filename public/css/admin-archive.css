@@ -70,3 +70,9 @@
 .ar-filtro { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 
 #closed-emergency-select { max-width: 100%; min-width: 0; }
+
+.ar-voce-elenco { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+.ar-voce-elenco li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-color); font-size: 0.88rem; }
+.ar-voce-elenco li span { flex: 1; }
+.ar-voce-audio { height: 32px; max-width: 260px; }
+.ar-voce-trascrizione { flex-basis: 100%; margin: 0; font-style: italic; font-size: 0.85rem; }

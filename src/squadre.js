@@ -3,10 +3,11 @@ import { conIdoneitaFisica } from './esitiVisite.js';
 import { registraAudit } from './audit.js';
 import { checkAdminRole, nomeUtente, nonEsterni, ruoliDi } from './autenticazione.js';
 import { sistemaBeniInCarico } from './beniInUscita.js';
-import { ACTIVE_REPORT_STATUSES_BACKEND, NOMI_RADIO, erroreNonTrovato, erroreRichiesta } from './costanti.js';
+import { ACTIVE_REPORT_STATUSES_BACKEND, NOMI_RADIO, QUALIFICHE, erroreNonTrovato, erroreRichiesta, leggiQualifica } from './costanti.js';
 import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { notifiche, wss } from './tempoReale.js';
+import { leggiConfigSegreteria } from './configSegreteria.js';
 
 export async function avvisaSquadra(squadraId, dati) {
     try {
@@ -30,12 +31,14 @@ export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza
             await notifiche.scadi({ tipo: 'in_squadra', userId: id });
         }
         const radio = squadra.nome_radio + (squadra.nome ? ` (${squadra.nome})` : '');
+        // Android non lascia accendere il microfono da dietro le quinte: la voce parte quando si apre l'app.
+        const voce = String((await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'voce_enabled'")).rows[0]?.setting_value) === 'true';
         for (const id of await ids(entrati)) {
             await notifiche.scadi({ tipo: 'in_squadra', userId: id });
             await notifiche.notifica(id, {
                 tipo: 'in_squadra',
                 titolo: `Sei in squadra ${squadra.nome_radio}`,
-                testo: `Emergenza ${emergenza.code}: sei nella squadra ${radio}. Apri ORION per gli interventi.`,
+                testo: `Emergenza ${emergenza.code}: sei nella squadra ${radio}. Apri ORION per gli interventi${voce ? ' e per accendere Orion Voice' : ''}.`,
                 riferimento: { tipo: 'squadra', id: squadra.id },
                 chiave: `in_squadra:${emergenza.id}:${squadra.id}:${Date.now()}`,
                 oreValidita: 72
@@ -51,9 +54,7 @@ export async function avvisaEntratiInSquadra(entrati, usciti, squadra, emergenza
 async function segreteriaAccesa(esecutore = pool) {
     try {
         const r = await esecutore.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
-        const v = r.rows[0]?.setting_value;
-        const config = typeof v === 'string' ? JSON.parse(v) : v;
-        return config?.enabled === true;
+        return leggiConfigSegreteria(r.rows[0]?.setting_value).enabled === true;
     } catch {
         return false;
     }
@@ -124,8 +125,10 @@ export async function annotaRegistroSquadre(client, righe, req = null, emergency
     // All'apertura l'emergenza si passa: lo stato globale cambia solo dopo il COMMIT.
     const idEmergenza = emergencyId ?? activeEmergency?.id ?? null;
     if (!idEmergenza || !Array.isArray(righe) || righe.length === 0) return;
+    // Il punto di ripristino tiene viva la transazione di chi chiama: senza, un'annotazione fallita
+    // (l'emergenza appena eliminata) bloccava il resto, e la squadra COC non si scioglieva più.
+    await client.query('SAVEPOINT registro_squadre');
     try {
-
         const esecutore = nomeUtente(req?.user);
         for (const r of righe) {
             await client.query(
@@ -137,7 +140,9 @@ export async function annotaRegistroSquadre(client, righe, req = null, emergency
                  r.azione, r.motivo || 'operazione', esecutore]
             );
         }
+        await client.query('RELEASE SAVEPOINT registro_squadre');
     } catch (errore) {
+        await client.query('ROLLBACK TO SAVEPOINT registro_squadre').catch(() => {});
         logger.error('[Registro squadre] Annotazione non riuscita:', errore);
     }
 }
@@ -220,7 +225,7 @@ async function validateTeamMembers(client, usernames) {
     const confRes = await client.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
     if (confRes.rowCount === 0 || !confRes.rows[0].setting_value) return [];
     
-    const config = typeof confRes.rows[0].setting_value === 'string' ? JSON.parse(confRes.rows[0].setting_value) : confRes.rows[0].setting_value;
+    const config = leggiConfigSegreteria(confRes.rows[0].setting_value);
     
 
     if (!config.enabled || (!config.block_on_medical && !config.block_on_course)) return [];
@@ -261,11 +266,13 @@ export function registraRotteSquadre(app) {
                 s.nome_radio,
                 s.nome,
                 s.coc,
+                s.qualifica,
                 (SELECT json_build_object(
                             'report_id', r.id,
                             'emergency_code', e.code,
-                            'target_report_progressive_number', r.emergency_report_number, -- <<< AGGIUNTO
-                            'target_report_title', r.title                         -- <<< AGGIUNTO
+                            'target_report_progressive_number', r.emergency_report_number,
+                            'target_report_title', r.title,
+                            'stato', rta.stato
                         )
                    FROM report_team_assignments rta
                    JOIN reports r ON rta.report_id = r.id
@@ -295,7 +302,7 @@ export function registraRotteSquadre(app) {
             FROM squadre s
             LEFT JOIN squadra_membri sm ON s.id = sm.squadra_id
             LEFT JOIN posizioni_squadre ps ON s.id = ps.squadra_id
-            GROUP BY s.id, ps.last_update, ps.inviata_da
+            GROUP BY s.id, s.qualifica, ps.last_update, ps.inviata_da
             ORDER BY s.coc DESC, s.nome_radio;
         `;
 
@@ -307,6 +314,8 @@ export function registraRotteSquadre(app) {
             res.status(500).json({ message: 'Errore nel leggere le squadre.' });
         }
     });
+
+    app.get('/api/qualifiche', (req, res) => res.json(QUALIFICHE));
 
     app.get('/api/squadre/disponibili', async (req, res) => {
         logger.debug(`User ${req.user.id} requesting available teams.`);
@@ -337,7 +346,7 @@ export function registraRotteSquadre(app) {
         if (isNaN(squadraId)) return res.status(400).json({ message: 'ID Squadra non valido'});
 
         try {
-            const squadraQuery = `SELECT id, nome_radio, nome, created_at, target, coc FROM squadre WHERE id = $1`;
+            const squadraQuery = `SELECT id, nome_radio, nome, created_at, target, coc, qualifica FROM squadre WHERE id = $1`;
             const squadraResult = await pool.query(squadraQuery, [squadraId]);
             if (squadraResult.rowCount === 0) return res.status(404).json({ error: 'Squadra non trovata' });
             const squadra = squadraResult.rows[0];
@@ -377,11 +386,13 @@ export function registraRotteSquadre(app) {
              return res.status(400).json({ error: 'Array membri richiesto.' });
         }
         const nomeDescrittivo = nome ? String(nome).trim() : null;
+        const qualifica = leggiQualifica(req.body.qualifica);
+        if (qualifica.errore) return res.status(400).json({ error: qualifica.errore });
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            const insertSquadraQuery = `INSERT INTO squadre (nome_radio, nome, created_at) VALUES ($1, $2, NOW()) RETURNING id`;
-            const result = await client.query(insertSquadraQuery, [nome_radio, nomeDescrittivo]);
+            const insertSquadraQuery = `INSERT INTO squadre (nome_radio, nome, qualifica, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id`;
+            const result = await client.query(insertSquadraQuery, [nome_radio, nomeDescrittivo, qualifica.valore]);
             const squadraId = result.rows[0].id;
             const bloccati = await nomiRadioBloccati(client);
             if (bloccati.has(nome_radio)) {
@@ -453,12 +464,14 @@ export function registraRotteSquadre(app) {
              return res.status(400).json({ error: 'Array membri richiesto.' });
          }
         let nomeDescrittivo = nome ? String(nome).trim() : null;
+        // Chi non la manda (l'app, le versioni vecchie della pagina) la lascia com'era.
+        const qualifica = Object.hasOwn(req.body, 'qualifica') ? leggiQualifica(req.body.qualifica) : null;
+        if (qualifica?.errore) return res.status(400).json({ error: qualifica.errore });
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
-
-            const esiste = await client.query('SELECT id, nome_radio, nome, coc FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
+            const esiste = await client.query('SELECT id, nome_radio, nome, coc, qualifica FROM squadre WHERE id = $1 FOR UPDATE', [squadraId]);
             if (esiste.rowCount === 0) throw erroreNonTrovato('Squadra non trovata.');
             const coc = esiste.rows[0].coc;
             if (coc) {
@@ -488,7 +501,8 @@ export function registraRotteSquadre(app) {
 
             const membriRisolti = await risolviMembriSquadra(client, membri, squadraId);
             const capoDopo = caposquadraRichiesto(req.body, membriRisolti, capoPrima);
-            await client.query('UPDATE squadre SET nome_radio = $1, nome = $2 WHERE id = $3', [nome_radio, nomeDescrittivo, squadraId]);
+            const qualificaDopo = coc ? null : (qualifica ? qualifica.valore : esiste.rows[0].qualifica);
+            await client.query('UPDATE squadre SET nome_radio = $1, nome = $2, qualifica = $3 WHERE id = $4', [nome_radio, nomeDescrittivo, qualificaDopo, squadraId]);
 
             await client.query('DELETE FROM squadra_membri WHERE squadra_id = $1', [squadraId]);
             if (membriRisolti.length > 0) {

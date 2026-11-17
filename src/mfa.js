@@ -11,6 +11,8 @@ import { ChiaveNonDisponibile, cifraTesto, decifraTesto } from './cifratura.js';
 import { pool } from './db.js';
 import { ALFABETO_RECUPERO } from './formatoCifrato.js';
 import { passwordLimiter } from './middleware/rateLimiters.js';
+import { sendEmailUtility } from './email.js';
+import { azzeraCodiciSbagliati, codiceSbagliato, iniziaCodice, messaggioAttesa } from './tentativiAccesso.js';
 
 export const PERIODO = 30;
 const CIFRE = 6;
@@ -103,6 +105,35 @@ async function codiciRimasti(userId) {
 
 export const mfaObbligatoria = (ruoli, permessi = null) => mfaRichiesta(ruoli, permessi ?? [...permessiDeiRuoli(ruoli)]);
 
+// Le notifiche le passa server.js: importarle da tempoReale.js farebbe un giro di import fino a qui.
+let notificheMfa = null;
+export function usaNotificheMfa(notifiche) {
+    notificheMfa = notifiche;
+}
+
+const COSA_E_CAMBIATO = {
+    attivata: 'La verifica in due passaggi è stata attivata',
+    app_cambiata: "L'app dei codici della verifica in due passaggi è stata cambiata",
+    codici_rigenerati: 'Sono stati creati nuovi codici di riserva (quelli di prima non valgono più)',
+    disattivata: 'La verifica in due passaggi è stata tolta'
+};
+
+// Chi conosce la password potrebbe cambiare la verifica al posto della persona: lei deve saperlo subito.
+export function avvisaVerificaCambiata(utente, cosa, { daAmministratore = null } = {}) {
+    if (!utente) return;
+    const quando = new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'long', timeStyle: 'short' });
+    const fatto = cosa === 'azzerata'
+        ? `La tua verifica in due passaggi è stata azzerata da ${daAmministratore || 'un amministratore'}`
+        : COSA_E_CAMBIATO[cosa] || 'La tua verifica in due passaggi è cambiata';
+    const testo = `${fatto} il ${quando}. Se non sei stato tu, avvisa subito un amministratore.`;
+    notificheMfa?.notifica(utente.id, { tipo: 'mfa_cambiata', titolo: 'Verifica in due passaggi cambiata', testo })
+        ?.catch?.(e => logger.warn(`[MFA] Notifica di avviso non mandata a ${utente.username}: ${e.message}`));
+    if (utente.email) {
+        sendEmailUtility(utente.email, 'ORION: verifica in due passaggi cambiata', `Ciao ${utente.nome || utente.username},\n\n${testo}`)
+            .catch(e => logger.warn(`[MFA] Email di avviso non mandata a ${utente.username}: ${e.message}`));
+    }
+}
+
 export async function leggiUtente(userId) {
     const r = await pool.query(
         `SELECT u.id, u.username, u.nome, u.email, u.role, u.password, COALESCE(u.is_active, true) AS is_active, u.temporaneo,
@@ -129,13 +160,13 @@ async function verificaCodice(utente, codice) {
             throw e;
         }
         const passo = passoDelCodice(segreto, pulito);
-        if (passo == null) return { ok: false, message: "Codice non valido. Se è giusto, controlla che l'ora del telefono sia automatica." };
+        if (passo == null) return { ok: false, sbagliato: true, message: "Codice non valido. Se è giusto, controlla che l'ora del telefono sia automatica." };
         // Lo stesso codice non vale due volte, nemmeno da due richieste insieme.
         const r = await pool.query(
             'UPDATE users SET mfa_ultimo_passo = $2 WHERE id = $1 AND (mfa_ultimo_passo IS NULL OR mfa_ultimo_passo < $2)',
             [utente.id, passo]);
         if (r.rowCount === 0) return { ok: false, message: 'Questo codice è già stato usato: aspetta il prossimo.' };
-        return { ok: true };
+        return { ok: true, app: true };
     }
     const riserva = normalizzaRiserva(pulito);
     if (!riserva) return { ok: false, message: "Scrivi le sei cifre dell'app, oppure un codice di riserva (dieci caratteri)." };
@@ -169,6 +200,7 @@ async function togli(userId) {
         'UPDATE users SET mfa_attiva = false, mfa_segreto = NULL, mfa_attivata_il = NULL, mfa_ultimo_passo = NULL WHERE id = $1', [userId]);
     await pool.query('DELETE FROM mfa_codici_riserva WHERE user_id = $1', [userId]);
     await pool.query('DELETE FROM telefoni_chiave WHERE user_id = $1', [userId]);
+    azzeraCodiciSbagliati(userId);
 }
 
 // In memoria: un riavvio del server le perde, e si rifà l'accesso.
@@ -213,8 +245,10 @@ export async function passoDopoLaPassword(utente, extra = {}) {
         const r = await pool.query(
             `SELECT (SELECT count(*)::int FROM telefoni_chiave WHERE user_id = $1) AS telefoni,
                     (SELECT mfa_segreto IS NOT NULL FROM users WHERE id = $1) AS totp`, [utente.id]);
+        // Chi è entrato con l'email ritrova la chiave del telefono, che l'app tiene per username.
         return {
             mfa: 'codice',
+            username: utente.username,
             sfida: nuovaSfida({ userId: utente.id, tipo: 'codice', ...extra }),
             telefoni: r.rows[0].telefoni,
             totp: r.rows[0].totp === true,
@@ -225,6 +259,7 @@ export async function passoDopoLaPassword(utente, extra = {}) {
         const segreto = crypto.randomBytes(20);
         return {
             mfa: 'attivazione',
+            username: utente.username,
             sfida: nuovaSfida({ userId: utente.id, tipo: 'attivazione', segreto, ...extra }),
             segreto: base32(segreto),
             uri: await uriOtp(utente.username, segreto),
@@ -247,16 +282,36 @@ async function promuoviRinnovo(req, sfida, utente) {
 
 export async function accessoVerificato(req, res, sfida, utente, extra = {}) {
     await promuoviRinnovo(req, sfida, utente);
-    const sessione = emettiSessione(res, utente, utente.ruoli, { mfa: true });
+    const sessione = emettiSessione(res, utente, utente.ruoli, { mfa: true, via: sfida.rinnovo ? 'rinnovo' : null });
     return res.json(await rispostaAccesso(utente, sessione, extra));
 }
+
+// Tanti codici sbagliati dopo la password giusta vogliono dire che la password è nota a qualcuno.
+function avvisaCodiciSbagliati(req, utente) {
+    logger.warn(`[MFA] Molti codici sbagliati per ${utente.username}: codici dell'app in pausa.`);
+    registraAudit(req, 'mfa.molti_codici_sbagliati', { tipo: 'utente', id: utente.id });
+    if (!utente.email) return;
+    sendEmailUtility(utente.email, 'ORION: la tua password potrebbe essere nota ad altri',
+        `Ciao ${utente.nome || utente.username},\n\nqualcuno è entrato in ORION con la tua password e poi ha sbagliato molte volte il codice della verifica in due passaggi.\nSe non eri tu, cambia subito la password dal profilo e avvisa un amministratore. Per un po' i codici dell'app non vengono accettati: puoi entrare confermando dal telefono collegato o con un codice di riserva.`)
+        .catch(e => logger.warn(`[MFA] Avviso dei codici sbagliati non mandato a ${utente.username}: ${e.message}`));
+}
+
+const messaggioPausaCodici = (secondi) =>
+    `${messaggioAttesa(secondi)} Intanto puoi confermare dal telefono collegato o usare un codice di riserva.`;
 
 export function registraRotteMfaPubbliche(app) {
     app.post('/api/accesso/mfa', passwordLimiter, async (req, res) => {
         const id = typeof req.body?.sfida === 'string' ? req.body.sfida : '';
         const sfida = sfidaValida(id);
         if (!sfida) return res.status(401).json({ message: "Tempo scaduto: rifai l'accesso con la password.", sfida_scaduta: true });
+        const codice = String(req.body?.codice || '').trim();
+        const tentativo = sfida.tipo === 'codice' && /^\d{6}$/.test(codice.replace(/\s/g, '')) ? iniziaCodice(sfida.userId) : { attesa: 0 };
+        if (tentativo.attesa) {
+            return res.status(429).json({ message: messaggioPausaCodici(tentativo.attesa) });
+        }
+        const fineTentativo = tentativo.fine || (() => {});
         if (troppiTentativi(id, sfida)) {
+            fineTentativo();
             return res.status(401).json({ message: "Troppi codici sbagliati: rifai l'accesso con la password.", sfida_scaduta: true });
         }
         try {
@@ -266,7 +321,6 @@ export function registraRotteMfaPubbliche(app) {
                 return res.status(403).json({ message: 'Il tuo account è sospeso. Contatta la segreteria.' });
             }
             req.user = { id: utente.id, username: utente.username };
-            const codice = String(req.body?.codice || '').trim();
 
             if (sfida.tipo === 'attivazione') {
                 const passo = passoDelCodice(sfida.segreto, codice.replace(/\s/g, ''));
@@ -277,6 +331,7 @@ export function registraRotteMfaPubbliche(app) {
                 const codici = await salvaAttivazione(utente.id, sfida.segreto, passo);
                 await chiudiSessioni(utente.id);
                 registraAudit(req, 'mfa.attivata', { tipo: 'utente', id: utente.id, dettagli: { al_primo_accesso: true } });
+                avvisaVerificaCambiata(utente, 'attivata');
                 logger.info(`[MFA] ${utente.username} ha attivato la verifica in due passaggi.`);
                 return accessoVerificato(req, res, sfida, utente, { codici_riserva: codici });
             }
@@ -286,7 +341,15 @@ export function registraRotteMfaPubbliche(app) {
                 return res.status(401).json({ message: "La verifica in due passaggi è stata tolta nel frattempo: rifai l'accesso.", sfida_scaduta: true });
             }
             const esito = await verificaCodice(utente, codice);
-            if (!esito.ok) return res.status(401).json({ message: esito.message });
+            if (!esito.ok) {
+                const pausa = esito.sbagliato ? codiceSbagliato(utente.id) : { attesa: 0 };
+                if (pausa.primaPausa) avvisaCodiciSbagliati(req, utente);
+                if (pausa.attesa) {
+                    return res.status(429).json({ message: messaggioPausaCodici(pausa.attesa) });
+                }
+                return res.status(401).json({ message: esito.message });
+            }
+            if (esito.app) azzeraCodiciSbagliati(utente.id);
             sfide.delete(id);
             if (esito.riserva) {
                 registraAudit(req, 'mfa.codice_riserva', { tipo: 'utente', id: utente.id, dettagli: { rimasti: esito.rimasti } });
@@ -295,6 +358,8 @@ export function registraRotteMfaPubbliche(app) {
         } catch (e) {
             logger.error('[MFA] Errore nel secondo passo dell\'accesso:', e);
             return res.status(500).json({ message: 'Errore interno del server' });
+        } finally {
+            fineTentativo();
         }
     });
 }
@@ -352,6 +417,7 @@ export function registraRotteMfa(app) {
                 await pool.query('UPDATE users SET mfa_segreto = $2, mfa_ultimo_passo = $3 WHERE id = $1',
                     [req.user.id, cifraTesto(base32(preparata.segreto)), passo]);
                 registraAudit(req, 'mfa.app_codici_aggiunta', { tipo: 'utente', id: req.user.id });
+                avvisaVerificaCambiata(prima, 'app_cambiata');
                 return res.json({ message: 'App dei codici collegata.' });
             }
             const giaAttiva = prima.mfa_attiva === true;
@@ -359,6 +425,7 @@ export function registraRotteMfa(app) {
             await chiudiSessioni(req.user.id);
             const { token } = emettiSessione(res, req.user, req.user.ruoli, { mfa: true });
             registraAudit(req, giaAttiva ? 'mfa.telefono_cambiato' : 'mfa.attivata', { tipo: 'utente', id: req.user.id });
+            avvisaVerificaCambiata(prima, giaAttiva ? 'app_cambiata' : 'attivata');
             res.json({
                 message: giaAttiva ? 'Telefono cambiato: il codice vecchio non vale più.' : 'Verifica in due passaggi attivata.',
                 codici_riserva: codici, token
@@ -376,6 +443,7 @@ export function registraRotteMfa(app) {
             if (!(await passwordGiusta(u, req.body?.password))) return res.status(403).json({ message: 'Password non corretta.' });
             const codici = await nuoviCodiciRiserva(pool, u.id);
             registraAudit(req, 'mfa.codici_rigenerati', { tipo: 'utente', id: u.id });
+            avvisaVerificaCambiata(u, 'codici_rigenerati');
             res.json({ message: 'Codici di riserva nuovi: quelli di prima non valgono più.', codici_riserva: codici });
         } catch (e) {
             logger.error('[MFA] Errore codici di riserva:', e);
@@ -393,6 +461,7 @@ export function registraRotteMfa(app) {
             if (!(await passwordGiusta(u, req.body?.password))) return res.status(403).json({ message: 'Password non corretta.' });
             await togli(u.id);
             registraAudit(req, 'mfa.disattivata', { tipo: 'utente', id: u.id });
+            avvisaVerificaCambiata(u, 'disattivata');
             res.json({ message: 'Verifica in due passaggi disattivata.' });
         } catch (e) {
             logger.error('[MFA] Errore disattivazione:', e);
@@ -413,6 +482,7 @@ export function registraRotteMfa(app) {
             await togli(id);
             await chiudiSessioni(id);
             registraAudit(req, 'mfa.azzerata', { tipo: 'utente', id, dettagli: { username: u.username } });
+            avvisaVerificaCambiata(u, 'azzerata', { daAmministratore: req.user.username });
             logger.warn(`[MFA] ${req.user.username} ha azzerato la verifica in due passaggi di ${u.username}.`);
             res.json({
                 message: mfaObbligatoria(u.ruoli, await permessiDellaPersona(id, u.ruoli))

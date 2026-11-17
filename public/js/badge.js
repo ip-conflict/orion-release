@@ -53,21 +53,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const coursesUl = document.getElementById('b-courses');
         if (data.corsi_attivi && data.corsi_attivi.length > 0) {
-            coursesUl.innerHTML = data.corsi_attivi.map(c => {
+            // Pagina pubblica senza apiHelper: i testi dei corsi entrano con textContent.
+            const nodo = (tag, testo, stile) => {
+                const n = document.createElement(tag);
+                if (testo != null) n.textContent = testo;
+                if (stile) n.style.cssText = stile;
+                return n;
+            };
+            coursesUl.replaceChildren(...data.corsi_attivi.map(c => {
                 let textScadenza = 'Nessuna Scadenza';
                 if (c.expiry_date) {
                     const d = new Date(c.expiry_date);
                     textScadenza = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 }
-                
-                return `<li class="course-item"><i class="fas fa-check"></i> 
-                    <div>
-                        <strong>${c.name}</strong>
-                        ${c.course_code ? `<span style="font-size:0.75rem; color:#64748b; display:inline-block; margin-right: 10px;">Cod: ${c.course_code}</span>` : ''}
-                        <span style="font-size:0.75rem; color:var(--text-muted); display:inline-block;">Scadenza: ${textScadenza}</span>
-                    </div>
-                </li>`;
-            }).join('');
+
+                const li = nodo('li');
+                li.className = 'course-item';
+                const icona = nodo('i');
+                icona.className = 'fas fa-check';
+                const testi = nodo('div');
+                testi.append(nodo('strong', c.name));
+                if (c.course_code) {
+                    testi.append(nodo('span', `Cod: ${c.course_code}`, 'font-size:0.75rem; color:#64748b; display:inline-block; margin-right: 10px;'));
+                }
+                testi.append(nodo('span', `Scadenza: ${textScadenza}`, 'font-size:0.75rem; color:var(--text-muted); display:inline-block;'));
+                li.append(icona, ' ', testi);
+                return li;
+            }));
         } else {
             coursesUl.innerHTML = '<li class="course-item" style="color: var(--danger-text);"><i class="fas fa-times"></i> Nessuna specializzazione in validità.</li>';
         }

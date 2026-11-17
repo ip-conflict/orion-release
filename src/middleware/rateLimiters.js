@@ -48,6 +48,16 @@ export const passwordLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Ogni richiesta può far partire una mail: un tetto per rete contro chi prova tanti nomi.
+export const recuperoLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    keyGenerator: (req) => `recupero:${ipKeyGenerator(req.ip || '', 64)}`,
+    message: { message: 'Troppe richieste di recupero da questa rete: aspetta un quarto d\'ora e riprova.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 export const reportCreationLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, 
     max: 50, // Alzato a 50 (ora è per singolo operatore, molto generoso)

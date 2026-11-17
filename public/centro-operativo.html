@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="/css/admin-styles.css">
     <link rel="stylesheet" href="/css/dashboard-admin.css">
     <link rel="stylesheet" href="/css/centro-operativo.css">
+    <link rel="stylesheet" href="/css/voce.css">
 </head>
 <body style="margin: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; background: var(--bg-color);">
     
@@ -48,28 +49,7 @@
             <button type="button" id="funzioni-btn" class="button-style button-secondary" style="display: none" title="Le funzioni di supporto e i loro incarichi"><i class="fas fa-sitemap"></i><span class="etichetta-testata"> Funzioni</span></button>
             <button type="button" id="avvisi-computer-btn" class="button-style button-secondary" hidden title="Gli avvisi compaiono anche quando la finestra non è in primo piano"><i class="fas fa-bell"></i><span class="etichetta-testata"> Avvisi sul computer</span></button>
             <button type="button" id="rubrica-btn" class="button-style button-secondary" style="display: none" title="I numeri utili in sala"><i class="fas fa-address-book"></i><span class="etichetta-testata"> Rubrica</span></button>
-            <div class="top-menu-dropdown">
-                <button id="top-menu-btn" class="button-style button-secondary">
-                    Menu </button>
-                <div id="top-menu-content" class="dropdown-content" style="display: none; position: absolute; right: 0; top: 110%; background: var(--surface-color); min-width: 200px; box-shadow: 0 8px 16px rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; z-index: 2000;">
-                    <a href="/admin/dashboard-admin.html" id="admin-dashboard-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-cogs" style="width: 20px;"></i> Amministrazione</a>
-                    
-                    <a href="/admin/archive.html" id="archivio-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-archive" style="width: 20px;"></i> Archivio emergenze</a>
-                    <a href="/admin/admin.html" id="volontari-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-users" style="width: 20px;"></i> Volontari</a>
-
-                    <a href="/admin-segreteria.html" id="segreteria-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-folder-open" style="width: 20px;"></i> Segreteria</a>
-                    
-                    <a href="/magazzino.html" id="magazzino-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-boxes-stacked" style="width: 20px;"></i> Magazzino</a>
-                    
-                    <a href="/calendario.html" id="calendario-menu-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-calendar-days" style="width: 20px;"></i> Calendario</a>
-                    <a href="/documenti.html" id="documenti-gruppo-btn" style="display: block; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-book" style="width: 20px;"></i> Documenti del gruppo</a>
-                    <a href="/admin/squadre.html" id="manage-teams-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-truck-pickup" style="width: 20px;"></i> Gestione Squadre</a>
-                    <a href="#" id="esterni-temporanei-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-id-badge" style="width: 20px;"></i> Accesso esterno</a>
-                    <a href="/profile.html" id="profile-btn" style="display: none; padding: 12px 15px; color: var(--text-color); text-decoration: none; border-bottom: 1px solid var(--border-light-color);"><i class="fas fa-user-circle" style="width: 20px;"></i> Il mio profilo</a>
-                    
-                    <a href="#" id="logout-button" style="display: block; padding: 12px 15px; color: var(--danger-text); text-decoration: none; font-weight: 600;"><i class="fas fa-sign-out-alt" style="width: 20px;"></i> Esci</a>
-                </div>
-            </div>
+            <button id="top-menu-btn" type="button" class="button-style button-secondary" aria-controls="menu-scorrevole" aria-expanded="false"><i class="fas fa-bars"></i> Menu</button>
         </div>
     </header>
 
@@ -97,6 +77,8 @@
                 <div id="riepilogo-segnalazioni" class="riepilogo-segnalazioni" role="group" aria-label="Filtra le segnalazioni" hidden></div>
             </div>
 
+            <section id="mia-squadra" class="mia-squadra" aria-live="polite" hidden></section>
+            <section id="primi-passi" class="primi-passi" aria-labelledby="primi-passi-titolo" hidden></section>
             <div id="report-list-container" style="flex-grow: 1; overflow-y: auto; background: var(--secondary-bg-color);">
                 <div id="report-list-body" style="display: flex; flex-direction: column;">
                     <div style="text-align:center; padding: 20px; color: var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Caricamento...</div>
@@ -142,8 +124,9 @@
                 </div>
             </aside>
 
-            <div id="report-detail-side-panel" data-copre-mappa style="position: absolute; top: 0; left: -100%; width: 100%; max-width: 550px; height: 100%; background: var(--surface-color); box-shadow: 5px 0 20px rgba(0,0,0,0.15); border-right: 1px solid var(--border-color); z-index: 1050; transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
+            <div id="report-detail-side-panel" data-copre-mappa inert style="position: absolute; top: 0; left: -100%; width: 100%; max-width: 550px; height: 100%; background: var(--surface-color); box-shadow: 5px 0 20px rgba(0,0,0,0.15); border-right: 1px solid var(--border-color); z-index: 1050; transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
                 <div class="panel-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-color);">
+                    <button id="torna-elenco-btn" type="button" class="button-style button-secondary solo-in-colonna"><i class="fas fa-arrow-left"></i> Torna all'elenco</button>
                     <h3 style="margin: 0; font-size: 1.1rem; color: var(--info-text);">Segnalazione #<span id="bottom-detail-report-id"></span></h3>
                     <button id="close-side-panel-btn" class="button-style button-secondary" style="width: 32px" title="Chiudi il dettaglio" aria-label="Chiudi il dettaglio"><i class="fas fa-times"></i></button>
                 </div>
@@ -192,6 +175,10 @@
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="create-title">Titolo della Segnalazione <span class="obbligatorio">*</span></label>
                     <input type="text" id="create-title" placeholder="Es. Albero caduto in carreggiata..." required>
+                </div>
+                <div class="form-group scelta-tipo-gruppo">
+                    <span class="etichetta-tipo" id="create-tipo-etichetta">Tipo</span>
+                    <div id="create-tipo" class="scelta-tipo" role="radiogroup" aria-labelledby="create-tipo-etichetta"></div>
                 </div>
 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
@@ -243,6 +230,7 @@
                     <div id="map-selection-feedback" style="margin-top: 5px; font-style: italic; font-size: 0.8rem; color: var(--text-muted);"></div>
                 </div>
 
+                <div id="vicine-avviso" class="vicine-avviso" role="alert" hidden></div>
                 <div style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 15px;">
                     <button type="button" id="cancelCreateReportBtn" class="button-style button-secondary">Annulla</button>
                     <button type="submit" class="button-style primary">Crea segnalazione</button>
@@ -288,6 +276,10 @@
                             <option value="Medium">Media</option>
                             <option value="High">Alta</option>
                         </select>
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label for="edit-tipo">Tipo</label>
+                        <select id="edit-tipo"></select>
                     </div>
                     <div style="flex: 1; min-width: 120px;">
                         <label for="edit-status">Stato <span class="obbligatorio">*</span></label>
@@ -440,11 +432,21 @@
     <input type="file" id="report-image-upload-input" multiple accept="image/*" style="display: none;">
 
     <div id="contenitore-avvisi" data-avvisi aria-live="polite"></div>
+    <div id="velo-menu" class="velo-menu" hidden></div>
+    <nav id="menu-scorrevole" class="admin-sidebar menu-scorrevole" aria-label="Menu" hidden>
+        <button type="button" id="chiudi-menu-btn" class="chiudi-menu" aria-label="Chiudi il menu"><i class="fas fa-xmark"></i></button>
+        <ul class="sidebar-menu">
+            <li><a href="#" id="esterni-temporanei-btn" style="display: none"><i class="fas fa-id-badge" style="width: 20px;"></i> Accesso esterno</a></li>
+            <li><a href="/parete.html" id="parete-btn" target="_blank" rel="noopener"><i class="fas fa-tv" style="width: 20px;"></i> Schermo a parete</a></li>
+        </ul>
+    </nav>
     <script src="/leaflet/leaflet.js"></script>
     <script src="/vendor/geoman/leaflet-geoman.min.js"></script>
     <script src="/vendor/leaflet-markercluster/leaflet.markercluster.js"></script>
     <script src="/vendor/js-cookie/js.cookie.min.js"></script>
     <script src="/js/apiHelper.js"></script>
+    <script src="/js/qualifiche.js"></script>
+    <script src="/js/menu-laterale.js"></script>
     <script src="/js/rete-scarsa.js"></script>
     <script src="/vendor/qrcode/qrcode.min.js"></script>
     <script src="/js/esterni-temporanei.js"></script>
@@ -453,7 +455,10 @@
     <script src="/js/chiamata-co.js"></script>
     <script src="/js/regia-co.js"></script>
     <script src="/js/allerta-co.js"></script>
+    <script src="/js/drone-video.js"></script>
+    <script src="/js/drone-co.js"></script>
     <script src="/websocket.js"></script>
     <script type="module" src="/js/centro-operativo.js"></script>
+    <script type="module" src="/js/voce-co.js"></script>
 </body>
 </html>

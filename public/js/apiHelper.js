@@ -294,6 +294,19 @@ function haPermesso(...codici) {
     return codici.some(c => miei.includes(c));
 }
 
+// Gli stessi nomi di NOMI_RUOLI in src/permessi.js: un ruolo si scrive in un modo solo in tutte le pagine.
+const NOMI_DEI_RUOLI = {
+    admin: 'Amministratore', coordinatore: 'Coordinatore', segreteria: 'Segreteria',
+    magazziniere: 'Magazziniere', volontario: 'Volontario', esterno: 'Esterno'
+};
+function nomeRuolo(codice) {
+    return NOMI_DEI_RUOLI[codice] || String(codice || '');
+}
+function nomiRuoli(utente) {
+    const ruoli = Array.isArray(utente?.ruoli) && utente.ruoli.length ? utente.ruoli : [utente?.role].filter(Boolean);
+    return ruoli.map(nomeRuolo).join(', ');
+}
+
 function salvaRuoliEPermessi(dati) {
     try {
         if (dati?.role) localStorage.setItem('userRole', dati.role);
@@ -390,4 +403,41 @@ function notifica(testo, tipo = 'info', durata) {
     const vecchi = contenitore.querySelectorAll('.avviso-orion');
     for (let i = 0; i < vecchi.length - 3; i++) vecchi[i].remove();
     setTimeout(togli, durata ?? (tipo === 'errore' ? 8000 : 4500));
+}
+
+// Ruoli e permessi salvati all'accesso invecchiano (un ruolo cambiato mentre si è collegati, un
+// localStorage vuoto): si rileggono dal server a ogni pagina. Servono solo a mostrare i comandi giusti.
+async function rileggiPermessi() {
+    const prima = JSON.stringify([ruoliUtente(), permessiUtente()]);
+    try {
+        salvaRuoliEPermessi(await fetchApi('/api/me/status'));
+    } catch (e) { /* senza rete restano quelli salvati */ }
+    if (JSON.stringify([ruoliUtente(), permessiUtente()]) !== prima) document.dispatchEvent(new CustomEvent('orion:permessi'));
+}
+window.permessiPronti = rileggiPermessi();
+
+// Come DOMContentLoaded, ma dopo che ruoli e permessi sono stati riletti.
+function quandoPronto(funzione) {
+    document.addEventListener('DOMContentLoaded', async (evento) => {
+        await window.permessiPronti;
+        return funzione(evento);
+    });
+}
+
+// Una lista vuota dice a cosa serve la pagina e, a chi può, offre la prima cosa da fare.
+function paginaVuota(testo, azione = null) {
+    const box = document.createElement('div');
+    box.className = 'pagina-vuota';
+    const p = document.createElement('p');
+    p.textContent = testo;
+    box.append(p);
+    if (azione) {
+        const b = document.createElement(azione.href ? 'a' : 'button');
+        b.className = 'button-style';
+        b.textContent = azione.etichetta;
+        if (azione.href) b.href = azione.href;
+        else { b.type = 'button'; b.addEventListener('click', azione.suClick); }
+        box.append(b);
+    }
+    return box;
 }

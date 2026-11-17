@@ -1,6 +1,6 @@
 // Il disegno si calcola una volta, come elenco di forme, e si traduce in pdfMake per la
 // stampa e in SVG per il configuratore: quello che si vede è quello che si stampa.
-// Va caricato dopo pdfmake, vfs_fonts e codice-barre.js.
+// Va caricato dopo pdfmake, vfs_fonts, codice-barre.js e qrcode.min.js.
 
 (function () {
     const W = 243, H = 153;
@@ -33,16 +33,16 @@
         { id: 'fascia_ente', nome: "Fascia dell'ente", fascia: true, min: [20, 6], nascondibile: true, colori: ['fascia_ente'] },
         { id: 'fascia_qualifica', nome: 'Fascia della qualifica', fascia: true, min: [20, 6], nascondibile: true, colori: ['fascia_qualifica'] },
         { id: 'foto', nome: 'Foto', min: [34, 40], colori: [] },
-        { id: 'qr', nome: 'QR di verifica', min: [38, 38], quadrato: true, colori: [] },
-        { id: 'titolo', nome: 'Scritta centrale', min: [20, 6], nascondibile: true, colori: ['titolo'], testo: 'titolo' },
-        { id: 'loghi', nome: 'Loghi', min: [16, 12], nascondibile: true, colori: [] },
-        { id: 'codice', nome: 'Codice fiscale (codice a barre)', min: [(MODULI_CF + 2 * RISPETTO) * 3 * PUNTO, 16], colori: [] },
+        { id: 'qr', nome: 'QR di verifica', min: [38, 38], quadrato: true, colori: [], retro: true },
+        { id: 'titolo', nome: 'Scritta centrale', min: [20, 6], nascondibile: true, colori: ['titolo'], testo: 'titolo', retro: true },
+        { id: 'loghi', nome: 'Loghi', min: [16, 12], nascondibile: true, colori: [], retro: true },
+        { id: 'codice', nome: 'Codice fiscale (codice a barre)', min: [(MODULI_CF + 2 * RISPETTO) * 3 * PUNTO, 16], colori: [], retro: true },
         { id: 'nome', nome: 'Nome e cognome', min: [30, 7], colori: ['nome'] },
         { id: 'distretto', nome: 'Distretto', min: [20, 5], nascondibile: true, colori: ['distretto'] },
         { id: 'ente', nome: "Nome dell'ente", min: [20, 5], nascondibile: true, colori: ['ente'] },
         { id: 'qualifica', nome: 'Qualifica', min: [20, 6], nascondibile: true, colori: ['qualifica'], testo: 'qualifica' },
-        { id: 'bandiera_it', nome: 'Bandiera italiana', min: [9, 6], nascondibile: true, colori: [] },
-        { id: 'bandiera_ue', nome: 'Bandiera europea', min: [9, 6], nascondibile: true, colori: [] }
+        { id: 'bandiera_it', nome: 'Bandiera italiana', min: [9, 6], nascondibile: true, colori: [], retro: true },
+        { id: 'bandiera_ue', nome: 'Bandiera europea', min: [9, 6], nascondibile: true, colori: [], retro: true }
     ];
     const PER_ID = Object.fromEntries(ELEMENTI.map(e => [e.id, e]));
 
@@ -75,6 +75,30 @@
         };
     }
 
+    // Sul retro ci sono solo gli elementi spostati lì: il codice a barre largo
+    // in basso, sopra il QR con scritta e loghi accanto, le bandiere in fondo.
+    function automaticheRetro(r) {
+        const M = 8, B_W = 27, B_H = 18, CODICE_H = 32;
+        const bandiere = r.bandiera_it || r.bandiera_ue;
+        const fondo = bandiere ? H - M - B_H - 6 : H - M;
+        const sopra = r.qr || r.titolo || r.loghi;
+        const zona = { y: M, h: (r.codice ? fondo - CODICE_H - 8 : fondo) - M };
+        const accanto = r.titolo || r.loghi;
+        const QR = Math.min(58, zona.h);
+        const cx = r.qr ? M + QR + 8 : M, cw = W - M - cx;
+        const ts = Math.min(15, cw / 9.3);
+        const lato = Math.min(42, zona.h - (r.titolo ? ts * RIGA + 5 : 0));
+        const cy = zona.y + (zona.h - ((r.titolo ? ts * RIGA : 0) + (r.titolo && r.loghi ? 5 : 0) + (r.loghi ? lato : 0))) / 2;
+        return {
+            qr: { x: accanto ? M : (W - QR) / 2, y: zona.y + (zona.h - QR) / 2, w: QR, h: QR },
+            titolo: { x: cx, y: cy, w: cw, h: ts * RIGA },
+            loghi: { x: cx, y: r.titolo ? cy + ts * RIGA + 5 : cy, w: cw, h: lato },
+            codice: { x: M, y: sopra ? fondo - CODICE_H : M + (fondo - M - CODICE_H) / 2, w: W - 2 * M, h: CODICE_H },
+            bandiera_it: { x: 10, y: H - M - B_H, w: B_W, h: B_H },
+            bandiera_ue: { x: W - 10 - B_W, y: H - M - B_H, w: B_W, h: B_H }
+        };
+    }
+
     const COLORE = /^#[0-9a-f]{6}$/i;
     function normalizza(grezzo) {
         let m = grezzo;
@@ -102,7 +126,8 @@
             if (!Object.keys(posizioni).length) posizioni = null;
         }
         const nascosti = Array.isArray(m.nascosti) ? [...new Set(m.nascosti.filter(id => PER_ID[id]?.nascondibile))] : [];
-        return { colori, testi, posizioni, nascosti };
+        const retro = Array.isArray(m.retro) ? [...new Set(m.retro.filter(id => PER_ID[id]?.retro))] : [];
+        return { colori, testi, posizioni, nascosti, retro };
     }
 
     let misuratore = null;
@@ -199,22 +224,76 @@
         ];
     }
 
+    // pdfMake arrotonda il modulo del QR a punti interi: 33 moduli in 58 punti
+    // diventano 33 punti. La matrice la dà qrcodejs, che la tiene in _oQRCode.
+    let ultimoQr = null;
+    function moduliQr(valore) {
+        if (ultimoQr?.valore === valore) return ultimoQr.moduli;
+        if (typeof window.QRCode !== 'function') return null;
+        try {
+            const q = new window.QRCode(document.createElement('div'), { text: valore, width: 8, height: 8, correctLevel: window.QRCode.CorrectLevel.L })._oQRCode;
+            const n = q.getModuleCount();
+            const moduli = Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c)));
+            ultimoQr = { valore, moduli };
+            return moduli;
+        } catch { return null; }
+    }
+
+    function codiceQr(p, valore) {
+        const lato = Math.min(p.w, p.h);
+        const moduli = moduliQr(valore);
+        if (!moduli) {
+            const x = p.x + (p.w - lato) / 2, y = p.y + (p.h - lato) / 2;
+            return [{ tipo: 'rett', x: x - 2, y: y - 2, w: lato + 4, h: lato + 4, colore: '#ffffff' }, { tipo: 'qr', x, y, lato, valore }];
+        }
+        // Come le barre: ogni modulo un numero intero di punti della stampante.
+        const modulo = Math.max(1, Math.floor(lato / moduli.length / PUNTO)) * PUNTO, q = moduli.length * modulo;
+        const x = Math.round((p.x + (p.w - q) / 2) / PUNTO) * PUNTO, y = Math.round((p.y + (p.h - q) / 2) / PUNTO) * PUNTO;
+        const righe = [];
+        moduli.forEach((riga, i) => {
+            for (let j = 0; j < riga.length; j++) {
+                if (!riga[j]) continue;
+                let k = j;
+                while (k < riga.length && riga[k]) k++;
+                righe.push({ x: j * modulo, y: i * modulo, w: (k - j) * modulo, h: modulo });
+                j = k;
+            }
+        });
+        return [{ tipo: 'rett', x: x - 2, y: y - 2, w: q + 4, h: q + 4, colore: '#ffffff' }, { tipo: 'moduli', x, y, righe }];
+    }
+
     function varianti(dati) {
         return { qr: !!dati.qr, codice: !!dati.cf, ente: !!String(dati.ente || '').trim() };
     }
 
-    function posizioni(modello, v) {
+    const facciata = (m, id) => m.retro.includes(id) ? 'retro' : 'fronte';
+
+    // Il retro è facoltativo: c'è solo se qualcosa di visibile è stato messo lì.
+    function conRetro(modello) {
         const m = normalizza(modello);
-        if (!m.posizioni) return automatiche(v);
-        return { ...automatiche({ qr: true, codice: true, ente: true }), ...m.posizioni };
+        return m.retro.some(id => !m.nascosti.includes(id));
     }
 
-    function componi(modello, dati) {
+    // Ogni posizione è sulla facciata del suo elemento.
+    function posizioni(modello, v) {
+        const m = normalizza(modello);
+        const base = m.posizioni ? { qr: true, codice: true, ente: true } : v;
+        const dietro = (id) => m.retro.includes(id) && !m.nascosti.includes(id);
+        const fronte = automatiche({ ...base, qr: base.qr && !dietro('qr'), codice: base.codice && !dietro('codice') });
+        const retro = automaticheRetro({
+            qr: base.qr && dietro('qr'), codice: base.codice && dietro('codice'), titolo: dietro('titolo'),
+            loghi: dietro('loghi'), bandiera_it: dietro('bandiera_it'), bandiera_ue: dietro('bandiera_ue')
+        });
+        const auto = Object.fromEntries(ELEMENTI.map(e => [e.id, (facciata(m, e.id) === 'retro' ? retro : fronte)[e.id]]));
+        return m.posizioni ? { ...auto, ...m.posizioni } : auto;
+    }
+
+    function componi(modello, dati, faccia = 'fronte') {
         const m = normalizza(modello);
         const v = varianti(dati);
         const pos = posizioni(m, v);
         const c = m.colori;
-        const visibile = (id) => !m.nascosti.includes(id);
+        const visibile = (id) => !m.nascosti.includes(id) && facciata(m, id) === faccia;
         const forme = [{ tipo: 'rett', x: 0, y: 0, w: W, h: H, colore: c.sfondo, sfondo: true }];
         const aggiungi = (id, ...f) => f.flat().forEach(x => forme.push({ ...x, elemento: id }));
         const nome = String(dati.nome || '').trim().toUpperCase();
@@ -232,11 +311,7 @@
                     if (v.ente) aggiungi(e.id, { tipo: 'rett', ...p, colore: c.fascia_ente, sfondo: true }); break;
                 case 'foto':
                     aggiungi(e.id, dati.foto ? { tipo: 'immagine', ...p, src: dati.foto, riempi: true } : segnapostoFoto(p)); break;
-                case 'qr': if (v.qr) {
-                    const lato = Math.min(p.w, p.h), x = p.x + (p.w - lato) / 2, y = p.y + (p.h - lato) / 2;
-                    aggiungi(e.id, { tipo: 'rett', x: x - 2, y: y - 2, w: lato + 4, h: lato + 4, colore: '#ffffff' },
-                        { tipo: 'qr', x, y, lato, valore: dati.qr, immagine: dati.qrImmagine });
-                } break;
+                case 'qr': if (v.qr) aggiungi(e.id, codiceQr(p, dati.qr)); break;
                 case 'titolo':
                     aggiungi(e.id, testo(p, m.testi.titolo, { colore: c.titolo, grassetto: true })); break;
                 case 'loghi': if (loghi.length) {
@@ -258,11 +333,32 @@
                 case 'bandiera_ue': aggiungi(e.id, bandiera(p, true)); break;
             }
         }
-        return { forme, posizioni: pos, varianti: v, modello: m };
+        return { forme, posizioni: pos, varianti: v, modello: m, facciata: faccia };
     }
 
-    function inPdf(disegno) {
-        const sfondo = [], contenuto = [];
+    function facciate(modello, dati) {
+        return conRetro(modello) ? [componi(modello, dati, 'fronte'), componi(modello, dati, 'retro')] : [componi(modello, dati)];
+    }
+
+    // Una pagina per facciata, nell'ordine dato.
+    function inPdf(disegni) {
+        const sfondi = [], contenuto = [];
+        [].concat(disegni).forEach((disegno, i) => {
+            const sfondo = [];
+            sfondi.push(sfondo);
+            if (i) contenuto.push({ text: '', pageBreak: 'before' });
+            aggiungiPagina(disegno, sfondo, contenuto);
+        });
+        return {
+            pageSize: { width: W, height: H },
+            pageMargins: [0, 0, 0, 0],
+            // pdfMake impila i disegni separati, che finirebbero fuori dal tesserino.
+            background: (pagina) => ({ canvas: sfondi[pagina - 1] || [] }),
+            content: contenuto
+        };
+    }
+
+    function aggiungiPagina(disegno, sfondo, contenuto) {
         for (const f of disegno.forme) {
             if (f.tipo === 'rett' && f.sfondo) { sfondo.push({ type: 'rect', x: f.x, y: f.y, w: f.w, h: f.h, color: f.colore }); continue; }
             switch (f.tipo) {
@@ -283,16 +379,10 @@
                         : { image: f.src, fit: [f.w, f.h], absolutePosition: { x: f.x, y: f.y } });
                     break;
                 case 'qr': contenuto.push({ qr: f.valore, fit: f.lato, absolutePosition: { x: f.x, y: f.y } }); break;
+                case 'moduli': contenuto.push({ canvas: f.righe.map(r => ({ type: 'rect', ...r, color: '#000000' })), absolutePosition: { x: f.x, y: f.y } }); break;
                 case 'barre': contenuto.push({ canvas: f.barre.map(b => ({ type: 'rect', x: b.x * f.modulo, y: 0, w: b.w * f.modulo, h: f.h, color: '#000000' })), absolutePosition: { x: f.x, y: f.y } }); break;
             }
         }
-        return {
-            pageSize: { width: W, height: H },
-            pageMargins: [0, 0, 0, 0],
-            // pdfMake impila i disegni separati, che finirebbero fuori dal tesserino.
-            background: { canvas: sfondo },
-            content: contenuto
-        };
     }
 
     // Niente markup composto a mano: testi e immagini arrivano dai dati.
@@ -327,11 +417,13 @@
                     g.appendChild(nodo('image', { href: f.src, x: n(f.x), y: n(f.y), width: n(f.w), height: n(f.h),
                         preserveAspectRatio: f.riempi ? 'xMidYMid slice' : 'xMinYMin meet' }));
                     break;
-                case 'qr':
-                    g.appendChild(f.immagine
-                        ? nodo('image', { href: f.immagine, x: n(f.x), y: n(f.y), width: n(f.lato), height: n(f.lato), style: 'image-rendering:pixelated' })
-                        : nodo('rect', { x: n(f.x), y: n(f.y), width: n(f.lato), height: n(f.lato), fill: '#cbd5e1' }));
+                case 'qr': g.appendChild(nodo('rect', { x: n(f.x), y: n(f.y), width: n(f.lato), height: n(f.lato), fill: '#cbd5e1' })); break;
+                case 'moduli': {
+                    const q = nodo('g', { transform: `translate(${n(f.x)} ${n(f.y)})`, fill: '#000', 'shape-rendering': 'crispEdges' });
+                    f.righe.forEach(r => q.appendChild(nodo('rect', { x: n(r.x), y: n(r.y), width: n(r.w), height: n(r.h) })));
+                    g.appendChild(q);
                     break;
+                }
                 case 'barre': {
                     const b = nodo('g', { transform: `translate(${n(f.x)} ${n(f.y)})`, fill: '#000' });
                     f.barre.forEach(x => b.appendChild(nodo('rect', { x: n(x.x * f.modulo), y: '0', width: n(x.w * f.modulo), height: n(f.h) })));
@@ -345,7 +437,7 @@
 
     window.Tesserino = {
         LARGHEZZA: W, ALTEZZA: H, PUNTO, COLORI, NOMI_COLORI, TESTI, ELEMENTI, PER_ID,
-        automatiche, normalizza, varianti, posizioni, componi, inPdf, inSvg, nodo, caratteri,
+        automatiche, automaticheRetro, normalizza, varianti, posizioni, componi, facciate, conRetro, inPdf, inSvg, nodo, caratteri,
         // Almeno tre punti (0,254 mm) per modulo.
         LARGHEZZA_MINIMA_CODICE: (MODULI_CF + 2 * RISPETTO) * 3 * PUNTO
     };

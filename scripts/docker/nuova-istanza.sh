@@ -1,7 +1,8 @@
 #!/bin/bash
 # Crea un'istanza di ORION in container: cartelle, segreti, database, programma e, se c'è nginx,
 # il sito con il certificato. Vedi "ORION in container" nel manuale tecnico.
-#   sudo [ORION_CHIAVE_DA=chiave-dati.key] scripts/docker/nuova-istanza.sh <nome> <dominio> <versione> [--senza-nginx]
+#   sudo [ORION_CHIAVE_DA=chiave-dati.key] scripts/docker/nuova-istanza.sh <nome> <dominio> [versione] [--senza-nginx]
+# Senza versione si installa l'ultima pubblicata.
 
 set -euo pipefail
 
@@ -13,14 +14,37 @@ PRIMA_PORTA=3101
 
 errore() { echo "ERRORE: $*" >&2; exit 1; }
 
-NOME=${1:-}; DOMINIO=${2:-}; VERSIONE=${3:-}; NGINX=si
-[ "${4:-}" = --senza-nginx ] && NGINX=no
-[[ $NOME =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || errore "Uso: $0 <nome> <dominio> <versione> [--senza-nginx]; il nome è fatto di minuscole, cifre e trattini."
+NOME=${1:-}; DOMINIO=${2:-}; VERSIONE=; NGINX=si
+shift $(( $# < 2 ? $# : 2 ))
+for argomento in "$@"; do
+    case $argomento in
+        --senza-nginx) NGINX=no ;;
+        *) VERSIONE=$argomento ;;
+    esac
+done
+[[ $NOME =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || errore "Uso: $0 <nome> <dominio> [versione] [--senza-nginx]; il nome è fatto di minuscole, cifre e trattini."
 [[ $DOMINIO =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || errore "Dominio non valido: $DOMINIO"
-[[ $VERSIONE =~ ^[0-9]+(\.[0-9]+){1,3}([-+][0-9A-Za-z.]+)?$ ]] || errore "Versione non valida: $VERSIONE"
 [ "$(id -u)" -eq 0 ] || errore "Va lanciato con sudo."
 command -v docker > /dev/null && docker compose version > /dev/null 2>&1 || errore "Servono docker e il plugin compose (vedi prepara-host.sh)."
 command -v jq > /dev/null || errore "Serve jq (vedi prepara-host.sh)."
+command -v curl > /dev/null || errore "Serve curl (vedi prepara-host.sh)."
+
+# Le versioni pubblicate sono i tag del registro (ghcr.io dà un token di sola lettura senza
+# account); le versioni di prova, con il trattino, non si scelgono da sole.
+ultima_versione() {
+    local registro=${IMMAGINE%%/*} percorso=${IMMAGINE#*/} token
+    [[ $registro == *.* ]] || return 1
+    token=$(curl -fsS --max-time 20 "https://$registro/token?scope=repository:$percorso:pull&service=$registro" | jq -r '.token // empty') || return 1
+    curl -fsS --max-time 20 ${token:+-H "Authorization: Bearer $token"} "https://$registro/v2/$percorso/tags/list?n=1000" \
+        | jq -r '.tags[]?' | grep -E '^[0-9]+(\.[0-9]+){1,3}$' | sort -V | tail -1
+}
+
+if [ -z "$VERSIONE" ]; then
+    VERSIONE=$(ultima_versione || true)
+    [ -n "$VERSIONE" ] || errore "Non riesco a sapere qual è l'ultima versione di $IMMAGINE: indicala dopo il dominio (per esempio 1.4.0)."
+    echo "Ultima versione pubblicata: $VERSIONE."
+fi
+[[ $VERSIONE =~ ^[0-9]+(\.[0-9]+){1,3}([-+][0-9A-Za-z.]+)?$ ]] || errore "Versione non valida: $VERSIONE"
 
 DIR="$BASE/$NOME"
 [ -e "$DIR" ] && errore "L'istanza $NOME esiste già in $DIR."
@@ -44,9 +68,9 @@ segreto() { openssl rand -hex "$1"; }
 
 umask 077
 mkdir -p "$BASE"; chmod 711 "$BASE"
-mkdir -p "$DIR"/{dati,chiave,postgres,backup/auto,backup/notte,backup/file,agente/richieste,agente/stato}
+mkdir -p "$DIR"/{dati,chiave,postgres,backup/auto,backup/notte,backup/file,agente/richieste,agente/stato,drone/registrazioni}
 chmod 711 "$DIR"
-chown "$UID_ISTANZA:$UID_ISTANZA" "$DIR"/{dati,chiave,backup/auto,agente/richieste}
+chown "$UID_ISTANZA:$UID_ISTANZA" "$DIR"/{dati,chiave,backup/auto,agente/richieste,drone/registrazioni}
 chmod 700 "$DIR"/{dati,chiave}
 chmod 750 "$DIR"/{backup/auto,agente/richieste}
 # Notturni, copia dei file e stato dell'agente li scrive root: l'applicazione li legge soltanto.
@@ -60,6 +84,7 @@ if [ -n "${ORION_CHIAVE_DA:-}" ]; then
 fi
 
 cp "$QUI/compose.yaml" "$DIR/compose.yaml"
+install -m 644 "$QUI/mediamtx.yml" "$DIR/mediamtx.yml"
 install -m 755 "$QUI/postgres-init.sh" "$DIR/postgres-init.sh"
 chmod 644 "$DIR/compose.yaml"
 
@@ -95,6 +120,7 @@ done
 
 if [ -x "$AGENTE" ]; then
     "$AGENTE" giro
+    "$AGENTE" memoria 2> /dev/null | grep -E "^(Server|ATTENZIONE)" || true
 else
     echo "ATTENZIONE: l'agente ($AGENTE) non è installato: aggiornamenti e backup notturni non funzionano (vedi prepara-host.sh)."
 fi
@@ -108,6 +134,18 @@ server {
     client_max_body_size 100M;
     add_header X-Frame-Options "SAMEORIGIN";
     add_header X-Content-Type-Options "nosniff";
+
+    # La pagina Sistema accetta backup fino a 500 MB; in nginx una location non eredita i proxy_* di un'altra.
+    location = /api/sistema/backup/carica {
+        client_max_body_size 520M;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:$PORTA;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:$PORTA;

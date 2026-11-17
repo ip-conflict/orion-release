@@ -9,14 +9,14 @@ import path from 'path';
 import logger from './logger.js';
 import { pool } from './db.js';
 import { registraAudit } from './audit.js';
-import { COSTO_BCRYPT, scriviRuoli } from './autenticazione.js';
+import { COSTO_BCRYPT, emettiSessione, permessiDellaPersona, scriviRuoli } from './autenticazione.js';
+import { generateUsername } from './anagrafica.js';
 import { passwordLimiter } from './middleware/rateLimiters.js';
 import { RADICE_DATI } from './percorsi.js';
 
 export const FILE_CODICE = path.join(RADICE_DATI, 'PRIMO-ACCESSO.txt');
 
 export { REGOLA_PASSWORD } from './password.js';
-const USERNAME = /^[a-z0-9._-]{3,50}$/;
 
 let codiceAttivo = null;
 
@@ -85,8 +85,7 @@ export function registraRottePrimoAccesso(app) {
         const testo = (v, max) => (typeof v === 'string' ? v.trim() : '').slice(0, max);
         const nome = testo(c.nome, 100);
         const cognome = testo(c.cognome, 100);
-        const username = testo(c.username, 50).toLowerCase();
-        const email = testo(c.email, 150) || null;
+        const email = testo(c.email, 150)?.toLowerCase() || null;
         const password = typeof c.password === 'string' ? c.password : '';
 
         if (!codiceAttivo) return res.status(409).json({ message: "La configurazione iniziale è già stata fatta: accedi con l'amministratore." });
@@ -95,9 +94,8 @@ export function registraRottePrimoAccesso(app) {
             return res.status(403).json({ message: 'Il codice non è giusto. Lo trovi alla fine dell\'installazione, o sul server in PRIMO-ACCESSO.txt.' });
         }
         if (!nome || !cognome) return res.status(400).json({ message: 'Servono nome e cognome.' });
-        if (!USERNAME.test(username)) return res.status(400).json({ message: 'Lo username va da 3 a 50 caratteri: lettere minuscole, cifre, punto, trattino o trattino basso.' });
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ message: "L'indirizzo email non è valido." });
-        const problemaPassword = controllaPassword(password, { username, nome, cognome, email });
+        const problemaPassword = controllaPassword(password, { nome, cognome, email });
         if (problemaPassword) return res.status(400).json({ message: problemaPassword });
 
         const client = await pool.connect();
@@ -110,8 +108,9 @@ export function registraRottePrimoAccesso(app) {
                 codiceAttivo = null;
                 return res.status(409).json({ message: "La configurazione iniziale è già stata fatta: accedi con l'amministratore." });
             }
-            const doppione = await client.query('SELECT 1 FROM users WHERE username = $1 OR ($2::text IS NOT NULL AND lower(email) = lower($2))', [username, email]);
-            if (doppione.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Username o email già usati.' }); }
+            const doppione = await client.query('SELECT 1 FROM users WHERE $1::text IS NOT NULL AND lower(email) = lower($1)', [email]);
+            if (doppione.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Questa email è già usata.' }); }
+            const username = await generateUsername(nome, cognome, client);
             const hash = await bcrypt.hash(password, COSTO_BCRYPT);
             const nuovo = await client.query(
                 `INSERT INTO users (username, password, role, nome, cognome, email) VALUES ($1, $2, 'admin', $3, $4, $5) RETURNING id`,
@@ -122,7 +121,16 @@ export function registraRottePrimoAccesso(app) {
             fs.rmSync(FILE_CODICE, { force: true });
             registraAudit({ ip: req.ip, user: { id: nuovo.rows[0].id, username } }, 'configurazione_iniziale.amministratore_creato', { tipo: 'utente', id: nuovo.rows[0].id, dettagli: { username } });
             logger.info(`[Primo accesso] Amministratore '${username}' creato dalla pagina di accesso.`);
-            res.status(201).json({ message: `Fatto: ${nome} ${cognome} è l'amministratore. Ora accedi con ${username} e la password scelta.`, username });
+            // Il codice letto sul server e la password sono già due fattori: la verifica in due
+            // passaggi si attiva al prossimo accesso, non mentre si sta ancora installando.
+            const utente = { id: nuovo.rows[0].id, username, role: 'admin' };
+            const { token, principale, ruoliUtente } = emettiSessione(res, utente, ['admin'], { mfa: true });
+            res.status(201).json({
+                message: `Fatto: ${nome} ${cognome} è l'amministratore, con nome utente ${username}.`,
+                avviso: `Sei dentro come ${username} (puoi entrare anche con l'email). Al prossimo accesso ORION ti farà collegare il telefono per la verifica in due passaggi.`,
+                userId: utente.id, username, role: principale, ruoli: ruoliUtente,
+                permessi: await permessiDellaPersona(utente.id, ruoliUtente), token
+            });
         } catch (e) {
             await client.query('ROLLBACK').catch(() => {});
             logger.error('Errore POST /api/primo-accesso:', e);

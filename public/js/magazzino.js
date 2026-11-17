@@ -1,8 +1,89 @@
 // Chi usa questa pagina ha spesso il telefono in mano e fretta: ogni schermata fa una cosa
 // sola, con bersagli grandi e niente tabelle da far scorrere di lato.
 
-document.addEventListener('DOMContentLoaded', () => {
+quandoPronto(() => {
     const $ = (id) => document.getElementById(id);
+
+    // Con cento persone una tendina non si scorre: si scrive due lettere. La tendina resta, nascosta,
+    // e riceve la scelta con il suo evento change, così il resto della pagina non cambia.
+    const senzaAccenti = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    function tendinaCercabile(select, segnaposto) {
+        const campo = document.createElement('input');
+        campo.type = 'search';
+        campo.className = 'campo-grande cerca-persona';
+        campo.placeholder = segnaposto;
+        campo.setAttribute('aria-label', select.getAttribute('aria-label') || segnaposto);
+        campo.setAttribute('role', 'combobox');
+        campo.setAttribute('aria-autocomplete', 'list');
+        campo.setAttribute('aria-expanded', 'false');
+        campo.autocomplete = 'off';
+        const elenco = document.createElement('ul');
+        elenco.className = 'elenco-persone';
+        elenco.setAttribute('role', 'listbox');
+        elenco.id = `${select.id}-elenco`;
+        elenco.hidden = true;
+        campo.setAttribute('aria-controls', elenco.id);
+        select.style.display = 'none';
+        select.before(campo, elenco);
+        let trovate = [], attivo = -1;
+        const testoScelto = () => (select.value ? select.selectedOptions[0]?.textContent || '' : '');
+        const chiudi = () => { elenco.hidden = true; campo.setAttribute('aria-expanded', 'false'); attivo = -1; };
+        const scegli = (opzione) => {
+            select.value = opzione.value;
+            campo.value = opzione.textContent;
+            chiudi();
+            select.dispatchEvent(new Event('change'));
+        };
+        const mostra = () => {
+            const cerca = senzaAccenti(campo.value).trim();
+            trovate = [...select.options].filter(o => o.value && (!cerca || senzaAccenti(o.textContent).split(/\s+/).some(p => p.startsWith(cerca))
+                || senzaAccenti(o.textContent).includes(cerca))).slice(0, 30);
+            elenco.replaceChildren(...trovate.map((o, i) => {
+                const li = document.createElement('li');
+                li.setAttribute('role', 'option');
+                li.id = `${elenco.id}-${i}`;
+                li.textContent = o.textContent;
+                li.addEventListener('mousedown', (e) => { e.preventDefault(); scegli(o); });
+                return li;
+            }));
+            if (!trovate.length) {
+                const li = document.createElement('li');
+                li.className = 'nessuno';
+                li.textContent = 'Nessuno con questo nome';
+                elenco.append(li);
+            }
+            attivo = trovate.length === 1 ? 0 : -1;
+            elenco.querySelectorAll('[role=option]').forEach((li, i) => li.setAttribute('aria-selected', String(i === attivo)));
+            elenco.hidden = false;
+            campo.setAttribute('aria-expanded', 'true');
+        };
+        campo.addEventListener('input', () => {
+            if (select.value) { select.value = ''; select.dispatchEvent(new Event('change')); }
+            mostra();
+        });
+        campo.addEventListener('focus', () => { if (!select.value) mostra(); });
+        campo.addEventListener('blur', () => setTimeout(() => { chiudi(); campo.value = testoScelto(); }, 150));
+        campo.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (elenco.hidden) mostra();
+                if (!trovate.length) return;
+                attivo = (attivo + (e.key === 'ArrowDown' ? 1 : -1) + trovate.length) % trovate.length;
+                elenco.querySelectorAll('[role=option]').forEach((li, i) => li.setAttribute('aria-selected', String(i === attivo)));
+                campo.setAttribute('aria-activedescendant', `${elenco.id}-${attivo}`);
+            } else if (e.key === 'Enter' && !elenco.hidden && attivo >= 0) {
+                e.preventDefault();
+                scegli(trovate[attivo]);
+            } else if (e.key === 'Escape') {
+                chiudi();
+            }
+        });
+        // Chi riempie o sceglie la tendina dal codice (dopo un rientro, dal QR) deve vederlo nel campo.
+        select.addEventListener('change', () => { if (document.activeElement !== campo) campo.value = testoScelto(); });
+        new MutationObserver(() => { if (document.activeElement !== campo) campo.value = testoScelto(); }).observe(select, { childList: true });
+        select.mettiFuoco = () => campo.focus();
+        return campo;
+    }
 
     const unitaDi = (n, unita) => (Number(n) === 1 && unita === 'pezzi' ? 'pezzo' : unita || '');
     const ETICHETTE_FAMIGLIA = { dpi: 'DPI', attrezzatura: 'Attrezzatura', veicolo: 'Veicolo' };
@@ -253,6 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         disegnaConsegnabili();
     }
+    tendinaCercabile($('destinatario'), 'Scrivi il nome o il cognome…');
+    tendinaCercabile($('detentore-rientro'), 'Chi restituisce: scrivi il nome o la squadra…');
     $('destinatario').addEventListener('change', caricaTagliePersona);
     $('destinatario').addEventListener('change', () => aggiornaRiepilogoConsegna());
     const taglieUguali = (a, b) => String(a).trim().toUpperCase() === String(b).trim().toUpperCase();
@@ -888,7 +971,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(b => !cerca || `${b.denominazione} ${b.matricola || ''} ${b.categoria || ''}`.toLowerCase().includes(cerca));
 
         if (righe.length === 0) {
-            contenitore.innerHTML = '<p class="vuoto">Nessun bene con questi criteri.</p>';
+            const filtrato = tipo || cerca || categoria;
+            contenitore.replaceChildren(filtrato || stato.beni.length
+                ? Object.assign(document.createElement('p'), { className: 'vuoto', textContent: 'Nessun bene con questi criteri.' })
+                : paginaVuota('Il magazzino è vuoto: qui tieni DPI, attrezzature e mezzi, con consegne, rientri e scadenze.',
+                    sonoMagazziniere ? { etichetta: 'Aggiungi il primo bene', suClick: () => $('btn-nuovo-bene').click() } : null));
             return;
         }
 
@@ -1865,7 +1952,7 @@ document.addEventListener('DOMContentLoaded', () => {
         disegnaConsegnabili();
         aggiornaRiepilogoConsegna();
         avvisa(`${nomeConTaglia(bene)} è già nella consegna: scegli a chi va e registra.`, 'fatto');
-        $('destinatario').focus();
+        $('destinatario').mettiFuoco?.();
     }
     $('btn-consegna-bene').addEventListener('click', () => {
         const id = Number($('bene-id').value);
@@ -2127,6 +2214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const select = $('destinatario');
             if (consegnaERientra && select && [...select.options].some(o => Number(o.value) === persona)) {
                 select.value = String(persona);
+                select.dispatchEvent(new Event('change'));
                 apriScheda('consegna');
             }
         }

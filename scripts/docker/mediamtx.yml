@@ -1,0 +1,43 @@
+# MediaMTX per il drone di un'istanza ORION: riceve la diretta in RTMP, la dà alla sala in WebRTC
+# passando da ORION, registra per l'emergenza. Chi può trasmettere e guardare lo decide ORION
+# (authHTTPAddress, messo da compose.yaml con il segreto dell'istanza).
+logLevel: info
+
+authMethod: http
+authHTTPExclude:
+- action: api
+- action: metrics
+- action: pprof
+
+# L'API serve solo a ORION, nella rete dei container: la porta non si pubblica.
+api: yes
+apiAddress: :9997
+metrics: no
+pprof: no
+playback: no
+
+rtsp: no
+hls: no
+srt: no
+rtmp: yes
+rtmpAddress: :1935
+rtmpEncryption: "no"
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: ''
+webrtcIPsFromInterfaces: no
+webrtcAdditionalHosts: []
+
+pathDefaults:
+  # Le registrazioni le raccoglie ORION, che le cifra e le lega all'emergenza: qui non scadono da sole.
+  record: yes
+  recordPath: /registrazioni/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 15m
+  recordDeleteAfter: 0s
+
+paths:
+  "~^drone/[A-Za-z0-9_-]{24,64}$":

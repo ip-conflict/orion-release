@@ -1,8 +1,8 @@
 #!/bin/bash
-# Agente delle istanze ORION in container: esegue aggiornamenti e ritorni chiesti dalla pagina
-# Sistema e fa i backup notturni. Gira come root sull'host (timer di systemd ogni minuto).
-#   orion-agente giro | backup [istanza] | stato | approva <istanza> | rifiuta <istanza> | aggiorna <istanza> <versione>
-#   orion-agente disco prepara <dispositivo> | disco copia | disco stato
+# Agente delle istanze ORION in container: esegue aggiornamenti, ritorni e cambi di memoria chiesti
+# dalla pagina Sistema e fa i backup notturni. Gira come root sull'host (timer di systemd ogni minuto).
+#   orion-agente giro | backup [istanza] | pulisci | stato | approva <istanza> | rifiuta <istanza> | aggiorna <istanza> <versione>
+#   orion-agente memoria [<istanza> <MB>] | disco prepara <dispositivo> | disco copia | disco stato
 
 set -u -o pipefail
 
@@ -19,6 +19,14 @@ SECONDI_SALUTE="${ORION_SECONDI_SALUTE:-240}"
 DISCO_ETICHETTA=ORION-COPIE
 DISCO_PUNTO=/mnt/orion-copie
 DISCO_GIORNI="${ORION_DISCO_GIORNI:-90}"
+# La pagina Sistema la confronta con quella che si aspetta, per dire quando l'agente va reinstallato.
+AGENTE_VERSIONE=2
+MEMORIA_MINIMA_MB=768
+MEMORIA_APP_PREDEFINITA_MB=1024
+MEMORIA_DB_PREDEFINITA_MB=512
+# Quanto un'istanza si può dare da sola dalla pagina: basta per ogni modello di trascrizione, e
+# un'associazione non si prende la memoria libera che servirebbe alle altre. Oltre, ORION_MEMORIA_MASSIMA.
+MEMORIA_MASSIMA_PAGINA_MB=3072
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [${ISTANZA:-agente}] $*" >> "$LOG"; }
 adesso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -89,9 +97,53 @@ storico_cambia() {
          + [{versione: $v, rif: $r, dal: $ora, migrazioni: $m}]' "$(STORICO)" | scrivi_stato versioni.json
 }
 
+# Come la scrive docker compose (1g, 1536m, byte); se non si legge vale quella di serie del compose.
+in_mb() {
+    local valore=${1,,}
+    if [[ $valore =~ ^([0-9]{1,15})([kmg]?)b?$ ]]; then
+        case ${BASH_REMATCH[2]} in
+            g) echo $((10#${BASH_REMATCH[1]} * 1024)) ;;
+            m) echo $((10#${BASH_REMATCH[1]})) ;;
+            k) echo $((10#${BASH_REMATCH[1]} / 1024)) ;;
+            *) echo $((10#${BASH_REMATCH[1]} / 1048576)) ;;
+        esac
+    else
+        echo "$2"
+    fi
+}
+memoria_app_di() { in_mb "$(grep -E '^ORION_MEMORIA=' "$1/.env" 2> /dev/null | tail -1 | cut -d= -f2-)" "$MEMORIA_APP_PREDEFINITA_MB"; }
+memoria_db_di() { in_mb "$(grep -E '^ORION_MEMORIA_DB=' "$1/.env" 2> /dev/null | tail -1 | cut -d= -f2-)" "$MEMORIA_DB_PREDEFINITA_MB"; }
+memoria_host_mb() { awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo; }
+# Al sistema, a Docker, a nginx e all'agente resta almeno un giga, o il 15% sui server grandi.
+riserva_host_mb() { local h; h=$(memoria_host_mb); echo $(( h * 15 / 100 > 1024 ? h * 15 / 100 : 1024 )); }
+
+# I limiti scritti, non l'uso del momento: così la somma dei limiti di tutte le istanze non supera
+# mai la memoria del server, anche quando sono tutte al massimo insieme.
+limiti_istanze_mb() {
+    local somma=0 cartella escludi=${1:-}
+    for cartella in "$BASE"/*/; do
+        cartella=${cartella%/}
+        [ "$cartella" != "$escludi" ] && [ -f "$cartella/compose.yaml" ] && [ -f "$cartella/.env" ] || continue
+        somma=$((somma + $(memoria_app_di "$cartella") + $(memoria_db_di "$cartella")))
+    done
+    echo "$somma"
+}
+altre_istanze_mb() { limiti_istanze_mb "$DIR"; }
+libero_memoria_mb() {
+    local m=$(( $(memoria_host_mb) - $(riserva_host_mb) - $(altre_istanze_mb) - $(memoria_db_di "$DIR") ))
+    echo $(( m > 0 ? m / 64 * 64 : 0 ))
+}
+tetto_pagina_mb() { in_mb "$(leggi_env ORION_MEMORIA_MASSIMA)" "$MEMORIA_MASSIMA_PAGINA_MB"; }
+massimo_pagina_mb() { local l t; l=$(libero_memoria_mb); t=$(tetto_pagina_mb); echo $(( l < t ? l : t )); }
+
+# All'istanza solo i suoi numeri: la memoria della macchina e quella delle altre istanze direbbero
+# a un'associazione chi altro ospita il server, e quanto è grande.
 battito() {
-    jq -n --arg t "$(adesso)" --arg p "$(politica)" --arg v "$(leggi_env ORION_VERSIONE)" \
-        '{visto_il: $t, politica: $p, versione: $v}' | scrivi_stato agente.json
+    jq -n --arg t "$(adesso)" --arg p "$(politica)" --arg v "$(leggi_env ORION_VERSIONE)" --argjson agente "$AGENTE_VERSIONE" \
+        --argjson db "$(memoria_db_di "$DIR")" --argjson attuale "$(memoria_app_di "$DIR")" \
+        --argjson minimo "$MEMORIA_MINIMA_MB" --argjson massimo "$(massimo_pagina_mb)" \
+        '{visto_il: $t, politica: $p, versione: $v, agente: $agente, sa: ["aggiornamento", "ritorno", "memoria"],
+          memoria: {database_mb: $db, attuale_mb: $attuale, minimo_mb: $minimo, massimo_mb: $massimo}}' | scrivi_stato agente.json
 }
 
 attendi_salute() {
@@ -239,6 +291,48 @@ esegui_ritorno() {
     fallito "La versione $versione non è partita: è di nuovo in servizio la $versione_prima. Il database è già cambiato; i dati di prima sono nel backup $backup."
 }
 
+# Abbassare si può sempre (fino al minimo); alzare solo dentro quello che le altre istanze lasciano,
+# e dalla pagina non oltre il tetto. Il blocco è di tutto il server: due istanze che alzano insieme
+# farebbero il conto sulla stessa memoria.
+esegui_memoria() {
+    local nuova=$1 da=$2 prima prima_mb massimo
+    exec 8> "$BASE/.blocco-memoria"
+    flock 8
+    prima=$(leggi_env ORION_MEMORIA); prima_mb=$(memoria_app_di "$DIR")
+    if [ "$da" = pagina ]; then massimo=$(massimo_pagina_mb); else massimo=$(libero_memoria_mb); fi
+
+    passo "Controllo della memoria del server"
+    if ((nuova < MEMORIA_MINIMA_MB)); then
+        fallito "Con meno di $MEMORIA_MINIMA_MB MB ORION non lavora bene: non è cambiato niente."
+        return
+    fi
+    if ((nuova > prima_mb && nuova > massimo)); then
+        fallito "Su questo server ORION può avere al massimo $massimo MB: oltre lo decide chi gestisce il server (orion-agente memoria). Non è cambiato niente."
+        return
+    fi
+    if ((nuova == prima_mb)); then
+        fine_passo fatto
+        fatto "La memoria è già di $nuova MB: non è cambiato niente."
+        return
+    fi
+    fine_passo fatto
+
+    passo "Riavvio di ORION con $nuova MB"
+    scrivi_env ORION_MEMORIA "${nuova}m"
+    if dc up -d --no-deps app >> "$LOG" 2>&1 && attendi_salute; then
+        fine_passo fatto
+        battito
+        fatto "Memoria di ORION portata da $prima_mb a $nuova MB. Ricarica la pagina."
+        return
+    fi
+    fine_passo errore
+    passo "Ritorno a $prima_mb MB"
+    if [ -n "$prima" ]; then scrivi_env ORION_MEMORIA "$prima"; else sed -i '/^ORION_MEMORIA=/d' "$DIR/.env"; fi
+    if dc up -d --no-deps app >> "$LOG" 2>&1 && attendi_salute; then fine_passo fatto; else fine_passo errore; fi
+    battito
+    fallito "Con $nuova MB ORION non è partito: è tornato a $prima_mb MB."
+}
+
 # La richiesta si legge dentro il container: un collegamento simbolico messo dall'applicazione
 # punterebbe a un file del container, non dell'host.
 leggi_richiesta() { dc exec -T app cat /agente/richieste/richiesta 2> /dev/null; }
@@ -250,9 +344,10 @@ giro_istanza() {
     storico_prepara
     RICHIESTA=$(leggi_richiesta) || return 0
     [ -n "$RICHIESTA" ] || return 0
-    local id tipo versione decisa
-    id=$(campo id); tipo=$(campo tipo); versione=$(campo versione)
-    if ! [[ $id =~ ^[0-9a-f]{16}$ && $tipo =~ ^(aggiornamento|ritorno)$ && $versione =~ $VERSIONE_RE ]]; then
+    local id tipo versione memoria decisa
+    id=$(campo id); tipo=$(campo tipo); versione=$(campo versione); memoria=$(campo memoria)
+    if ! [[ $id =~ ^[0-9a-f]{16}$ ]] \
+        || ! { [[ $tipo =~ ^(aggiornamento|ritorno)$ && $versione =~ $VERSIONE_RE ]] || [[ $tipo == memoria && $memoria =~ ^[1-9][0-9]{2,6}$ ]]; }; then
         togli_richiesta
         log "Richiesta non valida, scartata."
         return 0
@@ -285,6 +380,11 @@ giro_istanza() {
             togli_richiesta ;;
     esac
 
+    if [ "$tipo" = memoria ]; then
+        log "Richiesta di portare la memoria a $memoria MB."
+        esegui_memoria "$memoria" pagina
+        return 0
+    fi
     log "Richiesta $tipo verso $versione."
     if [ "$tipo" = aggiornamento ]; then
         esegui_aggiornamento "$versione"
@@ -408,6 +508,23 @@ disco_stato() {
     smonta_disco
 }
 
+# Ogni versione lascia la sua immagine e la cache della costruzione: senza pulizia il disco si riempie.
+# Delle immagini di ORION restano le tre più recenti di ogni nome, per tornare indietro, e quelle in uso.
+pulisci_immagini() {
+    local in_uso repo id nome
+    docker image prune -f > /dev/null 2>&1 || true
+    docker builder prune -f --filter until=168h > /dev/null 2>&1 || true
+    in_uso=$(docker ps -aq | xargs -r docker inspect -f '{{.Image}}' 2> /dev/null)
+    for repo in $(docker images --format '{{.Repository}}' | grep -E '(^|/)orion$' | sort -u); do
+        docker images "$repo" --format '{{.Repository}}:{{.Tag}}' | grep -v ':<none>$' \
+            | xargs -r docker image inspect -f '{{.Created}} {{.Id}} {{index .RepoTags 0}}' | sort -r | tail -n +4 \
+            | while read -r _ id nome; do
+                grep -qF "$id" <<< "$in_uso" && continue
+                docker rmi "$nome" > /dev/null 2>&1 && log "Pulizia: tolta l'immagine $nome"
+            done
+    done
+}
+
 per_istanza() {
     local azione=$1 solo=${2:-}
     for DIR in "$BASE"/*/; do
@@ -440,6 +557,24 @@ decidi() {
     giro_istanza
 }
 
+memoria_istanza() {
+    printf '%-20s ORION %6s MB, database %5s MB, libera fino a %6s MB, dalla pagina fino a %6s MB\n' \
+        "$ISTANZA" "$(memoria_app_di "$DIR")" "$(memoria_db_di "$DIR")" "$(libero_memoria_mb)" "$(massimo_pagina_mb)"
+}
+memoria_riepilogo() {
+    local somma disponibile
+    somma=$(limiti_istanze_mb)
+    disponibile=$(( $(memoria_host_mb) - $(riserva_host_mb) ))
+    echo "Server: $(memoria_host_mb) MB, $(riserva_host_mb) restano al sistema; le istanze ne possono usare $disponibile, i loro limiti sommano $somma."
+    ((somma <= disponibile)) || echo "ATTENZIONE: se le istanze usano tutta la memoria concessa, il server la finisce. Abbassa la memoria di qualcuna: orion-agente memoria <istanza> <MB>"
+}
+memoria_a_mano() {
+    op_inizia "$(openssl rand -hex 8)" memoria
+    passo "Chiesto da chi gestisce il server" fatto
+    esegui_memoria "$MEMORIA_A_MANO" mano
+    jq -r .messaggio "$DIR/agente/stato/operazione.json"
+}
+
 aggiorna_a_mano() {
     op_inizia "$(openssl rand -hex 8)" aggiornamento
     passo "Chiesto da chi gestisce il server" fatto
@@ -452,7 +587,8 @@ case "${1:-giro}" in
     giro) per_istanza giro_istanza ;;
     backup)
         per_istanza backup_istanza "${2:-}"
-        [ -n "${2:-}" ] || copia_su_disco || true ;;
+        [ -n "${2:-}" ] || { copia_su_disco || true; pulisci_immagini; } ;;
+    pulisci) pulisci_immagini; docker system df ;;
     disco)
         case "${2:-stato}" in
             prepara) [ -n "${3:-}" ] || { echo "Uso: $0 disco prepara <dispositivo>" >&2; exit 2; }; disco_prepara "$3" ;;
@@ -464,9 +600,18 @@ case "${1:-giro}" in
         [ -n "${2:-}" ] || { echo "Uso: $0 $1 <istanza>" >&2; exit 2; }
         DECISIONE=$([ "$1" = approva ] && echo approvata || echo rifiutata)
         per_istanza decidi "$2" ;;
+    memoria)
+        if [ -z "${2:-}" ]; then
+            per_istanza memoria_istanza
+            memoria_riepilogo
+        else
+            [[ ${3:-} =~ ^[1-9][0-9]{2,6}$ ]] || { echo "Uso: $0 memoria <istanza> <MB>" >&2; exit 2; }
+            MEMORIA_A_MANO=$3
+            per_istanza memoria_a_mano "$2"
+        fi ;;
     aggiorna)
         [[ ${3:-} =~ $VERSIONE_RE ]] || { echo "Uso: $0 aggiorna <istanza> <versione>" >&2; exit 2; }
         VERSIONE_A_MANO=$3
         per_istanza aggiorna_a_mano "$2" ;;
-    *) echo "Uso: $0 giro | backup [istanza] | stato | approva <istanza> | rifiuta <istanza> | aggiorna <istanza> <versione> | disco prepara <dispositivo> | disco copia | disco stato" >&2; exit 2 ;;
+    *) echo "Uso: $0 giro | backup [istanza] | pulisci | stato | approva <istanza> | rifiuta <istanza> | aggiorna <istanza> <versione> | memoria [<istanza> <MB>] | disco prepara <dispositivo> | disco copia | disco stato" >&2; exit 2 ;;
 esac

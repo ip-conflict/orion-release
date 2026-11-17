@@ -2,6 +2,11 @@
 # il programma esce su internet (posta, aggiornamenti, allerta) e risponde solo sull'host.
 name: orion-${ORION_ISTANZA:?}
 
+# Senza limite i log dei container crescono finché c'è disco.
+x-log: &log
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 services:
   db:
     image: ${ORION_POSTGRES_IMMAGINE:-postgres:17-trixie}
@@ -19,6 +24,7 @@ services:
       timeout: 5s
       retries: 10
     mem_limit: ${ORION_MEMORIA_DB:-512m}
+    logging: *log
 
   app:
     image: ${ORION_IMMAGINE_RIF:?}
@@ -37,6 +43,11 @@ services:
       DB_PASSWORD: ${ORION_DB_PASSWORD:?}
       ORION_AGENTE_DIR: /agente
       ORION_ISTANZA: ${ORION_ISTANZA}
+      # Vuoto finché il drone non si attiva con attiva-drone.sh.
+      ORION_DRONE_SEGRETO: ${ORION_DRONE_SEGRETO:-}
+      ORION_DRONE_RTMP_PORTA: ${ORION_DRONE_PORTA_RTMP:-1935}
+      ORION_DRONE_WEBRTC_PORTA: ${ORION_DRONE_PORTA_WEBRTC:-8189}
+      ORION_DRONE_REGISTRAZIONI: /drone-registrazioni
     volumes:
       - ./dati:/dati
       - ./chiave:/chiave
@@ -45,14 +56,42 @@ services:
       - ./backup/file:/backup/file:ro
       - ./agente/richieste:/agente/richieste
       - ./agente/stato:/agente/stato:ro
+      - ./drone/registrazioni:/drone-registrazioni
     ports: ["127.0.0.1:${ORION_PORTA:?}:3000"]
     depends_on:
       db:
         condition: service_healthy
-    networks: [interna, esterna]
+    networks: [interna, esterna, drone]
     mem_limit: ${ORION_MEMORIA:-1g}
+    logging: *log
+
+  # Il drone: si accende con COMPOSE_PROFILES=drone (attiva-drone.sh). RTMP e WebRTC sono le uniche
+  # porte pubbliche; l'API e il WHEP restano nella rete dei container, solo per ORION.
+  drone:
+    image: ${ORION_MEDIAMTX_IMMAGINE:-bluenviron/mediamtx:1.15.3}
+    profiles: [drone]
+    restart: unless-stopped
+    user: "${ORION_UID:?}:${ORION_UID:?}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      MTX_AUTHHTTPADDRESS: http://app:3000/api/drone/autorizza?s=${ORION_DRONE_SEGRETO:-}
+      MTX_WEBRTCADDITIONALHOSTS: ${ORION_DRONE_HOST:-}
+      # Il browser riceve questa porta nei candidati: dentro e fuori deve essere la stessa.
+      MTX_WEBRTCLOCALUDPADDRESS: :${ORION_DRONE_PORTA_WEBRTC:-8189}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./drone/registrazioni:/registrazioni
+    ports:
+      - "${ORION_DRONE_PORTA_RTMP:-1935}:1935/tcp"
+      - "${ORION_DRONE_PORTA_WEBRTC:-8189}:${ORION_DRONE_PORTA_WEBRTC:-8189}/udp"
+    networks: [drone]
+    mem_limit: ${ORION_MEMORIA_DRONE:-256m}
+    logging: *log
 
 networks:
   interna:
     internal: true
   esterna: {}
+  drone: {}

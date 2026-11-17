@@ -60,11 +60,19 @@
                         <a id="print-resoconto-link" class="button-style button-small" href="#" target="_blank" rel="noopener"><i class="fas fa-print"></i> Stampa resoconto</a>
                         <a id="print-tutto-link" class="button-style button-small button-secondary" href="#" target="_blank" rel="noopener" title="Il resoconto e poi ogni segnalazione per intero, con diario e foto"><i class="fas fa-print"></i> Stampa tutto</a>
                         <a id="download-resoconto-link" class="button-style button-small button-secondary" href="#"><i class="fas fa-download"></i> Scarica .txt</a>
+                        <a id="esporta-csv-link" class="button-style button-small button-secondary" href="#" title="Le segnalazioni in un foglio di calcolo (Excel, LibreOffice)"><i class="fas fa-file-csv"></i> Foglio di calcolo</a>
+                        <a id="esporta-geojson-link" class="button-style button-small button-secondary" href="#" title="Segnalazioni, strade chiuse e zone in GeoJSON, per QGIS e i sistemi cartografici"><i class="fas fa-map"></i> Mappa (GeoJSON)</a>
                         <a id="copione-link" class="button-style button-small button-secondary" href="#" hidden><i class="fas fa-clapperboard"></i> Copione e valutazione</a>
                         <button type="button" id="delete-selected-emergency-btn" class="button-style button-small btn-pericolo">Elimina per sempre</button>
                     </div>
                 </div>
                 <p id="emergency-details-display" class="ar-dettagli"></p>
+            </section>
+
+            <section id="archived-drone-section" class="ar-drone" hidden style="margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color);">
+                <h2 style="margin-top: 0; font-size: 1.2rem;"><i class="fas fa-helicopter" aria-hidden="true"></i> Riprese del drone</h2>
+                <video id="archived-drone-video" controls preload="none" hidden style="width: 100%; max-height: 60vh; background: #000; border-radius: 8px; margin-bottom: 12px;"></video>
+                <ul id="archived-drone-list" style="list-style: none; padding: 0; margin: 0;"></ul>
             </section>
 
             <section id="archived-docs-section" style="display: none; margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px var(--shadow-color-light); border: 1px solid var(--border-color);">
@@ -73,6 +81,15 @@
                 </h2>
                 <div id="archived-docs-list-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px;">
                 </div>
+            </section>
+
+            <section id="archived-voce-section" hidden style="margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px var(--shadow-color-light); border: 1px solid var(--border-color);">
+                <h2 style="margin-top: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-headset"></i> Comunicazioni vocali
+                </h2>
+                <p id="archived-voce-riepilogo" style="margin: 0 0 10px; color: var(--text-muted); font-size: 0.9rem;"></p>
+                <input type="search" id="archived-voce-cerca" placeholder="Cerca nelle trascrizioni o per nome" aria-label="Cerca nei messaggi vocali" style="width: 100%; max-width: 360px; margin-bottom: 10px;">
+                <ul id="archived-voce-list" class="ar-voce-elenco"></ul>
             </section>
 
             <section id="archived-reports-section" class="admin-panel" style="display: none;">

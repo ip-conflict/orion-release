@@ -26,11 +26,18 @@ async function leggiConfigSmtp() {
     return settings;
 }
 
+// Senza requireTLS un server che non offre STARTTLS, o chi in mezzo toglie l'offerta, riceve in
+// chiaro la password della casella e i link di attivazione. Fa eccezione solo la stessa macchina.
+const STESSA_MACCHINA = new Set(['localhost', '127.0.0.1', '::1']);
+
 function creaTrasporto(settings) {
+    const secure = settings.smtp_secure === 'true';
     return nodemailer.createTransport({
         host: settings.smtp_host,
         port: parseInt(settings.smtp_port, 10) || 587,
-        secure: settings.smtp_secure === 'true',
+        secure,
+        requireTLS: !secure && !STESSA_MACCHINA.has(String(settings.smtp_host || '').trim().toLowerCase()),
+        tls: { minVersion: 'TLSv1.2' },
         auth: {
             user: settings.smtp_user,
             pass: settings.smtp_pass
@@ -51,6 +58,9 @@ function spiegaErrore(error, settings = {}) {
             return "Credenziali rifiutate. Con Gmail serve la password per le app di 16 lettere, non la password dell'account, e la verifica in due passaggi deve essere attiva.";
         }
         return "Credenziali SMTP rifiutate: controlla email mittente e password.";
+    }
+    if (error.code === 'ETLS' && /STARTTLS/i.test(testo)) {
+        return 'Il server di posta non offre una connessione cifrata: controlla host e porta (di solito 587 con SSL/TLS No, oppure 465 con SSL/TLS Sì).';
     }
     if (/wrong version number|ssl3_get_record|tls_validate_record_header/i.test(testo)) {
         return `Il server non usa SSL diretto sulla porta ${porta}: metti la sicurezza SSL/TLS su "No". Con la porta 587 la connessione passa comunque a TLS.`;

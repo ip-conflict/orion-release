@@ -31,9 +31,10 @@ dettaglio è nel capitolo 2 di `docs/manuale-tecnico.md`; qui i passi.
 
 2.  Per ogni associazione, crea la sua istanza:
 
-        sudo scripts/docker/nuova-istanza.sh <nome> <dominio> <versione>
+        sudo scripts/docker/nuova-istanza.sh <nome> <dominio>
 
-    Lo script avvia programma e database, chiede il certificato HTTPS a
+    Senza altro installa l'ultima versione pubblicata; una versione precisa si
+    aggiunge in fondo (per esempio `1.4.0`). Lo script avvia programma e database, chiede il certificato HTTPS a
     Let's Encrypt e alla fine stampa il **codice del primo accesso**.
 
 3.  Apri `https://<dominio>`: al posto del login c'è la configurazione iniziale,

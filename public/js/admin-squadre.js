@@ -220,7 +220,14 @@ async function loadSquadreAdmin() {
         ultimeSquadre = squadre || [];
 
         if (!squadre || squadre.length === 0) {
-            squadreTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Nessuna squadra trovata.</td></tr>';
+            const riga = document.createElement('tr');
+            const cella = document.createElement('td');
+            cella.colSpan = 5;
+            const nuova = document.getElementById('admin-new-team-btn');
+            cella.append(paginaVuota('Le squadre sono i gruppi che escono sul territorio: nome radio, membri e caposquadra.',
+                nuova && !nuova.hidden && nuova.style.display !== 'none' ? { etichetta: 'Crea la prima squadra', suClick: () => nuova.click() } : null));
+            riga.append(cella);
+            squadreTableBody.replaceChildren(riga);
             return;
         }
 
@@ -243,6 +250,7 @@ async function loadSquadreAdmin() {
                             ${escapeHTML(prefixChar)}
                         </div>
                         <strong style="font-size: 1rem; color: var(--text-color);">${escapeHTML(squadra.nome_radio || 'N/D')}</strong>
+                        ${window.Qualifiche?.bollino(squadra.qualifica, { conNome: true }) || ''}
                     </div>
                 </td>
                 <td style="color: var(--text-muted); font-weight: 500;">
@@ -305,7 +313,9 @@ async function openCreateModalAdmin() {
     caposquadraScelto.create = null;
     adminSelectedList.innerHTML = ''; 
     adminAvailableList.innerHTML = '<li style="padding: 15px; text-align: center;">Caricamento utenti...</li>'; 
-    populatePrefixDropdown(adminCreatePrefixSelect, usedPrefixes); 
+    populatePrefixDropdown(adminCreatePrefixSelect, usedPrefixes);
+    const sceltaQualifica = document.getElementById('admin-create-squadra-qualifica');
+    if (sceltaQualifica) Qualifiche.riempiScelta(sceltaQualifica, '', 'Nessuna: è del gruppo');
 
     adminCreateModal.style.display = 'flex';
     
@@ -399,7 +409,8 @@ async function handleCreateSquadraSubmit(event) {
 
     const dataToSend = {
         nome_radio: prefisso,
-        nome: nomeOpzionale || null, 
+        nome: nomeOpzionale || null,
+        qualifica: document.getElementById('admin-create-squadra-qualifica')?.value || null,
         membri: selectedMembri || null,
         caposquadra: selectedMembri.some(m => m.username === caposquadraScelto.create) ? caposquadraScelto.create : null
     };
@@ -438,6 +449,12 @@ async function openEditModalAdmin(squadraDallaLista) {
     adminEditTeamIdHidden.value = squadra.id;
     adminEditTeamPrefixDisplay.textContent = squadra.nome_radio;
     adminEditNameInput.value = squadra.nome || '';
+    const sceltaQualifica = document.getElementById('admin-edit-squadra-qualifica');
+    if (sceltaQualifica) {
+        Qualifiche.riempiScelta(sceltaQualifica, squadra.qualifica || '', 'Nessuna: è del gruppo');
+        // La squadra COC è sempre del gruppo.
+        sceltaQualifica.disabled = !!squadra.coc;
+    }
     
     window.currentSelectedMembersEdit = [...membriAttuali]; 
     caposquadraScelto.edit = membriAttuali.find(m => m.caposquadra)?.username || null;
@@ -513,6 +530,7 @@ async function handleEditSquadraSubmit(event) {
     const body = {
         nome_radio: prefisso,
         nome: nomeOpzionale || null,
+        qualifica: document.getElementById('admin-edit-squadra-qualifica')?.value || null,
         membri: membriAttuali || null,
         caposquadra: membriAttuali.some(m => m.username === caposquadraScelto.edit) ? caposquadraScelto.edit : null
     };
@@ -585,7 +603,7 @@ function closeTeamDetailsPanel() {
     console.log("Pannello dettagli squadra chiuso.");
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+quandoPronto(async () => {
     console.log("Pagina Admin Squadre caricata.");
     await loadAndApplyBranding();
     

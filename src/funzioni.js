@@ -86,7 +86,18 @@ export function registraRotteFunzioni(app, ctx) {
         return !!attiva && incarico.emergency_id === attiva.id;
     }
 
-    app.get('/api/funzioni', soloSeAcceso, async (req, res) => {
+    // Il centro operativo la chiede sempre: a modulo spento un 404 riempirebbe la console di errori.
+    async function elencoSeSpento(req, res, next) {
+        try {
+            if (await moduloAcceso()) return next();
+            res.json({ attivo: false, modulo_spento: true, funzioni: [] });
+        } catch (e) {
+            logger.error('Errore lettura funzioni_enabled:', e);
+            res.status(500).json({ message: 'Errore interno.' });
+        }
+    }
+
+    app.get('/api/funzioni', elencoSeSpento, async (req, res) => {
         try {
             const attiva = emergenzaAttiva();
             const { rows } = await pool.query(`

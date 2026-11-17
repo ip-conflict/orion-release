@@ -21,6 +21,10 @@ async function loadAndApplyBranding() {
             brandingSettings.card_regional_entity_name = settings.card_regional_entity_name || '';
             brandingSettings.badge_cf_barcode = settings.badge_cf_barcode !== 'false';
             brandingSettings.badge_modello = settings.badge_modello || '';
+            try {
+                const conf = typeof settings.segreteria_config === 'string' ? JSON.parse(settings.segreteria_config) : settings.segreteria_config;
+                brandingSettings.segreteriaAccesa = conf?.enabled === true;
+            } catch { brandingSettings.segreteriaAccesa = false; }
         }
 
         const logoInfo = await fetchApi('/api/branding');
@@ -36,26 +40,29 @@ async function loadAndApplyBranding() {
     }
 }
 
-if (ruoliUtente().length > 0 && !haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
-    // Al centro operativo, non all'accesso: la sessione è buona, manca il ruolo.
-    notifica('Questa pagina è riservata alla segreteria.', 'errore');
-    window.location.href = '/centro-operativo.html';
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
+quandoPronto(async () => {
+    if (ruoliUtente().length > 0 && !haPermesso('volontari.sanitario', 'volontari.anagrafica')) {
+        // Al centro operativo, non all'accesso: la sessione è buona, manca il ruolo.
+        notifica('Questa pagina è riservata alla segreteria.', 'errore');
+        window.location.href = '/centro-operativo.html';
+        return;
+    }
     if (!haPermesso('volontari.sanitario')) {
         ['btn-manage-catalog', 'btn-manage-medical-catalog'].forEach(id => {
             const voce = document.getElementById(id)?.closest('li');
             if (voce) voce.hidden = true;
         });
     }
+    if (!haPermesso('volontari.anagrafica')) document.getElementById('btn-stampa-tesserini').hidden = true;
     if (haRuolo('admin')) {
         const sidebarSettings = document.getElementById('sidebar-settings');
         if (sidebarSettings) sidebarSettings.style.display = 'block';
     }
 
     await loadAndApplyBranding();
-    loadDashboardAlerts();
+    // A modulo spento si apre dall'indirizzo diretto: restano anagrafica e tesserini, non le scadenze.
+    if (brandingSettings.segreteriaAccesa === false) document.getElementById('segreteria-spenta').hidden = false;
+    else loadDashboardAlerts();
     loadUsers();
     
     const searchInput = document.getElementById('search-volunteer');
@@ -135,7 +142,7 @@ function setupExpiryListeners() {
     attachListeners('edit_visit_type_id', () => autoCalculateExpiry('edit_last_visit_date', 'edit_visit_type_id', window.catalogsData.medicalVisits, 'edit_expiry_date'));
 }
 
-document.addEventListener('DOMContentLoaded', setupExpiryListeners);
+quandoPronto(setupExpiryListeners);
 
 async function loadDashboardAlerts() {
     if (!haPermesso('volontari.sanitario')) return;
@@ -1036,7 +1043,7 @@ async function showUserDetailView(user) {
     currentUserViewData = user;
 
     document.getElementById('detail-user-name').textContent = currentUserViewName;
-    document.getElementById('detail-user-role').textContent = user.role;
+    document.getElementById('detail-user-role').textContent = nomiRuoli(user);
     document.getElementById('detail-user-username').textContent = user.username;
     document.getElementById('detail-user-cf').textContent = user.codice_fiscale || 'Non inserito';
     document.getElementById('detail-user-phone').textContent = user.telefono || 'Non inserito';
@@ -1797,26 +1804,8 @@ async function generateIDCard() {
             const t = await fetchApi(`/api/admin/users/${currentUserViewData.id}/tesserino`);
             Object.assign(currentUserViewData, { public_token: t.public_token, photo_url: t.photo_url, qr_attivo: t.qr_attivo !== false });
         }
-        const [logo, logo2] = await Promise.all([
-            getBase64ImageFromUrl('/logo.png'),
-            brandingLogos.logo2Url ? getBase64ImageFromUrl(brandingLogos.logo2Url) : null,
-            Tesserino.caratteri()
-        ]);
-        // Senza token (QR spenti) il tesserino si stampa senza QR.
-        const cf = String(currentUserViewData.codice_fiscale || '').trim().toUpperCase();
-        const dati = {
-            nome: `${currentUserViewData.cognome || ''} ${currentUserViewData.nome || ''}`,
-            distretto: brandingSettings.card_district_label || '',
-            ente: brandingSettings.card_regional_entity_name || '',
-            qr: currentUserViewData.public_token ? `${window.location.origin}/badge.html?token=${currentUserViewData.public_token}` : null,
-            cf: brandingSettings.badge_cf_barcode !== false && /^[A-Z0-9]{16}$/.test(cf) ? cf : null,
-            loghi: [logo2, logo]
-        };
-        const riquadro = Tesserino.posizioni(brandingSettings.badge_modello, Tesserino.varianti(dati)).foto;
-        if (currentUserViewData.photo_url) dati.foto = await ritagliaFototessera(currentUserViewData.photo_url, riquadro.w, riquadro.h);
-
-        const docDefinition = Tesserino.inPdf(Tesserino.componi(brandingSettings.badge_modello, dati));
-        pdfMake.createPdf(docDefinition).download(`Tesserino_PC_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
+        const facce = await facciateTesserino(currentUserViewData, await loghiTesserino());
+        pdfMake.createPdf(Tesserino.inPdf(facce)).download(`Tesserino_PC_${currentUserViewData.cognome}_${currentUserViewData.nome}.pdf`);
 
     } catch (error) {
         console.error("Errore generazione Tesserino:", error);
@@ -1826,6 +1815,86 @@ async function generateIDCard() {
         btn.innerHTML = originalText;
     }
 }
+
+async function loghiTesserino() {
+    const [logo, logo2] = await Promise.all([
+        getBase64ImageFromUrl('/logo.png'),
+        brandingLogos.logo2Url ? getBase64ImageFromUrl(brandingLogos.logo2Url) : null,
+        Tesserino.caratteri()
+    ]);
+    return [logo2, logo];
+}
+
+// Senza token (QR spenti) il tesserino si stampa senza QR.
+async function facciateTesserino(utente, loghi) {
+    const cf = String(utente.codice_fiscale || '').trim().toUpperCase();
+    const dati = {
+        nome: `${utente.cognome || ''} ${utente.nome || ''}`,
+        distretto: brandingSettings.card_district_label || '',
+        ente: brandingSettings.card_regional_entity_name || '',
+        qr: utente.public_token ? `${window.location.origin}/badge.html?token=${utente.public_token}` : null,
+        cf: brandingSettings.badge_cf_barcode !== false && /^[A-Z0-9]{16}$/.test(cf) ? cf : null,
+        loghi
+    };
+    const riquadro = Tesserino.posizioni(brandingSettings.badge_modello, Tesserino.varianti(dati)).foto;
+    if (utente.photo_url) dati.foto = await ritagliaFototessera(utente.photo_url, riquadro.w, riquadro.h);
+    return Tesserino.facciate(brandingSettings.badge_modello, dati);
+}
+
+// In ordine di cognome, così si consegnano senza riordinarli.
+const tesseriniScelti = () => [...sceltiMultipla.keys()].map(id => ({ id, ...utentiSegreteria.get(id) }))
+    .sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+
+function apriStampaTesserini() {
+    const nomi = tesseriniScelti().map(p => `${p.cognome || ''} ${p.nome || ''}`.trim());
+    document.getElementById('chi-tesserini').textContent = `${nomi.length === 1 ? 'Un tesserino' : `${nomi.length} tesserini`}, in ordine di cognome: ${nomi.join(', ')}.`;
+    document.getElementById('riga-ordine-tesserini').hidden = !Tesserino.conRetro(brandingSettings.badge_modello);
+    document.getElementById('esito-tesserini').textContent = '';
+    document.getElementById('crea-tesserini').disabled = false;
+    document.getElementById('stampa-tesserini').showModal();
+}
+document.getElementById('btn-stampa-tesserini').addEventListener('click', apriStampaTesserini);
+document.getElementById('chiudi-tesserini').addEventListener('click', () => document.getElementById('stampa-tesserini').close());
+
+document.getElementById('form-tesserini').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = document.getElementById('crea-tesserini');
+    const esito = document.getElementById('esito-tesserini');
+    const persone = tesseriniScelti();
+    btn.disabled = true;
+    try {
+        const loghi = await loghiTesserino();
+        const carte = [], senzaFoto = [], falliti = [];
+        for (const persona of persone) {
+            const nome = `${persona.cognome || ''} ${persona.nome || ''}`.trim();
+            esito.textContent = `Tesserino ${carte.length + falliti.length + 1} di ${persone.length}…`;
+            try {
+                const t = await fetchApi(`/api/admin/users/${persona.id}/tesserino`);
+                const utente = { ...persona, photo_url: t.photo_url, public_token: t.public_token };
+                if (!utente.photo_url) senzaFoto.push(nome);
+                carte.push(await facciateTesserino(utente, loghi));
+            } catch {
+                falliti.push(nome);
+            }
+        }
+        if (!carte.length) throw new Error('nessun tesserino si è potuto preparare.');
+        const separate = document.getElementById('ordine-tesserini').value === 'separate' && carte[0].length > 1;
+        const pagine = separate ? [...carte.map(c => c[0]), ...carte.map(c => c[1])] : carte.flat();
+        const data = new Date().toISOString().slice(0, 10);
+        pdfMake.createPdf(Tesserino.inPdf(pagine)).download(carte.length === 1 ? `Tesserino_${data}.pdf` : `Tesserini_${carte.length}_volontari_${data}.pdf`);
+        const n = carte.length;
+        esito.textContent = [
+            `PDF pronto: ${n === 1 ? 'un tesserino' : `${n} tesserini`}, ${pagine.length} ${pagine.length === 1 ? 'pagina' : 'pagine'}.`,
+            separate ? `Fronti alle pagine 1-${n}, retri alle pagine ${n + 1}-${2 * n}.` : '',
+            senzaFoto.length ? `Senza foto, con la sagoma al suo posto: ${senzaFoto.join(', ')}.` : '',
+            falliti.length ? `Non preparati: ${falliti.join(', ')}.` : ''
+        ].filter(Boolean).join(' ');
+    } catch (e) {
+        esito.textContent = `Tesserini non creati: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+});
 
 async function stampaFascicoliScelti() {
     const ids = [...sceltiMultipla.keys()];
@@ -1876,11 +1945,13 @@ function aggiornaAzioniMultiple() {
     tutti.indeterminate = !tutti.checked && visibili.some(c => c.checked);
 }
 
+// Ogni riga ricalcola la spunta di "tutti": la scelta va letta prima.
 document.getElementById('scegli-tutti').addEventListener('change', (ev) => {
+    const tutti = ev.target.checked;
     document.querySelectorAll('#segreteria-users-table tr').forEach(r => {
         if (r.style.display === 'none') return;
         const c = r.querySelector('.scelta-volontario');
-        if (c && c.checked !== ev.target.checked) { c.checked = ev.target.checked; c.dispatchEvent(new Event('change')); }
+        if (c && c.checked !== tutti) { c.checked = tutti; c.dispatchEvent(new Event('change')); }
     });
 });
 document.getElementById('btn-annulla-scelta').addEventListener('click', () => {

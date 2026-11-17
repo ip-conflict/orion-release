@@ -1,0 +1,34 @@
+/* Il monitor a parete della sala: niente comandi, caratteri grandi, si legge da lontano. */
+html, body { margin: 0; height: 100%; background: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+body { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; overflow: hidden; }
+.parete-testa { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 28px; background: var(--surface-color); border-bottom: 2px solid var(--border-color); }
+.parete-titolo { display: flex; align-items: center; gap: 16px; font-size: 2rem; font-weight: 700; min-width: 0; }
+.parete-titolo img { height: 52px; width: auto; }
+.parete-titolo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.parete-conti { display: flex; gap: 34px; }
+.parete-conti[hidden] { display: none; }
+.parete-conti div { display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.parete-conti strong { font-size: 2.8rem; }
+.parete-conti span { font-size: 1.1rem; color: var(--text-muted); }
+.parete-conti .da-assegnare strong { color: var(--danger-text); }
+.parete-ora { font-size: 2rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.parete-mappa { position: relative; min-height: 0; }
+#mappa-parete { position: absolute; inset: 0; }
+.parete-vuota { white-space: pre-line; position: absolute; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 2.4rem; font-weight: 600; background: color-mix(in srgb, var(--bg-color) 82%, transparent); }
+.parete-vuota[hidden] { display: none; }
+.parete-squadre { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 20px; background: var(--surface-color); border-top: 2px solid var(--border-color); min-height: 56px; }
+.parete-squadra { padding: 8px 16px; border-radius: 999px; font-size: 1.3rem; font-weight: 600; background: var(--secondary-bg-color); border: 2px solid var(--border-color); }
+.parete-squadra.impegnata { border-color: var(--warning-color); }
+.parete-squadra.coc { border-color: var(--primary-color); }
+.parete-squadra small { font-weight: 500; color: var(--text-muted); margin-left: 6px; }
+.parete-segnaposto { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 1rem; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); background: var(--danger-color); }
+.parete-segnaposto.con-squadra { background: var(--warning-color); }
+.parete-segnaposto.alta { width: 46px; height: 46px; font-size: 1.15rem; }
+.parete-mezzo { padding: 4px 10px; border-radius: 8px; background: var(--primary-color); color: #fff; font-weight: 700; font-size: 1rem; white-space: nowrap; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+.parete-squadra.esterna { border-style: dashed; }
+.parete-mezzo { border-radius: 999px; }
+.parete-mezzo.esterna { border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--anello-ente, #0B233F), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.parete-drone { position: absolute; right: 16px; bottom: 16px; width: min(38vw, 640px); z-index: 900; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }
+.parete-drone[hidden] { display: none; }
+.parete-drone video { display: block; width: 100%; aspect-ratio: 16 / 9; }
+.parete-drone span { position: absolute; left: 10px; top: 8px; color: #fff; background: #dc2626; font-weight: 700; padding: 2px 10px; border-radius: 999px; }

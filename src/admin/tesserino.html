@@ -20,6 +20,10 @@
         .tz-strumenti { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 12px; font-size: 0.9rem; }
         .tz-strumenti label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
         .tz-strumenti strong { margin-right: 4px; }
+        .tz-facce { display: inline-flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+        .tz-facce button { border: 0; background: transparent; color: var(--text-color); padding: 6px 14px; font: inherit; cursor: pointer; }
+        .tz-facce button + button { border-left: 1px solid var(--border-color); }
+        .tz-facce button[aria-pressed="true"] { background: #2563eb; color: #ffffff; font-weight: 600; }
         .tz-tela { background: repeating-conic-gradient(var(--secondary-bg-color, #e5e7eb) 0% 25%, transparent 0% 50%) 50% / 18px 18px;
             border-radius: 10px; padding: 18px; }
         #tz-svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; max-width: 980px; margin: 0 auto; }
@@ -64,12 +68,16 @@
                 <h1 style="margin: 0; font-size: 2rem;">Aspetto del tesserino</h1>
                 <p style="margin: 5px 0 0 0; color: var(--text-muted);"><a href="/admin/dashboard-admin.html">Impostazioni</a> › Tesserino di riconoscimento</p>
             </header>
-            <p class="tz-nota">Trascina gli elementi per spostarli e i quadratini agli angoli per cambiarne la misura; le misure precise si scrivono a destra, in millimetri. Il QR e il codice a barre non scendono sotto la misura che serve per leggerli, e stanno sempre su bianco. Finché non sposti niente gli elementi si dispongono da soli e si adattano a ogni volontario: senza QR o senza codice fiscale lo spazio si ridistribuisce. Spostandone uno restano dove li metti. I colori si cambiano senza perdere la disposizione automatica.</p>
+            <p class="tz-nota">Trascina gli elementi per spostarli e i quadratini agli angoli per cambiarne la misura; le misure precise si scrivono a destra, in millimetri. Il QR e il codice a barre non scendono sotto la misura che serve per leggerli, e stanno sempre su bianco. Finché non sposti niente gli elementi si dispongono da soli e si adattano a ogni volontario: senza QR o senza codice fiscale lo spazio si ridistribuisce. Spostandone uno restano dove li metti. I colori si cambiano senza perdere la disposizione automatica. Il retro è facoltativo: QR, codice fiscale, scritta centrale, loghi e bandiere si possono spostare lì, e solo allora il tesserino si stampa su due facciate.</p>
 
             <div class="tz-griglia">
                 <section>
                     <div class="tz-riquadro">
                         <div class="tz-strumenti">
+                            <div class="tz-facce" role="group" aria-label="Facciata da vedere">
+                                <button type="button" id="tz-vedi-fronte" aria-pressed="true">Fronte</button>
+                                <button type="button" id="tz-vedi-retro" aria-pressed="false">Retro</button>
+                            </div>
                             <strong>Anteprima</strong>
                             <label><input type="checkbox" id="tz-con-qr"> con QR</label>
                             <label><input type="checkbox" id="tz-con-cf"> con codice fiscale</label>
@@ -77,6 +85,7 @@
                             <label style="margin-left: auto;"><input type="checkbox" id="tz-griglia" checked> griglia di 1 mm</label>
                         </div>
                         <div class="tz-tela"><svg id="tz-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anteprima del tesserino"></svg></div>
+                        <p class="tz-vuoto" id="tz-facciate" style="margin-top: 12px;"></p>
                         <div class="tz-stato">
                             <span id="tz-disposizione"></span>
                             <button type="button" class="button-style button-secondary" id="tz-automatiche" hidden>Torna alla disposizione automatica</button>
@@ -120,7 +129,6 @@
                     </div>
                 </aside>
             </div>
-            <div id="tz-qr-tela" hidden></div>
         </main>
     </div>
 

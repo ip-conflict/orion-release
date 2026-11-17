@@ -1,4 +1,4 @@
-import { ACTIVE_REPORT_STATUSES_BACKEND, MOTIVI_SENZA_SQUADRA } from './costanti.js';
+import { ACTIVE_REPORT_STATUSES_BACKEND, MOTIVI_SENZA_SQUADRA, TIPI_SEGNALAZIONE } from './costanti.js';
 import { sigilloAttuale, testoSigillo } from './integrita.js';
 import { haPermesso } from './permessi.js';
 
@@ -99,7 +99,7 @@ export function registraRotteSituazione(app, { pool, logger, nonEsterni, haRuolo
 
             const [segnalazioni, squadre, diario, associazione, funzioni, elementiMappa] = await Promise.all([
                 pool.query(`
-                    SELECT r.id, r.emergency_report_number AS numero, r.title, r.status, r.priority,
+                    SELECT r.id, r.emergency_report_number AS numero, r.title, r.status, r.priority, r.tipo,
                            r.location_address, r.created_at, r.updated_at, r.no_team_reason,
                            NULLIF(TRIM(r.environmental_hazard), '') AS pericolo,
                            COALESCE((SELECT string_agg(COALESCE(s.nome_radio, a.nome_radio), ', ' ORDER BY COALESCE(s.nome_radio, a.nome_radio))
@@ -143,6 +143,10 @@ export function registraRotteSituazione(app, { pool, logger, nonEsterni, haRuolo
                 || new Date(a.created_at) - new Date(b.created_at));
             chiuse.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
+            const conteggio = new Map();
+            for (const r of segnalazioni.rows) conteggio.set(r.tipo || 'altro', (conteggio.get(r.tipo || 'altro') || 0) + 1);
+            const perTipo = Object.entries(TIPI_SEGNALAZIONE).filter(([codice]) => conteggio.has(codice))
+                .map(([codice, nome]) => ({ tipo: codice, nome, quante: conteggio.get(codice) }));
             const voci = diario.rows;
             const diarioTroncato = !chiusa && voci.length > VOCI_DIARIO_IN_CORSO;
 
@@ -157,7 +161,7 @@ export function registraRotteSituazione(app, { pool, logger, nonEsterni, haRuolo
                 emergenza, chiusa, associazione, quadro,
                 generato_il: new Date().toISOString(),
                 generato_da: [req.user.nome, req.user.cognome].filter(Boolean).join(' ') || req.user.username,
-                aperte, chiuse,
+                aperte, chiuse, per_tipo: perTipo,
                 squadre: squadre,
                 diario: diarioTroncato ? voci.slice(-VOCI_DIARIO_IN_CORSO) : voci,
                 diario_troncato: diarioTroncato,

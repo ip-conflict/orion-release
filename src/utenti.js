@@ -10,9 +10,11 @@ import { richiedePermesso } from './permessi.js';
 import { sistemaBeniInCarico } from './beniInUscita.js';
 import { uploadExcelMulter, uploadPhoto, verifyExcelUpload, verifySingleUploadedImage } from './caricamenti.js';
 import { domainName } from './config.js';
+import { ACTIVE_REPORT_STATUSES_BACKEND, leggiQualifica } from './costanti.js';
 import { pool } from './db.js';
 import { sendEmailUtility } from './email.js';
-import { adminLimiter, passwordLimiter } from './middleware/rateLimiters.js';
+import { adminLimiter, chiaveIndirizzo, passwordLimiter } from './middleware/rateLimiters.js';
+import { accessoRiuscito, erroreAccesso, iniziaAccesso, messaggioAttesa } from './tentativiAccesso.js';
 import { qrVolontariAttivi } from './pubbliche.js';
 import { proteggiCaricati } from './cifratura.js';
 import { cancellaFile, fileDaIndirizzi, fileDellaPersona, pseudonimizza } from './eliminazionePersona.js';
@@ -34,18 +36,22 @@ export function registraRotteUtenti(app) {
         const username = req.user.username; 
         try {
             const query = `
-            SELECT s.id, s.nome, s.nome_radio
+            SELECT s.id, s.nome, s.nome_radio, s.coc,
+                   (SELECT json_build_object('nome', c.nome, 'cognome', c.cognome, 'username', c.username)
+                      FROM squadra_membri c WHERE c.squadra_id = s.id AND c.caposquadra LIMIT 1) AS caposquadra,
+                   (SELECT json_build_object('report_id', r.id, 'numero', r.emergency_report_number, 'titolo', r.title,
+                                             'indirizzo', r.location_address)
+                      FROM report_team_assignments rta JOIN reports r ON r.id = rta.report_id
+                     WHERE rta.squadra_id = s.id AND r.status = ANY($2::varchar[])
+                     ORDER BY rta.assignment_id DESC LIMIT 1) AS intervento
             FROM squadre s
             JOIN squadra_membri sm ON s.id = sm.squadra_id
             WHERE sm.username = $1
             LIMIT 1;
         `;
-            const result = await pool.query(query, [username]);
-            if (result.rowCount > 0) {
-                res.status(200).json({ team: result.rows[0] }); 
-            } else {
-                res.status(404).json({ message: 'Utente non assegnato a nessuna squadra.' });
-            }
+            const result = await pool.query(query, [username, ACTIVE_REPORT_STATUSES_BACKEND]);
+            // Senza squadra non è un errore: il centro operativo lo chiede a ogni apertura.
+            res.status(200).json({ team: result.rows[0] || null });
         } catch (error) {
             logger.error(`Errore GET /api/users/me/team per user ${userId}:`, error);
             res.status(500).json({ message: 'Errore recupero assegnazione squadra.' });
@@ -132,6 +138,14 @@ export function registraRotteUtenti(app) {
 
         logger.info(`Utente ${req.user.username} (ID: ${userId}) richiede cambio password.`);
 
+        // Chi ha in mano per un momento la sessione di un altro non deve poter provare password a raffica:
+        // gli errori si contano come quelli dell'accesso, sullo stesso account e sulla stessa rete.
+        const rete = chiaveIndirizzo(req.ip);
+        const tentativo = iniziaAccesso(req.user.username, rete);
+        if (tentativo.attesa) {
+            res.set('Retry-After', String(tentativo.attesa));
+            return res.status(429).json({ message: messaggioAttesa(tentativo.attesa), attesa: tentativo.attesa });
+        }
         try {
 
             const result = await pool.query('SELECT password FROM users WHERE id = $1', [userId]);
@@ -140,12 +154,18 @@ export function registraRotteUtenti(app) {
                  return res.status(404).json({ message: "Utente non trovato." });
             }
             const storedHash = result.rows[0].password;
-            const isMatch = await bcrypt.compare(currentPassword, storedHash);
+            const isMatch = !!storedHash && await bcrypt.compare(currentPassword, storedHash);
 
             if (!isMatch) {
                 logger.warn(`Tentativo cambio password fallito per utente ${userId}: password attuale errata.`);
+                const { attesa } = erroreAccesso(req.user.username, rete);
+                if (attesa) {
+                    res.set('Retry-After', String(attesa));
+                    return res.status(429).json({ message: messaggioAttesa(attesa), attesa });
+                }
                 return res.status(401).json({ message: "La password attuale inserita non è corretta." });
             }
+            accessoRiuscito(req.user.username, rete);
 
             const newPasswordHash = await bcrypt.hash(newPassword, COSTO_BCRYPT); 
 
@@ -161,6 +181,8 @@ export function registraRotteUtenti(app) {
         } catch (error) {
              logger.error(`Errore cambio password per utente ${userId}:`, error);
              res.status(500).json({ message: "Errore interno durante l'aggiornamento della password." });
+        } finally {
+            tentativo.fine();
         }
     });
 
@@ -168,7 +190,7 @@ export function registraRotteUtenti(app) {
         try {
             const result = await pool.query(`
             SELECT u.id, u.username, u.nome, u.cognome, u.email, u.role, u.is_active, u.codice_fiscale, u.telefono,
-                   u.temporaneo, u.ente, e.code AS emergenza, e.status = 'ACTIVE' AS emergenza_aperta,
+                   u.temporaneo, u.ente, u.qualifica, e.code AS emergenza, e.status = 'ACTIVE' AS emergenza_aperta,
                    u.creato_il, u.ultimo_accesso, u.mfa_attiva,
                    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli,
                    ARRAY(SELECT permesso FROM utenti_permessi WHERE user_id = u.id ORDER BY permesso) AS permessi_in_piu
@@ -191,11 +213,25 @@ export function registraRotteUtenti(app) {
         return true;
     }
 
+    // L'installazione resterebbe senza nessuno che possa rientrare: è già successo, chiamando la rotta a mano.
+    async function ultimoAmministratore(client, userId) {
+        const { rows } = await client.query(
+            `SELECT EXISTS (SELECT 1 FROM utenti_ruoli WHERE user_id = $1 AND ruolo = 'admin') AS admin,
+                    (SELECT count(*)::int FROM users u JOIN utenti_ruoli r ON r.user_id = u.id AND r.ruolo = 'admin'
+                      WHERE u.id <> $1 AND COALESCE(u.is_active, false) AND u.eliminato_il IS NULL
+                        AND COALESCE(u.temporaneo, false) = false) AS altri`, [userId]);
+        return rows[0].admin && rows[0].altri === 0;
+    }
+    const MESSAGGIO_ULTIMO_AMMINISTRATORE = "È l'ultimo amministratore attivo: prima nominane un altro.";
+
     app.patch('/api/admin/users/:id/toggle-status', checkAdminRole, async (req, res) => {
         const userId = parseInt(req.params.id, 10);
         
         if (isNaN(userId)) {
             return res.status(400).json({ message: 'ID non valido.' });
+        }
+        if (userId === req.user.id) {
+            return res.status(403).json({ message: 'Non puoi sospendere il tuo stesso account. Usa un altro account admin.' });
         }
         try {
             if (await rifiutaSeTemporaneo(userId, res)) return;
@@ -204,26 +240,44 @@ export function registraRotteUtenti(app) {
             return res.status(500).json({ message: 'Errore interno del server.' });
         }
 
+        const client = await pool.connect();
         try {
-            const result = await pool.query(
-                `UPDATE users 
-             SET is_active = NOT COALESCE(is_active, false) 
-             WHERE id = $1 
-             RETURNING id, is_active`,
-                [userId]
-            );
-
-            if (result.rowCount === 0) {
+            await client.query('BEGIN');
+            // L'ordine conta: due amministratori che si sospendono a vicenda nello stesso istante passerebbero tutti e due il conteggio.
+            await client.query("SELECT pg_advisory_xact_lock(hashtext('orion.amministratori'))");
+            const attuale = (await client.query('SELECT COALESCE(is_active, false) AS attivo FROM users WHERE id = $1', [userId])).rows[0];
+            if (!attuale) {
+                await client.query('ROLLBACK');
                 return res.status(404).json({ message: 'Utente non trovato.' });
             }
+            if (attuale.attivo && await ultimoAmministratore(client, userId)) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ message: MESSAGGIO_ULTIMO_AMMINISTRATORE });
+            }
+            const result = await client.query(
+                'UPDATE users SET is_active = NOT COALESCE(is_active, false) WHERE id = $1 RETURNING id, is_active', [userId]);
+            if (!result.rows[0].is_active) await chiudiSessioni(userId, client);
+            await client.query('COMMIT');
 
             res.json({ message: 'Stato aggiornato con successo.', user: result.rows[0] });
             registraAudit(req, result.rows[0].is_active ? 'utente.riattivato' : 'utente.sospeso', { tipo: 'utente', id: userId });
         } catch (error) {
+            await client.query('ROLLBACK').catch(() => {});
             logger.error(`Errore aggiornamento stato utente ${userId}:`, error);
             res.status(500).json({ message: 'Errore interno del server.' });
+        } finally {
+            client.release();
         }
     });
+
+    // Ente e qualifica dicono da dove viene chi non è del gruppo: per gli altri restano vuoti.
+    function enteEQualifica(corpo, ruoli) {
+        if (!ruoli.includes('esterno')) return { ente: null, qualifica: null };
+        const q = leggiQualifica(corpo?.qualifica);
+        if (q.errore) return { errore: q.errore };
+        const ente = corpo?.ente == null ? null : String(corpo.ente).trim().slice(0, 100) || null;
+        return { ente, qualifica: q.valore };
+    }
 
     app.post('/api/users', adminLimiter, richiedePermesso('volontari.anagrafica'), async (req, res) => {
         const { nome, cognome, email } = req.body;
@@ -239,6 +293,8 @@ export function registraRotteUtenti(app) {
         if (erroreRuoli) return res.status(400).json({ message: erroreRuoli });
         const controlloCampi = leggiCampiAnagrafici({ nome, cognome, email }, ['nome', 'cognome', 'email']);
         if (controlloCampi.errore) return res.status(400).json({ message: controlloCampi.errore });
+        const provenienza = enteEQualifica(req.body, ruoliRichiesti);
+        if (provenienza.errore) return res.status(400).json({ message: provenienza.errore });
         const role = ruoloPrincipale(ruoliRichiesti);
         const sanitizedEmail = email ? String(email).trim().toLowerCase() : null;
         const cleanNomeTrimmed = String(nome).trim();
@@ -257,8 +313,8 @@ export function registraRotteUtenti(app) {
             const expireDate = new Date(Date.now() + 7 * 24 * 3600000);
 
             const result = await client.query(
-                'INSERT INTO users (nome, cognome, username, email, role, reset_token, reset_token_expires) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, nome, cognome, email, role',
-                [cleanNomeTrimmed, cleanCognomeTrimmed, finalUsername, sanitizedEmail, role, tokenHash, expireDate]
+                'INSERT INTO users (nome, cognome, username, email, role, reset_token, reset_token_expires, ente, qualifica) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, username, nome, cognome, email, role, ente, qualifica',
+                [cleanNomeTrimmed, cleanCognomeTrimmed, finalUsername, sanitizedEmail, role, tokenHash, expireDate, provenienza.ente, provenienza.qualifica]
             );
             
             await scriviRuoli(client, result.rows[0].id, ruoliRichiesti);
@@ -323,6 +379,8 @@ export function registraRotteUtenti(app) {
         }
         const controlloCampi = leggiCampiAnagrafici({ nome, cognome, email }, ['nome', 'cognome', 'email']);
         if (controlloCampi.errore) return res.status(400).json({ message: controlloCampi.errore });
+        const provenienza = enteEQualifica(req.body, ruoliRichiesti);
+        if (provenienza.errore) return res.status(400).json({ message: provenienza.errore });
         const sanitizedEmail = email ? String(email).trim().toLowerCase() : null;
         try {
             if (await rifiutaSeTemporaneo(userId, res)) return;
@@ -334,6 +392,13 @@ export function registraRotteUtenti(app) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
+            if (!ruoliRichiesti.includes('admin')) {
+                await client.query("SELECT pg_advisory_xact_lock(hashtext('orion.amministratori'))");
+                const attivo = (await client.query('SELECT COALESCE(is_active, false) AS attivo FROM users WHERE id = $1', [userId])).rows[0]?.attivo;
+                if (attivo && await ultimoAmministratore(client, userId)) {
+                    throw { customError: true, statusCode: 409, message: MESSAGGIO_ULTIMO_AMMINISTRATORE };
+                }
+            }
 
             if (sanitizedEmail) {
                 const currentUserEmailCheck = await client.query('SELECT email FROM users WHERE id = $1', [userId]);
@@ -346,8 +411,8 @@ export function registraRotteUtenti(app) {
             }
             
             const result = await client.query(
-                'UPDATE users SET nome = $1, cognome = $2, email = $3 WHERE id = $4 RETURNING id, username, nome, cognome, email', 
-                [String(nome).trim(), String(cognome).trim(), sanitizedEmail, userId]
+                'UPDATE users SET nome = $1, cognome = $2, email = $3, ente = $4, qualifica = $5 WHERE id = $6 RETURNING id, username, nome, cognome, email, ente, qualifica',
+                [String(nome).trim(), String(cognome).trim(), sanitizedEmail, provenienza.ente, provenienza.qualifica, userId]
             );
             
             if (result.rowCount === 0) {

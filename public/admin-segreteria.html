@@ -35,6 +35,7 @@
             <div id="main-dashboard-view">
                 <header class="content-header">
                     <h1>Segreteria</h1>
+                    <p id="segreteria-spenta" class="messaggio messaggio-avviso" hidden>Il modulo Segreteria è spento: le scadenze di visite e corsi non si controllano e non partono avvisi. I tesserini si stampano lo stesso. Si accende dalle Impostazioni.</p>
                 </header>
 
                 <section class="dashboard-alerts" id="alerts-container"></section>
@@ -54,6 +55,7 @@
                         <button type="button" id="btn-visita-multipla" class="button-style primary">Registra una visita</button>
                         <button type="button" id="btn-corso-multiplo" class="button-style primary">Registra un corso</button>
                         <button type="button" id="btn-stampa-fascicoli" class="button-style button-secondary"><i class="fas fa-print" aria-hidden="true"></i> Stampa i fascicoli</button>
+                        <button type="button" id="btn-stampa-tesserini" class="button-style button-secondary"><i class="fas fa-id-card" aria-hidden="true"></i> Stampa i tesserini</button>
                         <button type="button" id="btn-annulla-scelta" class="button-style button-secondary">Deseleziona</button>
                     </div>
                     <div class="table-container">
@@ -483,6 +485,26 @@
             <div class="azioni-finestra">
                 <button type="button" id="annulla-multipla" class="button-style button-secondary">Annulla</button>
                 <button type="submit" id="salva-multipla" class="button-style primary">Registra</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="stampa-tesserini" class="finestra-multipla">
+        <form id="form-tesserini" method="dialog">
+            <h2>Stampa i tesserini</h2>
+            <p id="chi-tesserini" class="spiega-multipla"></p>
+            <label id="riga-ordine-tesserini">Ordine delle pagine
+                <select id="ordine-tesserini">
+                    <option value="alternate">Fronte e retro di seguito, tesserino per tesserino</option>
+                    <option value="separate">Prima tutti i fronti, poi tutti i retri</option>
+                </select>
+                <small>La prima va bene per le stampanti fronte-retro. Con una stampante a una facciata si usa la seconda: si stampano le pagine dei fronti, si rimettono le tessere nel caricatore girate e si stampano quelle dei retri.</small>
+            </label>
+            <p class="spiega-multipla">Un PDF grande quanto la tessera (CR80), una pagina per facciata: si stampa a dimensione reale, senza adattarlo alla pagina.</p>
+            <p id="esito-tesserini" class="spiega-multipla" role="status"></p>
+            <div class="azioni-finestra">
+                <button type="button" id="chiudi-tesserini" class="button-style button-secondary">Chiudi</button>
+                <button type="submit" id="crea-tesserini" class="button-style primary">Crea il PDF</button>
             </div>
         </form>
     </dialog>

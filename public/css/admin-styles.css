@@ -616,7 +616,7 @@ hr.admin-hr {
 }
 
 .stella-caposquadra { background: none; border: none; padding: 4px; cursor: pointer; font-size: 1.05rem; color: var(--text-muted); line-height: 1; }
-.stella-caposquadra.scelto, .stella-caposquadra:hover, .stella-caposquadra:focus-visible { color: #d97706; outline: none; }
+.stella-caposquadra.scelto, .stella-caposquadra:hover, .stella-caposquadra:focus-visible { color: #d97706; }
 .bollino-caposquadra { font-size: 0.65rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 5px; color: #92400e; background: #fef3c7; text-transform: uppercase; letter-spacing: 0.03em; }
 
 /* Il menu si mostra quando menu-laterale.js l'ha composto, senza il lampeggio dello scambio. */

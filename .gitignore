@@ -47,3 +47,6 @@ chiave-dati.key
 
 # Backup di un'istanza di sviluppo (nei container stanno fuori dal codice)
 /backup/
+
+# I modelli della trascrizione, che il server scarica
+modelli/

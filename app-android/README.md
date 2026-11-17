@@ -12,8 +12,12 @@ Contiene due file, messi qui al momento della release:
   accetta ancora.
 
 ```json
-{ "codice": 3, "nome": "0.3.0", "minima": 2, "certificato_sha256": "9E:EC:…:A9" }
+{ "codice": 3, "nome": "0.3.0", "minima": 2, "certificato_sha256": "9E:EC:…:A9", "commit": "3f2a…" }
 ```
+
+`commit` è il commit del repository dell'app da cui l'APK è costruito, che
+porta anche il tag `app-<versione>`: così si può sempre ricostruire e
+confrontare l'app distribuita. Le versioni fino alla 1.5.1 non lo hanno.
 
 I due file li prepara `scripts/pubblica.sh` del repository dell'app, a
 partire dall'APK firmato: controlla la firma, legge la versione e scrive

@@ -127,20 +127,7 @@ body > header h1 {
     margin-right: 5px; /* Spazio tra icona e testo */
 }
 
-.leaflet-control-logo {
-    background-color: transparent !important; /* Forza sfondo trasparente */
-    padding: 5px !important; /* Nessun padding */
-    border-radius: 0 !important; /* Nessun arrotondamento */
-    box-shadow: none !important; /* Nessuna ombra */
-    border: none !important; /* Nessun bordo */
-    margin: 0 !important; /* Rimuovi eventuali margini di default dei controlli */
-}
 
-.leaflet-control-logo img {
-    max-width: 80px; /* O la dimensione che preferisci */
-    height: auto;
-    display: block;
-}
 
 .leaflet-control-layers-toggle {
 
@@ -1061,7 +1048,7 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
 .inbox-card.prio-bassa { border-left-color: var(--priority-low-border); }
 
 .prio-tag {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     padding: 2px 7px;
@@ -1077,7 +1064,7 @@ body.sync-blink-state #bottom-updates-list li.new-log-blink {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     padding: 2px 7px;
@@ -1287,6 +1274,10 @@ body.eventi-aperti #contenitore-avvisi {
     right: 386px;
     max-width: 320px;
 }
+body.eventi-aperti #team-status-panel {
+    left: calc((100% - 311px) / 2) !important;
+    max-width: min(800px, calc(100% - 351px)) !important;
+}
 .avviso-novita {
     pointer-events: auto;
     display: flex;
@@ -1316,7 +1307,7 @@ body.eventi-aperti #contenitore-avvisi {
     min-width: 0;
 }
 .avviso-titolo {
-    font-size: 0.7rem;
+    font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -1480,10 +1471,10 @@ body.eventi-aperti #contenitore-avvisi {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.voce-menu-squadra:hover, .voce-menu-squadra:focus-visible { background: var(--list-item-hover-bg, rgba(127, 127, 127, 0.12)); outline: none; }
+.voce-menu-squadra:hover, .voce-menu-squadra:focus-visible { background: var(--list-item-hover-bg, rgba(127, 127, 127, 0.12)); }
 .voce-menu-squadra.pericolo { color: #dc2626; }
 .voce-menu-squadra.urgente::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #dc2626; margin-right: 6px; }
-.sezione-menu-squadra { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding: 8px 10px 2px; }
+.sezione-menu-squadra { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding: 8px 10px 2px; }
 .elenco-menu-squadra { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; margin-bottom: 4px; }
 .nota-menu-squadra { font-size: 0.82rem; color: var(--text-muted); padding: 6px 10px; white-space: normal; }
 
@@ -1557,15 +1548,13 @@ body.eventi-aperti #contenitore-avvisi {
         flex-shrink: 0;
     }
     body > header > div:last-child { gap: 0 !important; flex-shrink: 0; }
-    .leaflet-control-logo img { max-width: 44px !important; }
-
+    
     body > header { flex-wrap: wrap !important; justify-content: flex-start !important; row-gap: 6px !important; column-gap: 6px !important; }
     body > header > div { display: contents !important; }
     body > header h1 { order: 1; }
     #emergency-status-display { order: 2; flex: 1 1 0 !important; }
-    body > header .top-menu-dropdown { order: 3; position: relative; margin-left: auto; }
     body > header::before { content: ''; order: 4; flex-basis: 100%; height: 0; }
-    body > header > div > :not(h1):not(#emergency-status-display):not(.top-menu-dropdown) { order: 5; }
+    body > header > div > :not(h1):not(#emergency-status-display):not(#top-menu-btn) { order: 5; }
     body > header > div > button { padding: 6px 10px !important; font-size: 0.82rem !important; white-space: nowrap; }
     #contenitore-avvisi { top: calc(var(--fondo-testata, 112px) + 6px) !important; right: 8px !important; left: 8px; max-width: none !important; }
 
@@ -1604,6 +1593,8 @@ body.eventi-aperti #contenitore-avvisi {
 
 .leaflet-bottom.leaflet-left .leaflet-control { margin-left: 12px; margin-bottom: 12px; }
 #team-status-panel { max-width: min(800px, calc(100% - 150px)) !important; }
+/* Il riquadro del radar accanto ai pulsanti della mappa e sopra la barra delle squadre. */
+#map-segnalazioni .radar-pannello { left: 66px; bottom: 86px; }
 
 .ricerca-mappa {
     position: relative;
@@ -1787,7 +1778,7 @@ dialog.sigillo-chiusura .sigillo-esito { font-size: 0.85rem; color: var(--succes
 .membro-squadra { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
 .membro-squadra.caposquadra .nome-membro { font-weight: 600; }
 .stella-caposquadra { background: none; border: none; padding: 4px; cursor: pointer; font-size: 1.05rem; color: var(--text-muted); line-height: 1; }
-button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color: #d97706; outline: none; }
+button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color: #d97706; }
 .nota-caposquadra { font-size: 0.82rem; color: var(--text-muted); padding: 0 0 8px; }
 #teamMembersModalList .stella-caposquadra { background: none; border: none; box-shadow: none; padding: 4px 6px; min-width: 0; width: auto; color: var(--text-muted); }
 #teamMembersModalList .membro-squadra.caposquadra .stella-caposquadra,
@@ -1900,10 +1891,10 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
     body > header .etichetta-testata { display: none; }
     body > header button:has(> .etichetta-testata) {
         display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: 2px; padding: 5px 6px; min-width: 58px;
+        gap: 2px; padding: 5px 8px; min-width: 64px; min-height: 44px;
     }
     body > header button:not([hidden]):not([style*="display: none"]) > .etichetta-testata {
-        display: block; font-size: 0.6rem; font-weight: 600; line-height: 1.1; white-space: nowrap;
+        display: block; font-size: 0.8rem; font-weight: 600; line-height: 1.15; white-space: nowrap;
     }
 }
 
@@ -1938,3 +1929,93 @@ button.stella-caposquadra:hover, button.stella-caposquadra:focus-visible { color
     body > header > div:last-child { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
     #contenitore-avvisi { top: calc(var(--fondo-testata, 112px) + 6px) !important; }
 }
+
+.primi-passi { margin: 10px; padding: 14px 16px; border-radius: 10px; background: var(--surface-color); border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); }
+.primi-passi[hidden] { display: none; }
+.primi-passi-testa { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.primi-passi h3 { margin: 0; font-size: 1.05rem; }
+.primi-passi p { margin: 6px 0 8px; font-size: 0.9rem; color: var(--text-muted); }
+.primi-passi ol { margin: 0; padding-left: 20px; font-size: 0.95rem; line-height: 1.7; }
+.primi-passi li.fatto { color: var(--text-muted); text-decoration: line-through; }
+.primi-passi li.fatto::marker { content: "✓  "; color: var(--success-text); }
+
+.suggerimenti-indirizzo { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); box-shadow: 0 6px 16px var(--shadow-color-light); max-height: 220px; overflow-y: auto; }
+.suggerimenti-indirizzo li { padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+.suggerimenti-indirizzo li:hover, .suggerimenti-indirizzo li[aria-selected="true"] { background: var(--secondary-bg-color); }
+.fascia-scelta-punto { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 10px; background: var(--primary-color); color: #fff; font-weight: 600; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); max-width: calc(100% - 24px); }
+.fascia-scelta-punto[hidden] { display: none; }
+.scelta-punto { outline: 4px solid var(--primary-color); outline-offset: -4px; }
+
+.mia-squadra { margin: 10px; padding: 12px 14px; border-radius: 10px; background: var(--surface-color); border: 1px solid var(--border-color); border-left: 4px solid var(--success-color); }
+.mia-squadra[hidden] { display: none; }
+.mia-squadra.senza { border-left-color: var(--border-color); color: var(--text-muted); font-size: 0.95rem; }
+.mia-squadra h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.mia-squadra p { margin: 0 0 6px; font-size: 0.9rem; color: var(--text-muted); }
+.mia-squadra-intervento { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
+.inbox-card.della-mia-squadra { box-shadow: inset 4px 0 0 var(--success-color); }
+.inbox-card.della-mia-squadra .inbox-id-title::before { content: "La tua squadra · "; color: var(--success-text); font-size: 0.8em; font-weight: 700; }
+.pin-segnalazione.mia-squadra svg path { stroke: var(--success-color); stroke-width: 3; }
+
+.solo-in-colonna { display: none; }
+body.dettaglio-in-colonna #reports-inbox-sidebar { position: relative; overflow: hidden; }
+body.dettaglio-in-colonna #report-detail-side-panel { max-width: none !important; box-shadow: none !important; }
+body.dettaglio-in-colonna .solo-in-colonna { display: inline-flex; align-items: center; gap: 6px; width: auto; }
+body.dettaglio-in-colonna #close-side-panel-btn { display: none; }
+
+.freccia-squadre { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); cursor: pointer; margin: 0 4px; }
+.freccia-squadre[hidden] { display: none; }
+#team-status-content { scroll-behavior: smooth; }
+
+/* Pulsanti in alto: almeno 40 pixel e su una riga sola che scorre, anche sul telefono. */
+body > header button.button-style { min-height: 40px; font-size: max(0.85rem, 13px); }
+@media (max-width: 760px) {
+    body > header { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+    body > header::-webkit-scrollbar { display: none; }
+    body > header::before { display: none !important; }
+    body > header > div > * { flex-shrink: 0; }
+    body > header #top-menu-btn { order: 2; }
+    body > header #emergency-status-display { order: 3; flex: 0 0 auto !important; max-width: none !important; }
+}
+
+/* Il menu delle pagine, come pannello che scorre da sinistra sopra la sala. */
+.velo-menu { position: fixed; inset: 0; z-index: 2990; background: rgba(0, 0, 0, 0.35); }
+.velo-menu[hidden] { display: none; }
+.menu-scorrevole { position: fixed; top: 0; left: 0; bottom: 0; z-index: 3000; width: min(300px, 86vw); overflow-y: auto; box-sizing: border-box; padding: 56px 14px 20px; background: var(--surface-color); border-right: 1px solid var(--border-color); box-shadow: 6px 0 24px rgba(0, 0, 0, 0.2); animation: menu-entra 0.18s ease-out; }
+.menu-scorrevole[hidden] { display: none; }
+@keyframes menu-entra { from { transform: translateX(-100%); } to { transform: none; } }
+.menu-scorrevole .chiudi-menu { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-color); cursor: pointer; font-size: 1.1rem; }
+.menu-scorrevole .sidebar-menu { list-style: none; margin: 0; padding: 0; }
+.menu-scorrevole .sidebar-menu li { margin-bottom: 4px; }
+.menu-scorrevole .sidebar-menu a { display: block; padding: 11px 10px; border-radius: 8px; color: var(--text-color); text-decoration: none; font-size: 1rem; }
+.menu-scorrevole .sidebar-menu a:hover, .menu-scorrevole .sidebar-menu a.attivo { background: var(--secondary-bg-color); }
+.menu-scorrevole .separatore-menu { border-top: 1px solid var(--border-color); margin: 10px 4px; }
+
+.stato-squadra { width: auto; margin-left: 6px; padding: 3px 6px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; }
+.stato-squadra.stato-partita { border-color: var(--info-text); }
+.stato-squadra.stato-sul_posto { border-color: var(--warning-color); }
+.stato-squadra.stato-conclusa, .stato-squadra.stato-rientrata { border-color: var(--success-color); }
+
+.scelta-tipo { display: flex; flex-wrap: wrap; gap: 6px; }
+.etichetta-tipo { display: block; font-weight: 600; margin-bottom: 6px; }
+.tipo-scelta { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; min-height: 40px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); cursor: pointer; font-size: 0.85rem; }
+.tipo-scelta[aria-checked="true"] { border-color: var(--primary-color); background: var(--info-soft-bg); box-shadow: inset 0 0 0 1px var(--primary-color); font-weight: 600; }
+.icona-tipo { color: var(--text-muted); margin-right: 2px; }
+.filtro-tipo { width: auto; padding: 4px 8px; border-radius: 999px; font-size: 0.85rem; }
+
+.vicine-avviso { margin: 0 0 14px; padding: 12px 14px; border-radius: 8px; border-left: 4px solid var(--warning-color); background: var(--warning-soft-bg); color: var(--text-color); }
+.vicine-avviso[hidden] { display: none; }
+.vicine-titolo { margin: 0 0 8px; font-weight: 700; color: var(--warning-text); }
+.vicine-avviso ul { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.vicine-avviso li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vicine-avviso .button-style { width: auto; }
+
+/* Squadre di fuori: tonde come quelle del gruppo, ma nel colore dell'ente, con l'anello bianco e senza triangolo. */
+.team-marker-div-icon.squadra-esterna-marker { background: none; border: none; overflow: visible; box-shadow: none; }
+.team-marker-div-icon.squadra-esterna-marker::before { display: none; }
+.marker-ente { position: relative; display: block; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 0 0 1.5px var(--anello-ente), 0 1px 3px rgba(0,0,0,0.45); }
+.team-marker-div-icon .marker-ente .marker-letter { color: inherit; text-shadow: none; }
+.marker-ente-sigla { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); margin: 0; padding: 0 4px; border-width: 1px; font-size: 8px; line-height: 1.3; z-index: 2; pointer-events: none; }
+.team-status-item.squadra-esterna { border-style: dashed; }
+.cartellino-squadra { background: rgba(139, 92, 246, 0.15); color: #6d28d9; padding: 4px 10px; border-radius: 50px; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.cartellino-squadra.esterna { background: var(--surface-color); color: var(--text-color); border-width: 1.5px; }
+.cartellino-squadra.esterna .bollino-qualifica { margin-right: 2px; }

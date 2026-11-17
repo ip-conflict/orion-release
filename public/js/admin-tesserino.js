@@ -1,7 +1,8 @@
 // Impostazioni › Aspetto del tesserino: il configuratore. L'anteprima è
 // disegnata dallo stesso motore della stampa (tesserino.js), con dati di
 // esempio e i loghi veri; si trascinano gli elementi, si cambiano misure,
-// colori e i due testi fissi. Le modifiche restano qui finché non si salva:
+// colori e i due testi fissi, e si sceglie cosa va sul retro, che è
+// facoltativo. Le modifiche restano qui finché non si salva:
 // "Salva" scrive il modello nelle impostazioni (badge_modello) e da quel
 // momento la segreteria stampa così.
 
@@ -16,14 +17,15 @@
     let salvato = T.normalizza('');      // com'è nelle impostazioni
     let modello = T.normalizza('');      // com'è adesso, qui
     let scelto = null;
+    let faccia = 'fronte';
     let esempio = { nome: 'Rossi Maria', distretto: '', ente: '', loghi: [], qr: null, cf: null };
     let enteImpostato = '';
-    let qrImmagine = null;
     let disegno = null;
 
     const copia = (x) => JSON.parse(JSON.stringify(x));
     const uguali = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const mm = (pt) => Math.round(pt / MM * 10) / 10;
+    const facciaDi = (id) => modello.retro.includes(id) ? 'retro' : 'fronte';
 
     // ---- I dati dell'anteprima ------------------------------------------------
 
@@ -31,7 +33,6 @@
         return {
             ...esempio,
             qr: $('tz-con-qr').checked ? `${location.origin}/badge.html?token=esempio-di-tesserino` : null,
-            qrImmagine,
             cf: $('tz-con-cf').checked ? 'RSSMRA85T41H501Z' : null,
             ente: $('tz-con-ente').checked ? (enteImpostato || 'Ente sovraordinato') : ''
         };
@@ -44,17 +45,6 @@
             const b = await r.blob();
             return await new Promise((ok) => { const f = new FileReader(); f.onloadend = () => ok(f.result); f.readAsDataURL(b); });
         } catch { return null; }
-    }
-
-    // Il QR dell'anteprima: lo stesso indirizzo che avrebbe un tesserino vero.
-    function preparaQr() {
-        try {
-            const tela = $('tz-qr-tela');
-            tela.replaceChildren();
-            new QRCode(tela, { text: `${location.origin}/badge.html?token=esempio-di-tesserino`, width: 264, height: 264, correctLevel: QRCode.CorrectLevel.L });
-            const c = tela.querySelector('canvas');
-            qrImmagine = c ? c.toDataURL('image/png') : null;
-        } catch { qrImmagine = null; }
     }
 
     // ---- Il disegno -------------------------------------------------------------
@@ -71,7 +61,8 @@
     }
 
     function ridisegna() {
-        disegno = T.componi(modello, datiAnteprima());
+        disegno = T.componi(modello, datiAnteprima(), faccia);
+        svg.setAttribute('aria-label', faccia === 'retro' ? 'Anteprima del retro del tesserino' : 'Anteprima del fronte del tesserino');
         // Gli angoli arrotondati del CR80 (3,18 mm) e un'ombra, per riconoscerlo.
         svg.setAttribute('viewBox', `${-BORDO} ${-BORDO} ${T.LARGHEZZA + 2 * BORDO} ${T.ALTEZZA + 2 * BORDO}`);
         const angoli = crea('clipPath', { id: 'tz-angoli' });
@@ -247,16 +238,28 @@
                     riga.appendChild(l);
                     extra.appendChild(riga);
                 }
+                if (e.retro) {
+                    const riga = document.createElement('div');
+                    riga.className = 'tz-riga';
+                    const l = document.createElement('label');
+                    const c = document.createElement('input');
+                    c.type = 'checkbox'; c.id = 'tz-sul-retro';
+                    c.addEventListener('change', () => { sulRetro(e.id, c.checked); });
+                    l.append(c, document.createTextNode(' Sul retro'));
+                    riga.appendChild(l);
+                    extra.appendChild(riga);
+                }
                 if (e.id === 'qr' || e.id === 'codice') {
                     const nota = document.createElement('p');
                     nota.className = 'tz-vuoto';
                     nota.textContent = e.id === 'qr'
-                        ? 'Non scende sotto i 13,4 mm di lato, la misura che un telefono legge senza fatica. Si toglie spegnendo i QR nelle Impostazioni.'
+                        ? 'Il riquadro non scende sotto i 13,4 mm di lato, la misura che un telefono legge senza fatica; il QR lo riempie con moduli di un numero intero di punti della stampante, come le barre del codice. Si toglie spegnendo i QR nelle Impostazioni.'
                         : `Non scende sotto i ${mm(T.LARGHEZZA_MINIMA_CODICE).toLocaleString('it-IT')} mm di larghezza: ogni barra resta di almeno 0,254 mm. Si toglie spegnendo il codice fiscale nelle Impostazioni.`;
                     extra.appendChild(nota);
                 }
             }
             if ($('tz-mostra')) $('tz-mostra').checked = !modello.nascosti.includes(e.id);
+            if ($('tz-sul-retro')) $('tz-sul-retro').checked = modello.retro.includes(e.id);
             extra.querySelectorAll('input[type=color]').forEach((c, i) => { c.value = modello.colori[e.colori[i]]; });
         }
         aggiornaColori();
@@ -278,6 +281,22 @@
         ridisegna();
     }
 
+    // Sull'altra facciata l'elemento riparte dalla posizione automatica.
+    function sulRetro(id, si) {
+        modello.retro = si ? [...new Set([...modello.retro, id])] : modello.retro.filter(x => x !== id);
+        if (modello.posizioni) delete modello.posizioni[id];
+        faccia = si ? 'retro' : 'fronte';
+        ridisegna();
+    }
+
+    function vedi(f) {
+        faccia = f;
+        if (scelto && facciaDi(scelto) !== f) scelto = null;
+        ridisegna();
+    }
+    $('tz-vedi-fronte').addEventListener('click', () => vedi('fronte'));
+    $('tz-vedi-retro').addEventListener('click', () => vedi('retro'));
+
     function aggiornaColori() {
         const box = $('tz-colori');
         if (!box.childElementCount) Object.keys(T.COLORI).forEach(k => box.appendChild(rigaColore(k)));
@@ -293,8 +312,8 @@
             riga.className = `tz-voce${scelto === e.id ? ' attivo' : ''}${modello.nascosti.includes(e.id) ? ' nascosto' : ''}`;
             const b = document.createElement('button');
             b.type = 'button';
-            b.textContent = e.nome + (assente[e.id] ? ` (non c'è nell'anteprima ${assente[e.id]})` : '');
-            b.addEventListener('click', () => { scelto = e.id; ridisegna(); });
+            b.textContent = e.nome + (facciaDi(e.id) === 'retro' ? ' · retro' : '') + (assente[e.id] ? ` (non c'è nell'anteprima ${assente[e.id]})` : '');
+            b.addEventListener('click', () => { scelto = e.id; faccia = facciaDi(e.id); ridisegna(); });
             riga.appendChild(b);
             if (e.nascondibile) {
                 const c = document.createElement('input');
@@ -319,6 +338,15 @@
     const contrasto = (a, b) => { const [x, y] = [luminanza(a), luminanza(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
     function aggiornaAvvisi() {
+        const facce = T.conRetro(modello) ? ['fronte', 'retro'] : ['fronte'];
+        const avvisi = facce.flatMap(f => {
+            const suQuesta = avvisiDi(f === faccia ? disegno : T.componi(modello, datiAnteprima(), f));
+            return facce.length > 1 ? suQuesta.map(t => `${f === 'retro' ? 'Retro' : 'Fronte'}: ${t}`) : suQuesta;
+        });
+        $('tz-avvisi').replaceChildren(...avvisi.map(t => { const li = document.createElement('li'); li.textContent = t; return li; }));
+    }
+
+    function avvisiDi(disegno) {
         const avvisi = [];
         const disegnati = new Set(disegno.forme.map(f => f.elemento).filter(Boolean));
         const pos = disegno.posizioni;
@@ -340,7 +368,7 @@
             const sotto = [...fasce].reverse().find(r => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
             if (sotto && contrasto(f.colore, sotto.colore) < 3) avvisi.push(`${e.nome}: il colore della scritta si distingue poco dal suo sfondo.`);
         }
-        $('tz-avvisi').replaceChildren(...avvisi.map(t => { const li = document.createElement('li'); li.textContent = t; return li; }));
+        return avvisi;
     }
 
     // ---- Stato, salvataggio --------------------------------------------------------
@@ -350,6 +378,15 @@
             ? 'Disposizione personalizzata: gli elementi restano dove li hai messi, anche quando un volontario non ha il QR o il codice fiscale.'
             : 'Disposizione automatica: si adatta a QR, codice fiscale e nome dell\'ente di ogni volontario.';
         $('tz-automatiche').hidden = !modello.posizioni;
+        const retro = T.conRetro(modello);
+        $('tz-vedi-fronte').setAttribute('aria-pressed', String(faccia === 'fronte'));
+        $('tz-vedi-retro').setAttribute('aria-pressed', String(faccia === 'retro'));
+        $('tz-vedi-retro').textContent = retro ? 'Retro' : 'Retro (vuoto)';
+        $('tz-facciate').textContent = retro
+            ? 'Fronte e retro: nel PDF ogni tesserino ha due pagine, prima il fronte e poi il retro.'
+            : faccia === 'retro'
+                ? 'Il retro è vuoto e il tesserino si stampa su una facciata sola. Per usarlo scegli il QR, il codice fiscale, la scritta centrale, i loghi o una bandiera e spunta "Sul retro".'
+                : 'Tesserino su una facciata. Il retro è facoltativo: si usa spostandoci un elemento.';
         const modificato = !uguali(modello, salvato);
         $('tz-salva').disabled = !modificato;
         $('tz-annulla').disabled = !modificato;
@@ -378,9 +415,7 @@
     });
 
     $('tz-prova').addEventListener('click', () => {
-        const dati = datiAnteprima();
-        delete dati.qrImmagine;
-        pdfMake.createPdf(T.inPdf(T.componi(modello, dati))).download('Tesserino_di_prova.pdf');
+        pdfMake.createPdf(T.inPdf(T.facciate(modello, datiAnteprima()))).download('Tesserino_di_prova.pdf');
     });
 
     window.addEventListener('beforeunload', (ev) => {
@@ -403,7 +438,6 @@
         $('tz-con-qr').checked = impostazioni.badge_qr_enabled !== 'false';
         $('tz-con-cf').checked = impostazioni.badge_cf_barcode !== 'false';
         $('tz-con-ente').checked = !!enteImpostato;
-        preparaQr();
         ridisegna();
     })();
 })();

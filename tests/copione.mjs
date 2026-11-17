@@ -90,6 +90,8 @@ try {
     verifica('una zona di pericolo vuole un\'area -> 400', (await nuovoEv({ tipo: 'pericolo', titolo: 'No', elemento_tipo: 'pericolo_frana', geometria: linea })).stato === 400);
     const pericolo = (await nuovoEv({ tipo: 'pericolo', titolo: `Esondazione ${suffisso}`, elemento_tipo: 'pericolo_alluvione', geometria: area })).corpo;
     verifica('la zona di pericolo entra nel copione', pericolo?.tipo === 'pericolo' && pericolo?.elemento_tipo === 'pericolo_alluvione', pericolo);
+    const gemelle = [];
+    for (const lettera of ['A', 'B']) gemelle.push((await nuovoEv({ tipo: 'segnalazione', minuto: 700, titolo: `Gemella ${lettera} ${suffisso}`, priorita: 'Low' })).corpo);
     const daSaltare = (await nuovoEv({ tipo: 'comunicazione', minuto: 600, titolo: 'Da saltare' })).corpo;
     const daRimandare = (await nuovoEv({ tipo: 'comunicazione', minuto: 300, titolo: 'Da rimandare' })).corpo;
     const mod = await chiama(`/api/copione/eventi/${anziana.id}`, { method: 'PUT', token: reg.token, body: { ...anziana, testo: 'Non riesce a uscire, ha 85 anni' } });
@@ -167,6 +169,10 @@ try {
     const mappa = (await chiama('/api/mappa/elementi', { token: admin })).corpo;
     verifica('la strada chiusa compare sulla mappa', (mappa?.emergenza || []).some(m => m.nome === `Frana SP2 ${suffisso}`));
     await esci(pericolo);
+    const insieme = await Promise.all(gemelle.map(esci));
+    const numeriGemelle = insieme.map(u => u.corpo?.creata?.emergency_report_number);
+    verifica('due segnalazioni della regia uscite nello stesso istante hanno numeri diversi e di seguito',
+        insieme.every(u => u.stato === 200) && numeriGemelle.every(Number.isInteger) && Math.abs(numeriGemelle[0] - numeriGemelle[1]) === 1, numeriGemelle);
     const tutti = Object.values((await chiama('/api/mappa/elementi', { token: admin })).corpo || {}).flat();
     verifica('la zona di pericolo compare sulla mappa con il suo tipo', tutti.some(m => m?.nome === `Esondazione ${suffisso}` && m.tipo === 'pericolo_alluvione'), tutti.map(m => m?.tipo));
     const comunicazioni = (await chiama('/api/regia/comunicazioni', { token: b.token })).corpo || [];

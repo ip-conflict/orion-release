@@ -120,6 +120,8 @@
         const nome = el('input', { type: 'text', maxlength: 100, required: true, placeholder: 'Mario Rossi, o Ambulanza CRI 1' });
         const ente = el('input', { type: 'text', maxlength: 100, list: 'et-enti', placeholder: 'Croce Rossa, 118...' });
         const enti = el('datalist', { id: 'et-enti' }, ENTI.map(e => el('option', { value: e })));
+        const qualifica = el('select');
+        window.Qualifiche?.riempiScelta(qualifica, '');
         const squadra = el('select', {}, el('option', { value: '', testo: 'Nessuna, per ora' }));
         const nomeRadio = el('select');
         const nomeSquadra = el('input', { type: 'text', maxlength: 100, placeholder: 'es. Ambulanza CRI' });
@@ -134,6 +136,10 @@
             dati.funzioni.forEach(f => funzione.append(el('option', { value: f.id, testo: `${f.sigla} ${f.nome}` })));
             campoFunzione.hidden = false;
         }).catch(() => { /* modulo spento */ });
+        const parlaVoce = el('input', { type: 'checkbox', checked: true });
+        const campoVoce = el('label', { class: 'et-campo', hidden: true, style: 'flex-direction: row; align-items: center; gap: 8px;' },
+            parlaVoce, 'Può parlare sul canale voce della squadra');
+        fetch('/api/branding/settings').then(r => r.json()).then(i => { campoVoce.hidden = String(i?.voce_enabled) !== 'true'; }).catch(() => {});
         const esito = el('div', { class: 'et-esito', hidden: true });
         const elenco = el('div', { class: 'et-elenco' });
         const crea = el('button', { type: 'submit', class: 'et-principale', testo: 'Crea accesso' });
@@ -141,9 +147,12 @@
         const chiudi = () => velo.remove();
         const modulo = el('form', {},
             el('label', { class: 'et-campo' }, 'Nome *', nome),
-            el('label', { class: 'et-campo' }, 'Ente', ente, enti),
+            el('div', { class: 'et-riga' },
+                el('label', { class: 'et-campo' }, 'Ente', ente, enti),
+                el('label', { class: 'et-campo' }, 'Qualifica (la squadra nuova la prende)', qualifica)),
             el('label', { class: 'et-campo' }, 'Squadra', squadra),
             bloccoNuova,
+            campoVoce,
             campoFunzione,
             el('label', { class: 'et-campo' }, 'Email per mandargli il link', email),
             errore,
@@ -178,7 +187,7 @@
 
         function schedaAccesso(v) {
             const chi = `${v.nome || ''} ${v.cognome || ''}`.trim() || v.username;
-            const dettagli = [v.ente, v.nome_radio ? `squadra ${v.nome_radio}` : 'senza squadra',
+            const dettagli = [window.Qualifiche?.nome(v.qualifica) || null, v.ente, v.nome_radio ? `squadra ${v.nome_radio}` : 'senza squadra',
                 v.attivo ? (v.usato_il ? `entrato alle ${dataOra(v.usato_il)}` : 'non ancora entrato') : 'revocato'].filter(Boolean).join(' · ');
             const voce = el('div', { class: `et-voce${v.attivo ? '' : ' revocato'}` });
             const pannello = el('div', { class: 'et-pannello', hidden: true });
@@ -221,6 +230,8 @@
             const cambiaPersona = () => {
                 const nome = el('input', { type: 'text', maxlength: 100, required: true, placeholder: 'Nome e cognome di chi subentra' });
                 const ente = el('input', { type: 'text', maxlength: 100, list: 'et-enti', value: v.ente || '' });
+                const qualificaNuova = el('select');
+                window.Qualifiche?.riempiScelta(qualificaNuova, v.qualifica || '');
                 const email = el('input', { type: 'email', maxlength: 100, placeholder: 'facoltativa' });
                 const err = el('p', { class: 'et-errore', hidden: true });
                 const conferma = el('button', { type: 'submit', class: 'et-principale', testo: 'Cambia e crea il codice' });
@@ -229,6 +240,7 @@
                     el('label', { class: 'et-campo' }, 'Chi subentra *', nome),
                     el('div', { class: 'et-riga' },
                         el('label', { class: 'et-campo' }, 'Ente', ente),
+                        el('label', { class: 'et-campo' }, 'Qualifica', qualificaNuova),
                         el('label', { class: 'et-campo' }, 'Email per il link', email)),
                     err,
                     el('div', { class: 'et-pulsanti' }, conferma));
@@ -238,7 +250,7 @@
                     conferma.disabled = true;
                     try {
                         const dati = await fetchApi(`/api/esterni-temporanei/${v.id}/persona`, {
-                            method: 'PUT', body: JSON.stringify({ nome: nome.value, ente: ente.value, email: email.value })
+                            method: 'PUT', body: JSON.stringify({ nome: nome.value, ente: ente.value, qualifica: qualificaNuova.value || null, email: email.value })
                         });
                         const nuovo = `${dati.nome} ${dati.cognome || ''}`.trim();
                         mostraCodice(pannello, { ...dati, email_chiesta: !!email.value.trim() }, nuovo, v.id, nuovoCodice);
@@ -283,7 +295,7 @@
         modulo.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             errore.hidden = true;
-            const corpo = { nome: nome.value, ente: ente.value, email: email.value };
+            const corpo = { nome: nome.value, ente: ente.value, qualifica: qualifica.value || null, email: email.value, voce_parla: parlaVoce.checked };
             if (squadra.value === 'nuova') corpo.nuova_squadra = { nome_radio: nomeRadio.value, nome: nomeSquadra.value };
             if (funzione.value) corpo.funzione_id = Number(funzione.value);
             else if (squadra.value) corpo.squadra_id = Number(squadra.value);

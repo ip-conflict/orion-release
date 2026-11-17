@@ -116,6 +116,25 @@
                 </details>
             </section>
 
+            <section class="pannello" id="pannello-memoria" hidden>
+                <h2>Memoria di ORION</h2>
+                <p class="spiegazione">
+                    La memoria che ORION può usare su questo server, trascrizione dei messaggi vocali compresa.
+                    Il massimo lo calcola il server: lascia la sua parte al sistema e alle altre installazioni
+                    che ospita, e da qui non supera quello che ha fissato chi lo gestisce.
+                </p>
+                <div id="stato-memoria" class="griglia-stato"></div>
+                <p id="motivo-memoria" class="nota" hidden></p>
+                <div id="scelta-memoria" class="gruppo-azioni" hidden>
+                    <label class="campo" style="margin: 0;">
+                        Nuova memoria
+                        <select id="memoria-nuova"></select>
+                    </label>
+                    <button type="button" id="btn-memoria" class="button-style button-secondary">Cambia</button>
+                </div>
+                <p id="modelli-memoria" class="spiegazione" hidden></p>
+            </section>
+
             <!-- Cifratura dei dati -->
             <section class="pannello" id="pannello-cifratura">
                 <h2>Cifratura</h2>
@@ -194,6 +213,17 @@
                 </div>
 
                 <div id="cancellazioni-integrita"></div>
+            </section>
+
+            <section class="pannello" id="pannello-voce" hidden>
+                <h2>Orion Voice</h2>
+                <p class="spiegazione">
+                    I numeri che dicono se Orion Voice funziona sul campo: quanto arriva in ritardo la voce
+                    rispetto a quando è stata detta, e quanti messaggi sono arrivati in differita (registrati
+                    senza rete o finiti dopo una caduta). Riguardano l'emergenza in corso, o l'ultima con
+                    messaggi vocali.
+                </p>
+                <div id="stato-voce" class="griglia-stato" aria-live="polite"></div>
             </section>
 
             <!-- Notifiche Firebase, facoltative -->
@@ -396,6 +426,33 @@
             <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
                 <button id="annulla-ritorno" class="button-style btn-discreto">Annulla</button>
                 <button id="conferma-ritorno" class="button-style btn-pericolo-pieno" style="margin-left: 10px;">Torna a questa versione</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modale-memoria" class="modal-overlay" hidden>
+        <div class="modal-content" style="background: var(--surface-color); border-radius: 12px; max-width: 620px;">
+            <div class="modal-header" style="background: var(--bg-color); padding: 15px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: var(--text-color);">Cambiare la memoria di ORION?</h3>
+                <button id="chiudi-modale-memoria" class="close-modal-btn" aria-label="Chiudi">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p class="riga-backup-scelto" id="memoria-scelta"></p>
+
+                <p class="avviso-aggiornamento">ORION si riavvia e resta fermo per circa un minuto: chi è collegato
+                    perde la voce in diretta finché non riparte. Se con la memoria nuova non riparte, il server
+                    rimette quella di prima.</p>
+
+                <label class="campo">
+                    La tua password
+                    <input type="password" id="password-memoria" autocomplete="current-password">
+                </label>
+
+                <p id="errore-memoria" class="errore" hidden></p>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; background: var(--bg-color); border-top: 1px solid var(--border-color); text-align: right;">
+                <button id="annulla-memoria" class="button-style btn-discreto">Annulla</button>
+                <button id="conferma-memoria" class="button-style" style="margin-left: 10px;">Cambia e riavvia</button>
             </div>
         </div>
     </div>

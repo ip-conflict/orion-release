@@ -298,3 +298,52 @@ body {
 @media (max-width: 700px) {
     .settings-panel { padding: 18px 14px !important; }
 }
+
+/* Impostazioni a sezioni: indice fisso a sinistra sul computer, tendina sul telefono. */
+.impostazioni-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+.impostazioni-indice { position: sticky; top: 20px; }
+.impostazioni-indice ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.impostazioni-indice a {
+    display: block; padding: 9px 12px; border-radius: 8px; color: var(--text-muted);
+    text-decoration: none; font-weight: 600; font-size: 0.95rem; border-left: 3px solid transparent;
+}
+.impostazioni-indice a:hover { background: var(--surface-color); color: var(--text-color); }
+.impostazioni-indice a.in-vista { color: var(--primary-color); border-left-color: var(--primary-color); background: var(--surface-color); }
+.impostazioni-indice-telefono { display: none; }
+.impostazioni-contenuto { display: flex; flex-direction: column; gap: 30px; min-width: 0; padding-bottom: 90px; }
+.sezione-impostazioni {
+    background: var(--surface-color); padding: 30px; border-radius: 12px;
+    border: 1px solid var(--border-color); box-shadow: 0 4px 6px var(--shadow-color-light); scroll-margin-top: 16px;
+}
+#settings-form { display: flex; flex-direction: column; gap: 30px; }
+.sezione-impostazioni > h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.sezione-spiega { margin: 0 0 22px; color: var(--text-muted); font-size: 0.9rem; }
+.sottotitolo-impostazioni { font-size: 1.1rem; margin: 26px 0 10px; }
+.sezione-esterna { scroll-margin-top: 16px; }
+.esito-modulo { display: block; margin-top: 8px; font-size: 0.85rem; font-weight: 600; min-height: 1em; }
+.esito-modulo.ok { color: var(--success-text); }
+.esito-modulo.errore { color: var(--danger-text); }
+
+.barra-salva {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500;
+    display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap;
+    padding: 12px 24px; background: var(--surface-color); border-top: 2px solid var(--primary-color);
+    box-shadow: 0 -4px 12px var(--shadow-color-light);
+}
+.barra-salva[hidden] { display: none; }
+.barra-salva-testo { margin-right: auto; font-weight: 600; }
+.barra-salva-testo.errore { color: var(--danger-text); }
+
+@media (max-width: 900px) {
+    .impostazioni-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .impostazioni-indice { display: none; }
+    .impostazioni-indice-telefono {
+        display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 20;
+        padding: 10px 0; background: var(--bg-color); font-weight: 600;
+    }
+    .impostazioni-indice-telefono select { flex: 1; }
+    .sezione-impostazioni { padding: 18px; }
+    .barra-salva { padding: 10px 14px; }
+}
+/* Con overflow-y: auto il contenitore scorre per conto suo e l'indice non resta attaccato. */
+.admin-content:has(.impostazioni-layout) { overflow: visible; }

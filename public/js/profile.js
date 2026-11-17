@@ -54,7 +54,7 @@ async function loadUserProfile() {
         currentUserData = user;
 
         document.getElementById('profile-fullname').textContent = `${user.nome} ${user.cognome}`;
-        document.getElementById('profile-role').textContent = user.role;
+        document.getElementById('profile-role').textContent = nomiRuoli(user);
         if (user.photo_url) {
             document.getElementById('profile-photo').src = user.photo_url;
         }

@@ -5,14 +5,16 @@ import path from 'path';
 import { authenticateToken, haRuolo, nomeUtente, puoVedereEmergenza, ruoliDi } from './autenticazione.js';
 import { haPermesso } from './permessi.js';
 import { uploadImageMulter, verifyMultipleUploadedImages } from './caricamenti.js';
-import { ACTIVE_REPORT_STATUSES_BACKEND, ETICHETTA_PRIORITA, ETICHETTA_STATO, MOTIVI_SENZA_SQUADRA, TERMINAL_REPORT_STATUSES_BACKEND, VALID_REPORT_STATUSES, erroreConflitto, erroreNonTrovato, erroreRichiesta } from './costanti.js';
+import { ACTIVE_REPORT_STATUSES_BACKEND, ETICHETTA_PRIORITA, ETICHETTA_STATO, ETICHETTA_STATO_SQUADRA, MOTIVI_SENZA_SQUADRA, STATI_SQUADRA, TIPI_SEGNALAZIONE, TERMINAL_REPORT_STATUSES_BACKEND, VALID_REPORT_STATUSES, erroreConflitto, erroreNonTrovato, erroreRichiesta } from './costanti.js';
 import { pool } from './db.js';
 import { reportCreationLimiter, uploadLimiter } from './middleware/rateLimiters.js';
 import { avvisaSquadra } from './squadre.js';
-import { activeEmergency } from './statoEmergenza.js';
-import { notifiche, wss } from './tempoReale.js';
+import { activeEmergency, prossimoNumeroSegnalazione } from './statoEmergenza.js';
+import { avvisaClienti, notifiche, wss } from './tempoReale.js';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { aggiornaRischi } from './rischiZone.js';
+import { controllaZoneSquadra } from './zoneSquadre.js';
+import { avvisaSala } from './avvisiSala.js';
 import { RADICE_DATI } from './percorsi.js';
 
 
@@ -78,6 +80,8 @@ export function registraRotteSegnalazioni(app) {
             latitude, 
             longitude 
         } = req.body;
+        const tipo = req.body.tipo == null || req.body.tipo === '' ? 'altro' : String(req.body.tipo);
+        if (!Object.hasOwn(TIPI_SEGNALAZIONE, tipo)) return res.status(400).json({ message: `Il tipo è uno fra: ${Object.keys(TIPI_SEGNALAZIONE).join(', ')}.` });
         const creator_user_id = req.user.id;
         // Una chiamata girata dal 112 non ha sempre un nome o un numero, e non si inventano.
         if (!title || String(title).trim() === '') {
@@ -100,15 +104,13 @@ export function registraRotteSegnalazioni(app) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            const nextNumberQuery = `SELECT COALESCE(MAX(emergency_report_number), 0) + 1 AS next_number FROM reports WHERE emergency_id = $1`;
-            const nextNumberResult = await client.query(nextNumberQuery, [currentEmergencyId]);
-            const emergencyReportNumber = nextNumberResult.rows[0].next_number;
+            const emergencyReportNumber = await prossimoNumeroSegnalazione(client, currentEmergencyId);
             logger.debug(`[POST /api/reports] Prossimo numero progressivo per emergenza ${currentEmergencyId}: ${emergencyReportNumber}`);
             const reportInsertQuery = `
-            INSERT INTO reports (title, description, location_address, priority, creator_user_id, reporter_name, reporter_contact, status, emergency_id, emergency_report_number, latitude, longitude, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) RETURNING *;
+            INSERT INTO reports (title, description, location_address, priority, creator_user_id, reporter_name, reporter_contact, status, emergency_id, emergency_report_number, latitude, longitude, tipo, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()) RETURNING *;
         `;
-            const reportValues = [title, description || null, location_address || null, priority || 'Medium', creator_user_id, String(reporter_name ?? '').trim() || null, String(reporter_contact ?? '').trim() || null, 'New', currentEmergencyId, emergencyReportNumber, reportLatitude, reportLongitude];
+            const reportValues = [title, description || null, location_address || null, priority || 'Medium', creator_user_id, String(reporter_name ?? '').trim() || null, String(reporter_contact ?? '').trim() || null, 'New', currentEmergencyId, emergencyReportNumber, reportLatitude, reportLongitude, tipo];
             const reportResult = await client.query(reportInsertQuery, reportValues);
             const newReport = reportResult.rows[0];
             const newReportId = newReport.id;
@@ -125,6 +127,10 @@ export function registraRotteSegnalazioni(app) {
             });
             res.status(201).json(newReport);
             if (coordinatesProvided) aggiornaRischi({ emergencyId: currentEmergencyId, reportIds: [newReportId], userId: creator_user_id });
+            if (newReport.priority === 'High') {
+                avvisaSala({ titolo: `Nuova segnalazione ad alta priorità: #${emergencyReportNumber}`, testo: [title, location_address].filter(Boolean).join(' · '),
+                    chiave: `alta:${newReportId}`, riferimento: { tipo: 'segnalazione', id: newReportId }, escludi: creator_user_id });
+            }
         } catch (err) {
             await client.query('ROLLBACK');
             logger.error('Error creating report:', err);
@@ -199,7 +205,7 @@ export function registraRotteSegnalazioni(app) {
                     r.title, r.status, r.priority, r.location_address,
                     r.created_at, r.updated_at, r.creator_user_id, r.emergency_id, r.reporter_name, r.reporter_contact,
                     r.latitude, r.longitude, r.description, r.environmental_hazard,
-                    r.no_team_reason,
+                    r.no_team_reason, r.tipo,
                     CONCAT(u.nome, ' ', u.cognome) AS creator_fullname,
                     COALESCE(rt.assigned_teams, '[]'::json) AS assigned_teams,
                     -- Le funzioni con un incarico, per le etichette sulla scheda.
@@ -219,7 +225,9 @@ export function registraRotteSegnalazioni(app) {
                      SELECT rta.report_id,
                             json_agg(json_build_object('id', rta.squadra_id,
                                                        'nome_radio', COALESCE(s.nome_radio, rta.nome_radio),
-                                                       'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio))
+                                                       'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio),
+                                                       'stato', rta.stato, 'stato_il', rta.stato_il,
+                                                       'qualifica', COALESCE(s.qualifica, rta.qualifica))
                                      ORDER BY COALESCE(s.nome, rta.squadra_nome, rta.nome_radio)) AS assigned_teams
                      -- Anche le squadre sciolte dopo l'intervento, con il nome di allora.
                      FROM report_team_assignments rta LEFT JOIN squadre s ON rta.squadra_id = s.id
@@ -249,6 +257,33 @@ export function registraRotteSegnalazioni(app) {
         }
     });
 
+    // Due telefonate per lo stesso albero: prima di creare, la sala vede le aperte entro 100 metri.
+    // Emisenoverso in SQL: a queste distanze basta, senza estensioni del database.
+    app.get('/api/reports/vicine', async (req, res) => {
+        if (ruoliDi(req.user).includes('esterno')) return res.status(403).json({ message: 'Gli utenti Esterni non creano segnalazioni.' });
+        const lat = Number(req.query.lat), lon = Number(req.query.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+            return res.status(400).json({ message: 'Servono latitudine e longitudine.' });
+        }
+        if (!activeEmergency) return res.json([]);
+        try {
+            const { rows } = await pool.query(
+                `SELECT * FROM (
+                    SELECT r.id, r.emergency_report_number AS numero, r.title, r.created_at, r.location_address,
+                           2 * 6371000 * asin(sqrt(power(sin(radians(r.latitude - $1) / 2), 2)
+                               + cos(radians($1)) * cos(radians(r.latitude)) * power(sin(radians(r.longitude - $2) / 2), 2))) AS metri
+                      FROM reports r
+                     WHERE r.emergency_id = $3 AND r.status = ANY($4::varchar[])
+                       AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
+                 ) v WHERE v.metri <= 100 ORDER BY v.metri LIMIT 5`,
+                [lat, lon, activeEmergency.id, ACTIVE_REPORT_STATUSES_BACKEND]);
+            res.json(rows.map(r => ({ ...r, metri: Math.round(Number(r.metri)) })));
+        } catch (e) {
+            logger.error('Errore GET /api/reports/vicine:', e);
+            res.status(500).json({ message: 'Errore nel cercare le segnalazioni vicine.' });
+        }
+    });
+
     app.get('/api/reports/:id', authenticateToken, async (req, res) => {
         const { id } = req.params;
         const reportId = parseInt(id, 10);
@@ -263,7 +298,9 @@ export function registraRotteSegnalazioni(app) {
                 CONCAT(u.nome, ' ', u.cognome) AS creator_fullname,
                 COALESCE(json_agg(DISTINCT jsonb_build_object('id', rta.squadra_id,
                                                               'nome', COALESCE(s.nome, rta.squadra_nome, rta.nome_radio),
-                                                              'nome_radio', COALESCE(s.nome_radio, rta.nome_radio)))
+                                                              'nome_radio', COALESCE(s.nome_radio, rta.nome_radio),
+                                                              'stato', rta.stato, 'stato_il', rta.stato_il,
+                                                              'qualifica', COALESCE(s.qualifica, rta.qualifica)))
                          FILTER (WHERE rta.assignment_id IS NOT NULL), '[]'::json) AS assigned_teams,
                 COALESCE((SELECT json_agg(json_build_object('sigla', f.sigla, 'stato', i.stato, 'funzione_id', f.id) ORDER BY f.ordine, f.sigla)
                             FROM incarichi i JOIN funzioni f ON f.id = i.funzione_id WHERE i.report_id = r.id), '[]'::json) AS incarichi,
@@ -306,12 +343,15 @@ export function registraRotteSegnalazioni(app) {
                 ru.update_text,
                 ru.is_system,
                 ru.user_id,
+                ru.voce_id,
+                vm.trascrizione AS voce_trascrizione,
                 CONCAT(upd_u.nome, ' ', upd_u.cognome) AS updater_fullname,
                 f.sigla AS funzione_sigla
             FROM
                 report_updates ru
             LEFT JOIN
                 users upd_u ON ru.user_id = upd_u.id
+            LEFT JOIN voce_messaggi vm ON vm.id = ru.voce_id
             LEFT JOIN funzioni f ON f.id = ru.funzione_id
             WHERE
                 ru.report_id = $1
@@ -347,10 +387,13 @@ export function registraRotteSegnalazioni(app) {
         const ALLOWED_UPDATE_FIELDS = new Set([
             'title', 'description', 'location_address', 'status', 'priority', 
             'reporter_name', 'reporter_contact', 'environmental_hazard', 'latitude', 'longitude',
-            'no_team_reason'
+            'no_team_reason', 'tipo'
         ]);
         
-        const allowedReportFields = ['title','description','location_address','status','priority','reporter_name', 'reporter_contact','environmental_hazard', 'latitude', 'longitude', 'no_team_reason'];
+        const allowedReportFields = ['title','description','location_address','status','priority','reporter_name', 'reporter_contact','environmental_hazard', 'latitude', 'longitude', 'no_team_reason', 'tipo'];
+        if ('tipo' in receivedUpdates && !Object.hasOwn(TIPI_SEGNALAZIONE, String(receivedUpdates.tipo))) {
+            return res.status(400).json({ message: `Il tipo è uno fra: ${Object.keys(TIPI_SEGNALAZIONE).join(', ')}.` });
+        }
 
         const client = await pool.connect();
         let statusChangedAffectingTeams = false;
@@ -847,6 +890,60 @@ export function registraRotteSegnalazioni(app) {
         }
     });
 
+    // Lo stato della squadra lo cambia chi ne fa parte, anche un esterno, dall'app o dal web; indietro lo
+    // corregge la sala. Dalla coda senza rete arriva con l'ora del tocco, accettata fino a sei ore prima.
+    // Le etichette stanno nel server: le pagine e l'app le leggono da qui.
+    app.get('/api/segnalazioni/tipi', (req, res) => res.json(TIPI_SEGNALAZIONE));
+
+    app.post('/api/reports/:id/teams/:teamId/stato', async (req, res) => {
+        const reportId = parseInt(req.params.id, 10), teamId = parseInt(req.params.teamId, 10);
+        const stato = String(req.body?.stato || '');
+        if (!Number.isInteger(reportId) || !Number.isInteger(teamId)) return res.status(400).json({ message: 'Richiesta non valida.' });
+        if (!STATI_SQUADRA.includes(stato)) return res.status(400).json({ message: `Lo stato è uno fra: ${STATI_SQUADRA.join(', ')}.` });
+        let quando = new Date();
+        if (req.body?.quando) {
+            const dato = new Date(req.body.quando);
+            const scarto = Date.now() - dato.getTime();
+            if (!Number.isNaN(dato.getTime()) && scarto >= -2 * 60 * 1000 && scarto <= 6 * 60 * 60 * 1000) quando = dato;
+        }
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const a = (await client.query(
+                `SELECT rta.assignment_id, rta.stato, COALESCE(s.nome_radio, rta.nome_radio) AS nome_radio, r.emergency_id,
+                        EXISTS (SELECT 1 FROM squadra_membri m WHERE m.squadra_id = rta.squadra_id AND m.username = $3) AS membro
+                   FROM report_team_assignments rta JOIN reports r ON r.id = rta.report_id
+                   LEFT JOIN squadre s ON s.id = rta.squadra_id
+                  WHERE rta.report_id = $1 AND rta.squadra_id = $2 FOR UPDATE OF rta`, [reportId, teamId, req.user.username])).rows[0];
+            if (!a || !puoVedereEmergenza(req, a.emergency_id)) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Squadra non assegnata a questa segnalazione.' }); }
+            const sala = !ruoliDi(req.user).includes('esterno');
+            if (!a.membro && !sala) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'Lo stato lo cambia chi è nella squadra, o la sala.' }); }
+            const prima = STATI_SQUADRA.indexOf(a.stato), dopo = STATI_SQUADRA.indexOf(stato);
+            if (dopo === prima) { await client.query('ROLLBACK'); return res.status(409).json({ message: `La squadra è già ${ETICHETTA_STATO_SQUADRA[stato]}.`, stato }); }
+            if (dopo < prima && !sala) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Dal campo lo stato va solo avanti: per correggerlo chiedi alla sala.', stato: a.stato }); }
+            await client.query('UPDATE report_team_assignments SET stato = $2, stato_il = $3 WHERE assignment_id = $1', [a.assignment_id, stato, quando]);
+            await client.query(
+                `INSERT INTO stati_squadra (report_id, squadra_id, nome_radio, stato, quando, user_id, autore_nome) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [reportId, teamId, a.nome_radio, stato, quando, req.user.id, nomeUtente(req.user)]);
+            const ora = quando.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+            const nota = `${a.nome_radio || 'Squadra'} ${ETICHETTA_STATO_SQUADRA[stato]}, ${ora}${dopo < prima ? ' (corretto dalla sala)' : ''}`;
+            const voce = (await client.query('INSERT INTO report_updates (report_id, update_text, user_id, update_timestamp, is_system) VALUES ($1, $2, $3, NOW(), true) RETURNING *',
+                [reportId, nota, req.user.id])).rows[0];
+            await client.query('COMMIT');
+            avvisaClienti('reload_reports', { updatedReportId: reportId, daUtente: req.user.id });
+            // Come le altre note di sistema: il diario aperto in sala la mostra senza riaprire la scheda.
+            avvisaClienti('new_report_update', { reportId, update: { ...voce, updater_fullname: nomeUtente(req.user) } });
+            avvisaClienti('reload_squadre', { squadraId: teamId });
+            res.json({ stato, quando, nota });
+        } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            logger.error(`Errore POST /api/reports/${reportId}/teams/${teamId}/stato:`, e);
+            res.status(500).json({ message: 'Errore nel cambiare lo stato della squadra.' });
+        } finally {
+            client.release();
+        }
+    });
+
     app.delete('/api/reports/:id/teams/:teamId', async (req, res) => {
         const { id, teamId } = req.params; const reportId = parseInt(id, 10); const squadraId = parseInt(teamId, 10);
         if (isNaN(reportId) || isNaN(squadraId)) return res.status(400).json({ message: 'ID Report o Team non valido.' });
@@ -1105,6 +1202,8 @@ export function registraRotteSegnalazioni(app) {
                      catch (e) { logger.error("WS Send Error (team_location_update):", e); }
                  }
             });
+            // Una posizione vecchia arrivata col ritorno della rete non è un ingresso di adesso.
+            if (etaSecondi <= 300) controllaZoneSquadra({ emergencyId: activeEmergency?.id, squadraId: teamId, lat, lon });
         } catch (err) {
             logger.error("Errore POST /api/location:", err);
             if (!res.headersSent) {

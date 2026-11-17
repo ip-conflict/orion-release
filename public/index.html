@@ -12,13 +12,13 @@
   <link rel="stylesheet" href="/css/mfa.css">
 </head>
 <body>
-  <div class="login-container">
+  <div class="login-container controllo-sessione">
     <div class="login-box">
       <form id="login-form">
         <img id="login-logo" src="" alt="Logo" style="display: none; max-width: 150px; margin: 0 auto 1rem auto;">
         <h2 id="association-name-display">Accesso</h2>
         <label for="username" class="etichetta-accesso">Nome utente o email</label>
-        <input type="text" id="username" placeholder="per esempio mario.rossi" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        <input type="text" id="username" placeholder="per esempio rossim, o la tua email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
         <p class="non-sei-tu" id="non-sei-tu" hidden>Non sei tu? <a href="#" id="cambia-utente">Scrivi il tuo nome</a></p>
         <label for="password" class="etichetta-accesso">Password</label>
         <input type="password" id="password" autocomplete="current-password" required />
@@ -27,7 +27,7 @@
         <div style="margin-top: 15px;">
             <a href="#" id="show-forgot-password" style="color: var(--link-color); font-size: 0.9em; text-decoration: none;">Hai dimenticato la password?</a>
         </div>
-        <p id="login-message"></p>
+        <p id="login-message" class="messaggio" role="status"></p>
       </form>
 
       <form id="mfa-form" class="mfa" hidden novalidate>
@@ -88,8 +88,7 @@
           <div><label for="pa-nome">Nome</label><input type="text" id="pa-nome" autocomplete="given-name" required /></div>
           <div><label for="pa-cognome">Cognome</label><input type="text" id="pa-cognome" autocomplete="family-name" required /></div>
         </div>
-        <label for="pa-username">Nome utente</label>
-        <input type="text" id="pa-username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="es. mario.rossi" required />
+        <p class="pa-spiega" id="pa-username">Il nome utente si forma come per tutti: cognome e iniziale del nome. Si entra anche con l'email.</p>
         <label for="pa-email">Email <span class="pa-facoltativo">(per recuperare la password)</span></label>
         <input type="email" id="pa-email" autocomplete="email" />
         <label for="pa-password">Password</label>
@@ -100,6 +99,11 @@
         <button class="button-style" type="submit">Crea l'amministratore</button>
         <p id="pa-messaggio" role="alert"></p>
       </form>
+      <div id="primo-accesso-fatto" class="primo-accesso" hidden>
+        <h2>Amministratore creato</h2>
+        <p class="pa-spiega" id="paf-messaggio" role="status"></p>
+        <button class="button-style" type="button" id="paf-entra">Entra</button>
+      </div>
 
       <form id="forgot-password-form" style="display: none;">
         <h2>Password dimenticata</h2>

@@ -30,14 +30,16 @@ async function loadLoginBranding() {
 
 const ULTIMO_UTENTE = 'orion.ultimoUtente';
 
-async function entra(data, username, avviso = '') {
+// conferma: dopo la configurazione iniziale si resta su un riquadro con il messaggio del server
+// finché la persona non preme "Entra", invece di far ricomparire il modulo d'accesso.
+async function entra(data, username, avviso = '', { conferma = false } = {}) {
     const messageDiv = document.getElementById('login-message');
     if (!data || !data.userId || !data.role) {
         console.error("ERRORE CRITICO: La risposta API di login non contiene userId o userRole!", data);
         mostraVista(loginForm);
         if (messageDiv) {
             messageDiv.textContent = 'Errore: Dati utente incompleti ricevuti dal server. Contattare assistenza.';
-            messageDiv.style.color = 'red';
+            messageDiv.className = 'messaggio messaggio-errore';
         }
         abilitaAccesso(true);
         return;
@@ -54,10 +56,19 @@ async function entra(data, username, avviso = '') {
         console.error("Errore durante il salvataggio in localStorage:", storageError);
         avviso = avviso || "Attenzione: impossibile salvare le informazioni utente. Alcune funzionalità potrebbero non essere disponibili.";
     }
+    const destinazioneConfermata = conferma ? paginaChiesta() || await primaPagina(data) : null;
+    if (conferma) {
+        mostraVista(document.getElementById('primo-accesso-fatto'));
+        document.getElementById('paf-messaggio').textContent = avviso || 'Accesso riuscito.';
+        const pulsante = document.getElementById('paf-entra');
+        pulsante.onclick = () => { window.location.href = destinazioneConfermata; };
+        pulsante.focus();
+        return;
+    }
     mostraVista(loginForm);
     if (messageDiv) {
         messageDiv.textContent = avviso || 'Accesso riuscito: apro ORION…';
-        messageDiv.style.color = avviso ? 'var(--warning-color, #b45309)' : 'green';
+        messageDiv.className = avviso ? 'messaggio messaggio-avviso' : 'messaggio messaggio-ok';
     }
     const destinazione = paginaChiesta() || await primaPagina(data);
     const vaiAlCentroOperativo = () => { window.location.href = destinazione; };
@@ -81,7 +92,7 @@ async function primaPagina(data) {
     const ruoli = Array.isArray(data.ruoli) && data.ruoli.length ? data.ruoli : [data.role];
     if (ruoli.includes('admin') || ruoli.includes('esterno')) return '/centro-operativo.html';
     try {
-        const r = await fetch('/api/emergencies/status', { headers: { Authorization: `Bearer ${data.token}` } });
+        const r = await fetch('/api/emergencies/status', { headers: data.token ? { Authorization: `Bearer ${data.token}` } : {}, credentials: 'same-origin' });
         const stato = await r.json();
         if (stato?.active || stato?.emergency) return '/centro-operativo.html';
     } catch { return '/centro-operativo.html'; }
@@ -98,7 +109,7 @@ function abilitaAccesso(si) {
     loginForm.querySelector('button[type=submit]').disabled = !si;
 }
 
-const VISTE = ['login-form', 'forgot-password-form', 'mfa-form', 'mfa-telefono', 'mfa-attiva-form', 'mfa-codici'];
+const VISTE = ['login-form', 'forgot-password-form', 'mfa-form', 'mfa-telefono', 'mfa-attiva-form', 'mfa-codici', 'primo-accesso-fatto'];
 function mostraVista(vista) {
     if (vista?.id !== 'mfa-telefono') fermaAttesaTelefono();
     for (const id of VISTE) {
@@ -129,7 +140,7 @@ function tornaAllAccesso(testo) {
     const messageDiv = document.getElementById('login-message');
     if (messageDiv) {
         messageDiv.textContent = testo || '';
-        messageDiv.style.color = 'red';
+        messageDiv.className = 'messaggio messaggio-errore';
     }
     document.getElementById('password').focus();
 }
@@ -306,7 +317,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             console.warn("Login fallito:", errorMessage);
             if (messageDiv) {
                 messageDiv.textContent = `Accesso non riuscito: ${errorMessage}`;
-                messageDiv.style.color = 'red';
+                messageDiv.className = 'messaggio messaggio-errore';
             }
             abilitaAccesso(true);
         }
@@ -317,11 +328,38 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             messageDiv.textContent = error instanceof TypeError
                 ? 'Il server non si raggiunge: controlla la connessione a internet e riprova.'
                 : error.message;
-            messageDiv.style.color = 'red';
+            messageDiv.className = 'messaggio messaggio-errore';
         }
         abilitaAccesso(true);
     }
 });
+
+// Chi riapre l'indirizzo del sito nella stessa giornata non rifà password e verifica: la sessione
+// del cookie vale ancora. Restano sul modulo solo un errore da leggere o un nome utente proposto.
+(async function sessioneAncoraAperta() {
+    const contenitore = document.querySelector('.login-container');
+    const mostraModulo = () => contenitore?.classList.remove('controllo-sessione');
+    const parametri = new URLSearchParams(location.search);
+    if (parametri.has('error') || parametri.has('utente')) return mostraModulo();
+    const riserva = setTimeout(mostraModulo, 4000);
+    try {
+        const r = await fetch('/api/me/status', { credentials: 'same-origin', signal: AbortSignal.timeout(4000) });
+        if (r.ok) {
+            const dati = await r.json();
+            try {
+                localStorage.setItem('userId', String(dati.userId));
+                localStorage.setItem('userRole', dati.role);
+                localStorage.setItem('userRuoli', JSON.stringify(Array.isArray(dati.ruoli) && dati.ruoli.length ? dati.ruoli : [dati.role]));
+                localStorage.setItem('userPermessi', JSON.stringify(Array.isArray(dati.permessi) ? dati.permessi : []));
+                localStorage.setItem('username', dati.username);
+            } catch { /* le pagine li rileggono dal server */ }
+            window.location.replace(paginaChiesta() || await primaPagina(dati));
+            return;
+        }
+    } catch { /* senza risposta si mostra il modulo */ }
+    clearTimeout(riserva);
+    mostraModulo();
+})();
 
 (function () {
     const errore = new URLSearchParams(location.search).get('error');
@@ -333,7 +371,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     };
     if (testi[errore]) {
         messageDiv.textContent = testi[errore];
-        messageDiv.style.color = 'red';
+        messageDiv.className = 'messaggio messaggio-errore';
     }
 })();
 
@@ -396,14 +434,14 @@ if (forgotForm) {
 
             if (response.ok || response.status === 200) {
                 messageDiv.textContent = data.message;
-                messageDiv.style.color = 'green';
+                messageDiv.className = 'messaggio messaggio-ok';
             } else {
                 messageDiv.textContent = data.message || "Errore durante la richiesta.";
-                messageDiv.style.color = 'red';
+                messageDiv.className = 'messaggio messaggio-errore';
             }
         } catch (error) {
             messageDiv.textContent = "Errore di connessione al server.";
-            messageDiv.style.color = 'red';
+            messageDiv.className = 'messaggio messaggio-errore';
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Invia il link';

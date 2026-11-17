@@ -563,6 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
             $('btn-chiudi-operazione').hidden = false;
             caricaTutto();
             caricaVersione();
+            caricaMemoria();
         }
     }
 
@@ -605,12 +606,126 @@ document.addEventListener('DOMContentLoaded', () => {
         caricaIntegrita();
         caricaCifratura();
         caricaFirebase();
+        caricaVoce();
+        caricaMemoria();
     })();
+
+    const PASSO_MEMORIA_MB = 256;
+    let memoria = null;
+
+    const mbLeggibili = (mb) => mb >= 1024
+        ? `${(mb / 1024).toLocaleString('it-IT', { maximumFractionDigits: 2 })} GB`
+        : `${mb} MB`;
+    // Lo stesso conto della trascrizione: al modello resta la memoria che ORION non sta già usando.
+    const modelliChestanno = (mb) => memoria.modelli.filter(m => m.memoria_mb <= mb - memoria.orion_mb).map(m => m.nome);
+
+    async function caricaMemoria() {
+        try {
+            memoria = await fetchApi('/api/sistema/memoria');
+        } catch {
+            return;
+        }
+        $('pannello-memoria').hidden = false;
+        const box = $('stato-memoria');
+        box.innerHTML = '';
+        $('motivo-memoria').hidden = memoria.disponibile;
+        $('scelta-memoria').hidden = !memoria.disponibile;
+        $('modelli-memoria').hidden = !memoria.disponibile;
+        if (!memoria.disponibile) {
+            $('motivo-memoria').textContent = memoria.motivo;
+            return;
+        }
+        box.append(
+            voceStato('Adesso', mbLeggibili(memoria.attuale_mb)),
+            voceStato('Massimo da qui', mbLeggibili(Math.max(memoria.massimo_mb, memoria.attuale_mb)),
+                memoria.massimo_mb < memoria.attuale_mb ? 'attenzione' : ''),
+            voceStato('Al database', mbLeggibili(memoria.database_mb)));
+
+        const valori = new Set([memoria.attuale_mb]);
+        const fino = Math.max(memoria.massimo_mb, memoria.attuale_mb);
+        for (let mb = Math.ceil(memoria.minimo_mb / PASSO_MEMORIA_MB) * PASSO_MEMORIA_MB; mb <= fino; mb += PASSO_MEMORIA_MB) valori.add(mb);
+        if (memoria.massimo_mb >= memoria.minimo_mb) valori.add(memoria.massimo_mb);
+        const scelta = $('memoria-nuova');
+        scelta.innerHTML = '';
+        [...valori].sort((x, y) => x - y).forEach(mb => {
+            const voce = document.createElement('option');
+            voce.value = String(mb);
+            const modelli = modelliChestanno(mb);
+            voce.textContent = `${mbLeggibili(mb)}${mb === memoria.attuale_mb ? ' (adesso)' : ''}, trascrizione: ${modelli.length ? modelli.join(', ') : 'nessun modello'}`;
+            voce.selected = mb === memoria.attuale_mb;
+            scelta.append(voce);
+        });
+        $('modelli-memoria').textContent = memoria.massimo_mb < memoria.attuale_mb
+            ? 'Adesso ORION ha più memoria di quella che da qui si può dare: si può solo abbassare. Per alzarla serve chi gestisce il server.'
+            : `ORION da solo usa adesso ${mbLeggibili(memoria.orion_mb)}; il resto è per la trascrizione. `
+              + memoria.modelli.map(m => `${m.nome} chiede ${mbLeggibili(m.memoria_mb)}`).join(', ') + '.';
+    }
+
+    $('btn-memoria').addEventListener('click', () => {
+        const mb = Number($('memoria-nuova').value);
+        if (mb === memoria.attuale_mb) return;
+        $('memoria-scelta').textContent = `Da ${mbLeggibili(memoria.attuale_mb)} a ${mbLeggibili(mb)}`;
+        $('password-memoria').value = '';
+        $('errore-memoria').hidden = true;
+        $('modale-memoria').hidden = false;
+    });
+    function chiudiMemoria() { $('modale-memoria').hidden = true; }
+    $('chiudi-modale-memoria').addEventListener('click', chiudiMemoria);
+    $('annulla-memoria').addEventListener('click', chiudiMemoria);
+
+    $('conferma-memoria').addEventListener('click', async (evento) => {
+        const pulsante = evento.currentTarget;
+        pulsante.disabled = true;
+        $('errore-memoria').hidden = true;
+        try {
+            await fetchApi('/api/sistema/memoria', {
+                method: 'POST',
+                body: JSON.stringify({ memoria_mb: Number($('memoria-nuova').value), password: $('password-memoria').value })
+            });
+            chiudiMemoria();
+            seguiOperazione();
+        } catch (e) {
+            $('errore-memoria').textContent = e.message;
+            $('errore-memoria').hidden = false;
+        } finally {
+            pulsante.disabled = false;
+        }
+    });
 
     function esitoFirebase(testo, tipo = '') {
         const esito = $('esito-firebase');
         esito.textContent = testo;
         esito.className = `nota${tipo ? ` ${tipo}` : ''}`;
+    }
+
+    // Sopra un secondo e mezzo in media la voce non sembra più una radio.
+    const RITARDO_VOCE_LENTO_MS = 1500;
+
+    async function caricaVoce() {
+        let v;
+        try {
+            v = await fetchApi('/api/voce/statistiche');
+        } catch {
+            return;
+        }
+        if (!v.attiva && !v.messaggi) return;
+        $('pannello-voce').hidden = false;
+        const box = $('stato-voce');
+        box.innerHTML = '';
+        box.append(voceStato('Modulo', v.attiva ? 'acceso' : 'spento'));
+        if (!v.messaggi) {
+            box.append(voceStato('Messaggi', 'ancora nessuno'));
+        } else {
+            const quale = v.in_corso ? 'nell\'emergenza in corso' : 'nell\'ultima emergenza';
+            box.append(
+                voceStato(`Messaggi ${quale}`, String(v.messaggi)),
+                voceStato('Ritardo medio della voce', v.ritardo_medio_ms == null ? 'non misurato' : `${(v.ritardo_medio_ms / 1000).toFixed(1)} s`,
+                    v.ritardo_medio_ms > RITARDO_VOCE_LENTO_MS ? 'attenzione' : ''),
+                voceStato('Nove messaggi su dieci entro', v.ritardo_p90_ms == null ? 'non misurato' : `${(v.ritardo_p90_ms / 1000).toFixed(1)} s`),
+                voceStato('Arrivati in differita', String(v.in_differita), v.in_differita > v.messaggi / 5 ? 'attenzione' : ''),
+                voceStato('Interrotti', String(v.interrotti)));
+        }
+        if (v.in_corso) box.append(voceStato('Collegati adesso', `${v.collegati.telefoni} telefoni, ${v.collegati.postazioni} postazioni`));
     }
 
     async function caricaFirebase() {

@@ -18,6 +18,7 @@ import path from 'path';
 import { inviaFile, proteggiCaricati } from './cifratura.js';
 import { FORMATI, MB_MASSIMI, TIPO_DA_ESTENSIONE, contenutoValido } from './documenti.js';
 import { RADICE_DATI } from './percorsi.js';
+import { leggiConfigSegreteria } from './configSegreteria.js';
 
 const LIMITE = { titolo: 150, descrizione: 4000, luogo: 200, nota: 300, motivo: 300, scenario: 4000, enti: 500 };
 const NATURE = ['generica', 'addestramento', 'esercitazione'];
@@ -677,7 +678,7 @@ export function registraRotteAttivita(app) {
             ]);
             const imp = Object.fromEntries(impostazioni.rows.map(r => [r.setting_key, r.setting_value]));
             let segreteria = false;
-            try { segreteria = JSON.parse(imp.segreteria_config || '{}').enabled === true; } catch { /* spenta */ }
+            segreteria = leggiConfigSegreteria(imp.segreteria_config).enabled === true;
             const magazzino = String(imp.magazzino_enabled) === 'true';
             const vedeSegreteria = segreteria && haPermesso(req, 'volontari.sanitario');
             const vedeMagazzino = magazzino && haPermesso(req, 'magazzino.gestione');

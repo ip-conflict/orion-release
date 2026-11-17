@@ -108,7 +108,7 @@ try {
     await chiama(`/api/admin/users/${persona}/toggle-status`, { method: 'PATCH', token: admin });
     verifica('sospesa la persona, non vale più', (await chiama('/api/avvisi/notifiche', { avvisi: terzo })).stato === 401);
     await chiama(`/api/admin/users/${persona}/toggle-status`, { method: 'PATCH', token: admin });
-    verifica('riattivata, torna a valere', (await chiama('/api/avvisi/notifiche', { avvisi: terzo })).stato === 200);
+    verifica('riattivata, il vecchio non torna: il telefono si registra di nuovo', (await chiama('/api/avvisi/notifiche', { avvisi: terzo })).stato === 401);
 } finally {
     connessioni.forEach(w => w.close());
     if (squadra) await chiama(`/api/squadre/${squadra}`, { method: 'DELETE', token: admin });

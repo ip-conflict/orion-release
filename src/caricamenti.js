@@ -19,16 +19,23 @@ if (!fs.existsSync(certDir)) {
 }
 
 
+// L'estensione del file salvato non la sceglie chi carica (potrebbe mettere .html o .svg e
+// farselo servire come pagina): si ricava dal tipo dichiarato, con un elenco chiuso. Il
+// contenuto vero lo controllano poi le funzioni verify*; qui basta un nome innocuo.
+const ESTENSIONE_PER_TIPO = {
+    'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
+    'application/pdf': '.pdf'
+};
+export const estensioneSicura = (mimetype) => ESTENSIONE_PER_TIPO[mimetype] || '.bin';
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, certDir); 
+        cb(null, certDir);
     },
     filename: function (req, file, cb) {
-        const targetUserId = req.params.userId || req.params.id; 
+        const targetUserId = req.params.userId || req.params.id;
         const randomString = crypto.randomBytes(8).toString('hex');
-        const ext = path.extname(file.originalname).toLowerCase();
-        
-        cb(null, `cert-${targetUserId}-${randomString}${ext}`);
+        cb(null, `cert-${targetUserId}-${randomString}${estensioneSicura(file.mimetype)}`);
     }
 });
 
@@ -59,7 +66,7 @@ export const uploadDocumentoMagazzino = multer({
         destination: (req, file, cb) => cb(null, magazzinoDir),
         filename: (req, file, cb) => {
             const bene = parseInt(req.params.id, 10) || 0;
-            cb(null, `bene-${bene}-${crypto.randomBytes(8).toString('hex')}${path.extname(file.originalname).toLowerCase()}`);
+            cb(null, `bene-${bene}-${crypto.randomBytes(8).toString('hex')}${estensioneSicura(file.mimetype)}`);
         }
     }),
     fileFilter,
@@ -105,7 +112,7 @@ const photoStorage = multer.diskStorage({
         cb(null, dir);
     },
     filename: (req, file, cb) => {
-        cb(null, `user_${crypto.randomBytes(24).toString('hex')}${path.extname(file.originalname).toLowerCase()}`);
+        cb(null, `user_${crypto.randomBytes(24).toString('hex')}${estensioneSicura(file.mimetype)}`);
     }
 });
 
@@ -123,9 +130,8 @@ if (!fs.existsSync(protectedImagesDir)) fs.mkdirSync(protectedImagesDir, { recur
 
 const storageUpload = multer.diskStorage({ 
     destination: (req, file, cb) => cb(null, protectedImagesDir), 
-    filename: (req, file, cb) => { 
-        const ext = path.extname(file.originalname); 
-        cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`); 
+    filename: (req, file, cb) => {
+        cb(null, `${crypto.randomBytes(16).toString('hex')}${estensioneSicura(file.mimetype)}`);
     } 
 });
 const imageFileFilter = (req, file, cb) => {
@@ -159,22 +165,24 @@ const imageFileFilter = (req, file, cb) => {
   if (!fs.existsSync(excelImportTmpDir)) fs.mkdirSync(excelImportTmpDir, { recursive: true });
   export const uploadExcelMulter = multer({ dest: excelImportTmpDir, fileFilter: excelFileFilter });
 
+// Il tipo dichiarato dal browser non conta: decide l'estensione, e il contenuto deve corrispondere
+// (null: testo, in cui file-type non deve riconoscere niente).
+const FORMATI_DOCUMENTI_SALA = {
+    '.pdf': ['application/pdf'],
+    '.doc': ['application/x-cfb'], '.xls': ['application/x-cfb'],
+    '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
+    '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'],
+    '.csv': null, '.txt': null
+};
+const estensioneDocumentoSala = (nome) => {
+    const estensione = path.extname(String(nome || '')).toLowerCase();
+    return Object.hasOwn(FORMATI_DOCUMENTI_SALA, estensione) ? estensione : null;
+};
+
 const documentFileFilter = (req, file, cb) => {
-    const allowedTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-        'text/csv',
-        'text/plain'
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(null, false);
-        req.fileValidationError = 'Tipo file non valido! Sono permessi solo PDF, Word, Excel, CSV, TXT.';
-    }
+    if (estensioneDocumentoSala(file.originalname)) return cb(null, true);
+    cb(null, false);
+    req.fileValidationError = 'Tipo file non valido! Sono permessi solo PDF, Word, Excel, CSV, TXT.';
 };
 
 export const protectedDocsDir = path.join(RADICE_DATI, 'protected_uploads', 'documents');
@@ -183,8 +191,7 @@ if (!fs.existsSync(protectedDocsDir)) fs.mkdirSync(protectedDocsDir, { recursive
 const storageDocs = multer.diskStorage({
     destination: (req, file, cb) => cb(null, protectedDocsDir),
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
+        cb(null, `${crypto.randomBytes(16).toString('hex')}${estensioneDocumentoSala(file.originalname)}`);
     }
 });
 
@@ -278,18 +285,10 @@ export async function verifyMultipleUploadedImages(req, res, allowedMimeTypes) {
 // CSV e TXT, che non hanno firma, passano solo se non somigliano a un formato binario noto.
 export async function verifyDocumentUpload(req, res) {
     if (!req.file) return true;
-    const allowedBinaryTypes = [
-        'application/pdf',
-        'application/x-cfb', // formato legacy OLE/CFB: .doc e .xls "classici"
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-        'application/zip' // alcuni pacchetti OOXML vengono rilevati come zip generico
-    ];
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    const detected = await detectRealFileType(req.file.path);
-    const isPlainTextExt = ext === '.csv' || ext === '.txt';
-    const valid = isPlainTextExt ? !detected : (detected && allowedBinaryTypes.includes(detected.mime));
-    if (!valid) {
+    const attesi = FORMATI_DOCUMENTI_SALA[estensioneDocumentoSala(req.file.originalname)];
+    const trovato = await detectRealFileType(req.file.path);
+    const valido = attesi === undefined ? false : attesi === null ? !trovato : !!trovato && attesi.includes(trovato.mime);
+    if (!valido) {
         cleanupRejectedFiles([req.file]);
         res.status(400).json({ message: 'Il contenuto del file non corrisponde a un documento valido tra quelli consentiti.' });
         return false;

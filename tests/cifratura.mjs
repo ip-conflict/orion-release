@@ -17,6 +17,8 @@ import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const RADICE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Nei container i dati stanno fuori dal codice: il server li cerca in ORION_DATI_DIR, e così la prova.
+const DATI = process.env.ORION_DATI_DIR ? path.resolve(process.env.ORION_DATI_DIR) : RADICE;
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const PASSWORD = process.env.ORION_ADMIN_PASSWORD;
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
@@ -38,6 +40,14 @@ const cifrato = (percorso) => fs.readFileSync(percorso).subarray(0, 8).toString(
 
 console.log('\nCifratura');
 
+// I certificati medici si caricano solo con la Segreteria accesa: la prova la accende e alla fine la rimette com'era.
+const segreteriaPrima = (await api('/api/branding/settings/full')).corpo?.segreteria_config ?? null;
+let segreteria = {};
+try { segreteria = JSON.parse(segreteriaPrima || '{}'); } catch { /* guasta: si riparte da vuota */ }
+if (segreteria.enabled !== true) {
+    await api('/api/branding/settings', { method: 'PUT', body: { segreteria_config: JSON.stringify({ ...segreteria, enabled: true }) } });
+}
+
 let stato = (await api('/api/sistema/cifratura')).corpo;
 verifica('la cifratura è attiva', stato?.stato === 'pronta', stato);
 
@@ -54,7 +64,7 @@ modulo.append('document', new Blob([pdf], { type: 'application/pdf' }), 'certifi
 const caricato = await api(`/api/admin/users/${accesso.userId}/medical-records`, { method: 'POST', body: modulo });
 const visita = (await pool.query('SELECT id, document_url FROM user_medical_records WHERE user_id = $1 ORDER BY id DESC LIMIT 1', [accesso.userId])).rows[0];
 const nomeFile = path.basename(visita?.document_url || '');
-const suDisco = path.join(RADICE, 'protected_uploads', 'certificates', nomeFile);
+const suDisco = path.join(DATI, 'protected_uploads', 'certificates', nomeFile);
 verifica('il certificato sul disco è cifrato', caricato.stato < 300 && fs.existsSync(suDisco) && cifrato(suDisco) && !fs.readFileSync(suDisco).includes('certificato di prova'), { stato: caricato.stato, nomeFile });
 const scaricato = await api(visita.document_url);
 verifica('e si riscarica identico', scaricato.stato === 200 && Buffer.compare(scaricato.corpo, pdf) === 0, { stato: scaricato.stato, lunghezza: scaricato.corpo?.length });
@@ -63,7 +73,7 @@ await api(`/api/admin/medical-records/${visita.id}`, { method: 'DELETE' });
 const fatto = await api('/api/sistema/backup', { method: 'POST' });
 const elenco = (await api('/api/sistema/backup')).corpo.backup;
 const backup = elenco.find(b => b.cartella === 'app');
-const cartella = process.env.ORION_BACKUP_DIR || path.join(process.env.ORION_DATI_DIR || RADICE, 'backup', 'auto');
+const cartella = process.env.ORION_BACKUP_DIR || path.join(DATI, 'backup', 'auto');
 const fileBackup = path.join(cartella, backup.nome);
 verifica('il backup è cifrato', fatto.stato === 200 && cifrato(fileBackup), backup);
 let v = (await api(`/api/sistema/backup/app/${backup.nome}/verifica`, { method: 'POST' })).corpo;
@@ -98,6 +108,11 @@ const invariata = (await pool.query("SELECT setting_value FROM branding_settings
 verifica('salvare con il campo vuoto la lascia com\'è', invariata === nelDb);
 if (prima === null) await pool.query("DELETE FROM branding_settings WHERE setting_key = 'smtp_pass'");
 else await pool.query("UPDATE branding_settings SET setting_value = $1 WHERE setting_key = 'smtp_pass'", [prima]);
+
+if (segreteria.enabled !== true) {
+    if (segreteriaPrima === null) await pool.query("DELETE FROM branding_settings WHERE setting_key = 'segreteria_config'");
+    else await api('/api/branding/settings', { method: 'PUT', body: { segreteria_config: segreteriaPrima } });
+}
 
 await pool.end();
 console.log(`\nCifratura: ${falliti === 0 ? 'tutto a posto' : `${falliti} falliti`}`);

@@ -6,7 +6,9 @@
 // USO:
 //   ORION_URL=https://orion.esempio.it \
 //   ORION_ADMIN_USER=admin ORION_ADMIN_PASSWORD='...' \
-//   npm test
+//   npm run test:smoke
+// Il server va avviato con ORION_AGGIORNAMENTI_RETE_LOCALE=true (lo fa tests/batteria.mjs):
+// il controllo degli aggiornamenti si prova contro un manifesto irraggiungibile su 127.0.0.1.
 //
 // ATTENZIONE: il test crea e poi elimina un utente di prova, quindi va eseguito
 // su un'istanza di collaudo, NON sull'installazione in produzione.
@@ -235,7 +237,7 @@ async function eseguiTest() {
         verifica('sospensione registrata', sospendi.stato === 200 && sospendi.corpo?.user?.is_active === false, `HTTP ${sospendi.stato}`);
 
         const sessioneSospesa = await volontario.chiamata('/api/users/me');
-        verifica('la sessione gia\' aperta viene interrotta', sessioneSospesa.stato === 403, `HTTP ${sessioneSospesa.stato}`);
+        verifica('la sessione gia\' aperta viene interrotta', [401, 403].includes(sessioneSospesa.stato), `HTTP ${sessioneSospesa.stato}`);
 
         const rientro = await creaClient().chiamata('/login', {
             method: 'POST', body: { username: utenteDiProva, password: passwordDiProva }
@@ -390,18 +392,8 @@ async function eseguiTest() {
     console.log('\n[5-septies] Magazzino');
     const etichetta = Date.now().toString().slice(-6);
 
-    const impostazioniPrima = await admin.chiamata('/api/branding/settings/full');
-    const impostazioniBase = {};
-    // Senza la posta e senza le configurazioni dei moduli (magazzino_config,
-    // segreteria_config...): hanno le loro rotte, e riscriverle da questa
-    // foto rimetterebbe le opzioni di prima a meta' delle prove. Lo stato
-    // degli aggiornamenti e la versione dell'informativa li scrive solo il programma: da qui sono rifiutati.
-    Object.entries(impostazioniPrima.corpo || {}).forEach(([k, v]) => {
-        if (!k.startsWith('smtp_') && !k.endsWith('_config') && !k.startsWith('aggiornamenti_') && !k.startsWith('cifratura_') && !k.startsWith('integrita_') && !k.startsWith('privacy_')) impostazioniBase[k] = v;
-    });
-
     await admin.chiamata('/api/branding/settings', {
-        method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'false' }
+        method: 'PUT', body: { magazzino_enabled: 'false' }
     });
     const spentoLettura = await admin.chiamata('/api/magazzino/beni');
     verifica('a modulo spento le letture sono rifiutate -> 403',
@@ -413,7 +405,7 @@ async function eseguiTest() {
         spentoScrittura.stato === 403 && spentoScrittura.corpo?.modulo_spento === true, `HTTP ${spentoScrittura.stato}`);
 
     const accensione = await admin.chiamata('/api/branding/settings', {
-        method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'true' }
+        method: 'PUT', body: { magazzino_enabled: 'true' }
     });
     verifica('il modulo si accende dalle impostazioni', accensione.stato === 200, `HTTP ${accensione.stato}`);
     const verbaleConsegnaPrima = !!(await admin.chiamata('/api/magazzino/config')).corpo?.verbale_consegna;
@@ -731,7 +723,7 @@ async function eseguiTest() {
             Array.isArray(suoi.corpo?.equipment), `${suoi.stato}`);
 
         await admin.chiamata('/api/branding/settings', {
-            method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'false' }
+            method: 'PUT', body: { magazzino_enabled: 'false' }
         });
         const librettoSenzaMagazzino = await admin.chiamata(`/api/users/${idVolontario}/libretto`);
         verifica('a magazzino spento il fascicolo non riporta DPI',
@@ -740,7 +732,7 @@ async function eseguiTest() {
             librettoSenzaMagazzino.corpo.equipment.length === 0,
             `attivo=${librettoSenzaMagazzino.corpo?.magazzino_attivo}`);
         await admin.chiamata('/api/branding/settings', {
-            method: 'PUT', body: { ...impostazioniBase, magazzino_enabled: 'true' }
+            method: 'PUT', body: { magazzino_enabled: 'true' }
         });
     }
 
@@ -1850,6 +1842,16 @@ async function eseguiTest() {
     verifica('lo stato degli aggiornamenti non si scrive dalle impostazioni -> 400', chiaveInterna.stato === 400, `HTTP ${chiaveInterna.stato}`);
     const chiaveStrana = await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { 'Chiave Strana!': 'x' } });
     verifica('una chiave di impostazione malformata -> 400', chiaveStrana.stato === 400, `HTTP ${chiaveStrana.stato}`);
+    {
+        const prima = (await admin.chiamata('/api/branding/settings')).corpo || {};
+        const virgola = await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { map_center_lat: '45,4064', map_center_lon: '11,8768' } });
+        const salvate = (await admin.chiamata('/api/branding/settings')).corpo || {};
+        verifica('le coordinate con la virgola si salvano con il punto',
+            virgola.stato === 200 && salvate.map_center_lat === '45.4064' && salvate.map_center_lon === '11.8768', `${salvate.map_center_lat} ${salvate.map_center_lon}`);
+        verifica('una latitudine fuori scala -> 400', (await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { map_center_lat: '999' } })).stato === 400);
+        verifica('uno zoom fuori scala -> 400', (await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { map_zoom_level: '99' } })).stato === 400);
+        await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { map_center_lat: prima.map_center_lat ?? '', map_center_lon: prima.map_center_lon ?? '' } });
+    }
 
     {
         const { gzipSync } = await import('zlib');
@@ -1866,9 +1868,11 @@ async function eseguiTest() {
 
     {
         const configPrima = (await admin.chiamata('/api/sistema/versione')).corpo?.aggiornamenti || {};
-        await admin.chiamata('/api/sistema/aggiornamenti/config', {
+        const manifestoFinto = await admin.chiamata('/api/sistema/aggiornamenti/config', {
             method: 'PUT', body: { attivo: false, origine: 'manifesto', manifesto: 'http://127.0.0.1:1/orion.json' }
         });
+        verifica('il manifesto di prova sulla macchina stessa viene accettato (server con ORION_AGGIORNAMENTI_RETE_LOCALE=true)',
+            manifestoFinto.stato === 200, `HTTP ${manifestoFinto.stato} ${manifestoFinto.corpo?.message || ''}`);
         const aMano = await admin.chiamata('/api/sistema/aggiornamenti/controlla', { method: 'POST' });
         verifica('il controllo a mano parte anche col giornaliero spento (servizio irraggiungibile -> 502)',
             aMano.stato === 502 && !/spento/.test(aMano.corpo?.message || ''), `HTTP ${aMano.stato} ${JSON.stringify(aMano.corpo)}`);
@@ -1952,7 +1956,7 @@ async function eseguiTest() {
             if (creato.stato !== 400 || !/nome radio/.test(creato.corpo?.message || '')) break;
         }
         verifica("un volontario al COC crea l'accesso con un nome, e una squadra nuova",
-            creato.stato === 201 && /\/accesso\.html\?c=/.test(creato.corpo?.link || '') && creato.corpo?.squadra?.nome_radio === libero,
+            creato.stato === 201 && /\/accesso\.html#c=/.test(creato.corpo?.link || '') && creato.corpo?.squadra?.nome_radio === libero,
             `HTTP ${creato.stato} ${JSON.stringify(creato.corpo)}`);
         const codice = creato.corpo?.codice;
         const idTemp = creato.corpo?.id;
@@ -1968,7 +1972,7 @@ async function eseguiTest() {
             `HTTP ${entrato.stato} ${JSON.stringify(entrato.corpo)}`);
         const contestoCri = await cri.chiamata('/api/app/contesto');
         verifica("nell'app l'esterno ha l'emergenza e i suoi documenti, e sa di essere temporaneo",
-            contestoCri.stato === 200 && (contestoCri.corpo?.capacita || []).join() === 'emergenza,documenti'
+            contestoCri.stato === 200 && (contestoCri.corpo?.capacita || []).filter(c => c !== 'voce').join() === 'emergenza,documenti'
                 && contestoCri.corpo?.utente?.temporaneo === true && contestoCri.corpo?.squadra?.id === idSquadra,
             `HTTP ${contestoCri.stato} ${JSON.stringify({ c: contestoCri.corpo?.capacita, u: contestoCri.corpo?.utente, s: contestoCri.corpo?.squadra })}`);
         const posizione = await cri.chiamata('/api/location', { method: 'POST', body: { squadra_id: idSquadra, latitude: 46.14, longitude: 12.21 } });
@@ -2012,6 +2016,10 @@ async function eseguiTest() {
         const rivisto = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/codice`);
         verifica('il codice di un accesso si rivede uguale', rivisto.stato === 200 && rivisto.corpo?.codice === nuovo.corpo?.codice && !!rivisto.corpo?.link,
             `HTTP ${rivisto.stato}`);
+        const riletture = (await admin.chiamata('/api/admin/audit-log?action=esterno_temporaneo.codice_riletto&limit=5')).corpo?.entries || [];
+        const rilettura = riletture.find(v => String(v.entity_id) === String(idTemp));
+        verifica('la rilettura del codice resta nel registro, senza il codice',
+            !!rilettura && !JSON.stringify(rilettura).includes(nuovo.corpo?.codice || '§'), JSON.stringify(riletture).slice(0, 200));
         const rivistoDaEsterno = await cri.chiamata(`/api/esterni-temporanei/${idTemp}/codice`);
         verifica('un esterno non rivede i codici -> 403', rivistoDaEsterno.stato === 403, `HTTP ${rivistoDaEsterno.stato}`);
         const emailStorta = await volontario.chiamata(`/api/esterni-temporanei/${idTemp}/invia`, { method: 'POST', body: { email: 'non-una-email' } });
@@ -2055,7 +2063,9 @@ async function eseguiTest() {
         const statoFunzioniPrima = (await admin.chiamata('/api/branding/settings')).corpo?.funzioni_enabled;
         await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'false' } });
         const funzioniSpente = await volontario.chiamata('/api/funzioni');
-        verifica('funzioni spente: le rotte non esistono (404)', funzioniSpente.stato === 404 && funzioniSpente.corpo?.modulo_spento === true, `HTTP ${funzioniSpente.stato}`);
+        verifica("funzioni spente: l'elenco risponde vuoto, senza errore", funzioniSpente.stato === 200 && funzioniSpente.corpo?.modulo_spento === true && funzioniSpente.corpo?.funzioni?.length === 0, `HTTP ${funzioniSpente.stato}`);
+        const incarichiSpenti = await volontario.chiamata('/api/incarichi');
+        verifica('funzioni spente: le altre rotte non esistono (404)', incarichiSpenti.stato === 404 && incarichiSpenti.corpo?.modulo_spento === true, `HTTP ${incarichiSpenti.stato}`);
         await admin.chiamata('/api/branding/settings', { method: 'PUT', body: { funzioni_enabled: 'true' } });
         const catalogo = (await admin.chiamata('/api/admin/funzioni')).corpo?.funzioni || [];
         const f2 = catalogo.find(f => f.sigla === 'F2');

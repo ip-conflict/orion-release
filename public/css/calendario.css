@@ -69,7 +69,7 @@
 .giorno.fuori-mese { background: var(--secondary-bg-color); }
 .giorno.fuori-mese .numero-giorno { opacity: 0.45; }
 .numero-giorno { font-size: 0.8rem; font-weight: 600; padding: 2px 4px; align-self: flex-end; }
-.giorno.oggi .numero-giorno { background: var(--primary-color); color: #fff; border-radius: 10px; min-width: 22px; text-align: center; }
+.giorno.oggi .numero-giorno { background: var(--primary-color); color: var(--button-text); border-radius: 10px; min-width: 22px; text-align: center; }
 
 .voce {
     display: block;

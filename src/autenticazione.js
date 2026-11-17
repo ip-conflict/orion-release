@@ -2,11 +2,13 @@ import './config.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import logger from './logger.js';
+import { mandaPaginaNegata } from './paginaNegata.js';
 import { verifyJwtToken } from './authHelper.js';
 import { pool } from './db.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { esenteDaPresaVisione, versioneInformativa } from './statoInformativa.js';
 import { ORDINE_RUOLI, haPermesso, mfaRichiesta, permessiDi } from './permessi.js';
+import { leggiConfigSegreteria } from './configSegreteria.js';
 
 // Revoca, account attivo e ruoli si rileggono a ogni richiesta: sospensioni e ruoli
 // tolti valgono subito.
@@ -145,11 +147,12 @@ export function ruoliDi(utente) {
 export const COSTO_BCRYPT = 12;
 
 // jwtid rende unici due accessi nello stesso secondo, che altrimenti si chiuderebbero a vicenda.
-export function emettiSessione(res, utente, ruoli, { mfa = false } = {}) {
+// via: 'rinnovo' segna le sessioni nate dall'impronta, che non possono crearne un'altra (sessioni.js).
+export function emettiSessione(res, utente, ruoli, { mfa = false, via = null } = {}) {
     const ruoliUtente = (ruoli && ruoli.length > 0) ? ruoli : [utente.role];
     const principale = ruoloPrincipale(ruoliUtente);
     // ems: l'emissione al millisecondo (iat conta i secondi), per tokenSuperato.
-    const token = jwt.sign({ id: utente.id, role: principale, ruoli: ruoliUtente, username: utente.username, ems: Date.now(), mfa: mfa === true },
+    const token = jwt.sign({ id: utente.id, role: principale, ruoli: ruoliUtente, username: utente.username, ems: Date.now(), mfa: mfa === true, ...(via ? { via } : {}) },
         process.env.JWT_SECRET, { expiresIn: '1d', algorithm: 'HS256', jwtid: crypto.randomUUID() });
     res.cookie('__Secure-token', token, {
         httpOnly: true,
@@ -160,8 +163,15 @@ export function emettiSessione(res, utente, ruoli, { mfa = false } = {}) {
         path: '/'
     });
     segnaAccesso(utente.id, true);
-    res.cookie('username', utente.username, { httpOnly: false, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
+    // Le pagine non lo leggono (usano localStorage): nessuno script deve poterlo vedere.
+    res.cookie('username', utente.username, { httpOnly: true, secure: true, sameSite: 'strict', path: '/' });
     return { token, principale, ruoliUtente };
+}
+
+// Un registro e non un import: tempoReale.js importa già da qui, e l'import inverso farebbe un giro.
+const allaChiusuraDelleSessioni = [];
+export function quandoSiChiudonoLeSessioni(funzione) {
+    allaChiusuraDelleSessioni.push(funzione);
 }
 
 // L'ora è quella di questo processo, lo stesso orologio che firma i token, non quella del database.
@@ -170,6 +180,13 @@ export async function chiudiSessioni(userId, esecutore = pool) {
         [userId, Date.now()]);
     await esecutore.query('DELETE FROM token_rinnovo WHERE user_id = $1', [userId]);
     await esecutore.query('DELETE FROM token_avvisi WHERE user_id = $1', [userId]);
+    for (const funzione of allaChiusuraDelleSessioni) {
+        try {
+            await funzione(userId);
+        } catch (e) {
+            logger.error(`Chiusura delle sessioni di ${userId}: un passo non è riuscito:`, e);
+        }
+    }
 }
 
 // Senza ems si usa iat, in secondi: nel dubbio il token cade.
@@ -262,8 +279,7 @@ export function checkAdminRole(req, res, next) {
         if (req.originalUrl.startsWith('/api')) {
             res.status(403).json({ message: 'Accesso negato: Permessi di amministratore richiesti.' });
         } else {
-
-            res.status(403).send('<h1>Accesso Negato</h1><p>Permessi di amministratore richiesti.</p><p><a href="/centro-operativo.html">Torna al Centro Operativo</a></p>');
+            mandaPaginaNegata(res, 'Questa pagina è riservata agli amministratori.');
         }
     }
 }
@@ -275,8 +291,7 @@ export async function checkSegreteriaAccess(req, res, next) {
         const confRes = await pool.query("SELECT setting_value FROM branding_settings WHERE setting_key = 'segreteria_config'");
         let isEnabled = false;
         if (confRes.rowCount > 0 && confRes.rows[0].setting_value) {
-            const config = typeof confRes.rows[0].setting_value === 'string' ? JSON.parse(confRes.rows[0].setting_value) : confRes.rows[0].setting_value;
-            isEnabled = config.enabled === true;
+            isEnabled = leggiConfigSegreteria(confRes.rows[0].setting_value).enabled === true;
         }
 
         if (!isEnabled) {

@@ -24,6 +24,7 @@ const CATEGORIA_DEL_TIPO = {
     chiamata: 'emergenza',
     imprevisto: 'emergenza',
     regia_telefona: 'emergenza',
+    avviso_sala: 'emergenza',
     allerta_meteo: 'personale',
     dpi_da_confermare: 'personale',
     scadenza: 'personale',
@@ -171,17 +172,22 @@ export function registraRotteApp(app, ctx) {
 
     // L'app mostra solo questo, ma decidono le rotte. L'emergenza la vede solo chi è in
     // squadra; gli esterni sempre, anche in attesa di squadra.
-    function capacita(req, moduli, inSquadra, inSala = false, regia = false) {
+    // emergenza.sala e squadre: anche al coordinatore e all'amministratore, che possono essere fuori sala.
+    function capacita(req, moduli, inSquadra, inSala = false, regia = false, inCoc = false) {
         const esterno = ruoliDi(req.user).includes('esterno');
         const elenco = [];
-        if (inSala) elenco.push('emergenza.sala');
+        const apre = !esterno && haPermesso(req, 'emergenze.apertura');
+        if (inSala || (apre && emergenzaAttiva())) elenco.push('emergenza.sala');
+        if (!esterno && (apre || inCoc)) elenco.push('squadre');
         if (regia) elenco.push('regia');
         if (esterno) {
             elenco.push('emergenza');
+            if (moduli.voce && emergenzaAttiva() && inSquadra) elenco.push('voce');
             if (emergenzaAttiva()) elenco.push('documenti');
         } else {
             elenco.push('io', 'documenti');
             if (inSquadra) elenco.push('emergenza');
+            if (moduli.voce && emergenzaAttiva() && (inSquadra || haPermesso(req, 'emergenze.apertura'))) elenco.push('voce');
             if (moduli.attivita) elenco.push('calendario');
             if (moduli.magazzino && haPermesso(req, 'magazzino.consegne')) elenco.push('magazzino.consegna');
             if (moduli.magazzino && haPermesso(req, 'magazzino.gestione')) elenco.push('magazzino.inventario');
@@ -205,7 +211,7 @@ export function registraRotteApp(app, ctx) {
 
     app.get('/api/app/contesto', async (req, res) => {
         try {
-            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica, funzioniAcceso, attivitaAcceso] = await Promise.all([
+            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica, funzioniAcceso, attivitaAcceso, voceAccesa] = await Promise.all([
                 impostazione('magazzino_enabled'),
                 impostazione('segreteria_config'),
                 impostazione('association_name'),
@@ -219,7 +225,8 @@ export function registraRotteApp(app, ctx) {
                 impostazione('badge_qr_enabled'),
                 pool.query('SELECT temporaneo, ente FROM users WHERE id = $1', [req.user.id]),
                 impostazione('funzioni_enabled'),
-                impostazione('attivita_enabled')
+                impostazione('attivita_enabled'),
+                impostazione('voce_enabled')
             ]);
 
             const moduli = {
@@ -227,7 +234,8 @@ export function registraRotteApp(app, ctx) {
                 segreteria: configSegreteria?.enabled === true,
 
                 tesserini_qr: String(qrTesserini) !== 'false',
-                attivita: String(attivitaAcceso ?? 'true') !== 'false'
+                attivita: String(attivitaAcceso ?? 'true') !== 'false',
+                voce: String(voceAccesa) === 'true'
             };
             const configMagazzino = moduli.magazzino ? await leggiConfigMagazzino() : null;
             const emergenza = emergenzaAttiva();
@@ -270,7 +278,7 @@ export function registraRotteApp(app, ctx) {
                     ente: anagrafica.rows[0]?.ente || null
                 },
                 moduli,
-                capacita: capacita(req, moduli, squadra.rowCount > 0, squadra.rows[0]?.coc === true && !!emergenza, regia),
+                capacita: capacita(req, moduli, squadra.rowCount > 0, squadra.rows[0]?.coc === true && !!emergenza, regia, squadra.rows[0]?.coc === true),
                 magazzino: configMagazzino ? {
                     conferma_dpi: !!configMagazzino.conferma_dpi,
                     verbale_consegna: !!configMagazzino.verbale_consegna,

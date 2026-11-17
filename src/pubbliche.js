@@ -1,4 +1,5 @@
-import { accessoRiuscito, attesaPerAccount, erroreAccesso, messaggioAttesa } from './tentativiAccesso.js';
+import { accessoRiuscito, attesaLinkRecupero, erroreAccesso, iniziaAccesso, linkRecuperoMandato, messaggioAttesa } from './tentativiAccesso.js';
+import { registraAudit } from './audit.js';
 import { controllaPassword } from './password.js';
 import { idoneitaFisica } from './esitiVisite.js';
 import bcrypt from 'bcrypt';
@@ -15,7 +16,7 @@ import { pool } from './db.js';
 import { sendEmailUtility } from './email.js';
 import { registraAccessoTemporaneo } from './esterniTemporanei.js';
 import { mfaObbligatoria, passoDopoLaPassword, registraRotteMfaPubbliche } from './mfa.js';
-import { apiLimiter, limitePerRete, passwordLimiter } from './middleware/rateLimiters.js';
+import { apiLimiter, chiaveIndirizzo, limitePerRete, passwordLimiter, recuperoLimiter } from './middleware/rateLimiters.js';
 import { activeEmergency } from './statoEmergenza.js';
 import { body, validationResult } from 'express-validator';
 import { fileURLToPath } from 'url';
@@ -26,6 +27,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Con l'impronta il telefono tiene questo token, non la password; il server ne conserva
 // solo l'impronta SHA-256.
 export const GIORNI_RINNOVO = 90;
+// Un token usato ogni giorno si allungherebbe per sempre: dopo questo tempo dall'accesso con la password si rifà.
+export const GIORNI_MASSIMI_RINNOVO = 180;
 export const MAX_RINNOVI_PER_PERSONA = 5;
 export const impronta = (valore) => crypto.createHash('sha256').update(String(valore)).digest('hex');
 
@@ -66,12 +69,23 @@ const IMPOSTAZIONI_PUBBLICHE = [
     'association_name', 'map_center_lat', 'map_center_lon', 'map_zoom_level',
     'minuti_attesa_critica', 'magazzino_enabled', 'card_district_label',
     'card_regional_entity_name', 'badge_qr_always_on', 'badge_qr_enabled', 'badge_cf_barcode', 'badge_modello', 'app_android_enabled',
-    'segreteria_config', 'funzioni_enabled', 'attivita_enabled'
+    'segreteria_config', 'funzioni_enabled', 'attivita_enabled', 'voce_enabled', 'voce_tasto', 'drone_enabled'
 ];
 const CAMPI_SEGRETERIA_PUBBLICI = ['enabled', 'block_on_medical', 'block_on_course'];
 
 // Senza accesso: chi installa l'app non ha ancora una sessione.
 export const CARTELLA_APK = path.join(RADICE_DATI, 'app-android');
+
+// Tanti errori da molte reti vogliono dire che qualcuno prova le password di questa persona.
+function avvisaMoltiTentativi(req, user) {
+    logger.warn(`[Login] Molti tentativi sbagliati da più reti sull'account ${user.username}: pausa per l'account intero.`);
+    registraAudit({ ip: req.ip, user: { id: user.id, username: user.username } }, 'accesso.molti_tentativi', { tipo: 'utente', id: user.id });
+    pool.query('SELECT email, nome FROM users WHERE id = $1', [user.id]).then(({ rows: [u] }) => {
+        if (!u?.email) return;
+        return sendEmailUtility(u.email, 'ORION: molti tentativi di accesso al tuo account',
+            `Ciao ${u.nome || user.username},\n\nnell'ultima ora qualcuno ha provato molte volte ad accedere a ORION con il tuo nome utente, sbagliando la password.\nSe non eri tu, non serve fare niente per ora: l'accesso resta protetto. Se però hai il dubbio che la tua password sia nota ad altri, cambiala dal profilo e avvisa un amministratore.`);
+    }).catch(e => logger.warn(`[Login] Avviso dei molti tentativi non mandato a ${user.username}: ${e.message}`));
+}
 
 export function registraRottePubbliche(app) {
     app.get('/', (req, res) => { res.sendFile(path.join(__dirname, '..', 'public', 'index.html')); });
@@ -111,27 +125,36 @@ export function registraRottePubbliche(app) {
     app.post('/login', passwordLimiter, [ body('username').notEmpty(), body('password').notEmpty() ], async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-        let { username, password } = req.body;
-        username = String(username).toLowerCase();
-        const attesa = attesaPerAccount(username);
-        if (attesa) {
-            res.set('Retry-After', String(attesa));
-            return res.status(429).json({ message: messaggioAttesa(attesa), attesa });
-        }
+        const identificativo = String(req.body.username).trim().toLowerCase();
+        const { password } = req.body;
+        let fineTentativo = () => {};
         try {
+          // Si entra con lo username o con l'email. Una stessa email scritta in due account
+          // (maiuscole diverse) non apre nessuno dei due.
           const result = await pool.query(
             `SELECT u.id, u.username, u.password, u.role, COALESCE(u.is_active, true) AS is_active,
                 u.temporaneo, u.mfa_attiva,
                 ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli
-         FROM users u WHERE u.username = $1`,
-            [username]
+         FROM users u WHERE u.username = $1 OR ($1 LIKE '%@%' AND lower(u.email) = $1)`,
+            [identificativo]
           );
-          const user = result.rows[0];
+          const perUsername = result.rows.find(u => u.username === identificativo);
+          const user = perUsername || (result.rows.length === 1 ? result.rows[0] : undefined);
+          // I tentativi si contano sull'account, non su come lo si scrive: con username ed email
+          // non si raddoppiano.
+          const username = user?.username || identificativo;
+          const rete = chiaveIndirizzo(req.ip);
+          const tentativo = iniziaAccesso(username, rete);
+          if (tentativo.attesa) {
+            res.set('Retry-After', String(tentativo.attesa));
+            return res.status(429).json({ message: messaggioAttesa(tentativo.attesa), attesa: tentativo.attesa });
+          }
+          fineTentativo = tentativo.fine;
           const dummyHash = '$2b$12$invalidhashforcomparisonpurposesonly123456789';
           const hashToCompare = user?.password || dummyHash;
           const isValid = await bcrypt.compare(password, hashToCompare);
             
-          if (user && isValid) accessoRiuscito(username);
+          if (user && isValid) accessoRiuscito(username, rete);
           if (user && isValid && !user.is_active) {
             logger.warn(`[Login] Accesso rifiutato a ${user.username}: account sospeso.`);
             return res.status(403).json({ message: 'Il tuo account è sospeso. Contatta la segreteria.' });
@@ -149,9 +172,10 @@ export function registraRottePubbliche(app) {
             const passo = await passoDopoLaPassword({ ...user, ruoli: user.ruoli?.length ? user.ruoli : [user.role] });
             if (passo) return res.status(401).json(passo);
             const { token, principale, ruoliUtente } = emettiSessione(res, user, user.ruoli);
-            return res.json({ message: 'Login effettuato con successo', userId: user.id, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(user.id, ruoliUtente), token: token });
+            return res.json({ message: 'Login effettuato con successo', userId: user.id, username: user.username, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(user.id, ruoliUtente), token: token });
           } else {
-            const pausa = erroreAccesso(username);
+            const { attesa: pausa, sogliaSuperata } = erroreAccesso(username, rete);
+            if (sogliaSuperata && user) avvisaMoltiTentativi(req, user);
             if (pausa) {
               logger.warn(`[Login] Troppi errori per l'account "${username.slice(0, 50)}": pausa di ${pausa} secondi.`);
               res.set('Retry-After', String(pausa));
@@ -159,7 +183,12 @@ export function registraRottePubbliche(app) {
             }
             return res.status(401).json({ message: 'Credenziali non valide' });
           }
-        } catch (err) { logger.error('Errore durante il login:', err); return res.status(500).json({ message: 'Errore interno del server' }); }
+        } catch (err) {
+          logger.error('Errore durante il login:', err);
+          return res.status(500).json({ message: 'Errore interno del server' });
+        } finally {
+          fineTentativo();
+        }
     });
 
     registraRotteMfaPubbliche(app);
@@ -179,9 +208,10 @@ export function registraRottePubbliche(app) {
                 SET usato_il = NOW(), scade_il = NOW() + ($2::int * INTERVAL '1 day')
               FROM users u
              WHERE t.impronta = $1 AND t.scade_il > NOW() AND u.id = t.user_id
+               AND t.creato_il > NOW() - ($3::int * INTERVAL '1 day')
          RETURNING u.id, u.username, u.role, COALESCE(u.is_active, true) AS attivo, u.mfa_attiva, t.mfa AS rinnovo_mfa,
                    ARRAY(SELECT ruolo::text FROM utenti_ruoli WHERE user_id = u.id) AS ruoli`,
-                [impronta(rinnovo), GIORNI_RINNOVO]);
+                [impronta(rinnovo), GIORNI_RINNOVO, GIORNI_MASSIMI_RINNOVO]);
             const utente = r.rows[0];
             // Un solo messaggio per inesistente, scaduto e revocato.
             if (!utente) return res.status(401).json({ message: "Accesso con l'impronta non piu' valido: accedi con la password.", rinnovo_non_valido: true });
@@ -197,7 +227,7 @@ export function registraRottePubbliche(app) {
                 await pool.query('DELETE FROM token_rinnovo WHERE impronta = $1', [impronta(rinnovo)]);
                 return res.status(401).json({ message: 'Serve la verifica in due passaggi: accedi con la password.', rinnovo_non_valido: true });
             }
-            const { token, principale, ruoliUtente } = emettiSessione(res, utente, utente.ruoli, { mfa: utente.rinnovo_mfa });
+            const { token, principale, ruoliUtente } = emettiSessione(res, utente, utente.ruoli, { mfa: utente.rinnovo_mfa, via: 'rinnovo' });
             res.json({ message: 'Accesso effettuato', userId: utente.id, username: utente.username, role: principale, ruoli: ruoliUtente, permessi: await permessiDellaPersona(utente.id, ruoliUtente), token });
         } catch (error) {
             logger.error('Errore accesso con token di rinnovo:', error);
@@ -210,20 +240,14 @@ export function registraRottePubbliche(app) {
 
         if (!token || !newPassword || !id) return res.status(400).json({ message: 'Dati mancanti o link non valido.' });
 
+        // Un solo messaggio: distinguere "utente non trovato", "scaduto" e "non valido" direbbe quali id esistono.
+        const linkNonValido = () => res.status(400).json({ message: 'Il link non è valido o è scaduto: chiedine uno nuovo.' });
+        if (!Number.isInteger(Number(id)) || typeof token !== 'string') return linkNonValido();
         try {
-            const result = await pool.query('SELECT username, nome, cognome, email, reset_token, reset_token_expires FROM users WHERE id = $1', [id]);
-            if (result.rowCount === 0) return res.status(400).json({ message: 'Utente non trovato.' });
-
+            const result = await pool.query('SELECT username, nome, cognome, email, reset_token, reset_token_expires FROM users WHERE id = $1', [Number(id)]);
             const user = result.rows[0];
-            
-
-            if (!user.reset_token || !user.reset_token_expires || new Date() > new Date(user.reset_token_expires)) {
-                return res.status(400).json({ message: 'Il link di ripristino è scaduto o è già stato utilizzato.' });
-            }
-
-
-            const isValid = await bcrypt.compare(token, user.reset_token);
-            if (!isValid) return res.status(400).json({ message: 'Token non valido.' });
+            if (!user?.reset_token || !user.reset_token_expires || new Date() > new Date(user.reset_token_expires)) return linkNonValido();
+            if (!(await bcrypt.compare(token, user.reset_token))) return linkNonValido();
 
 
             const problemaPassword = controllaPassword(newPassword, user);
@@ -244,56 +268,52 @@ export function registraRottePubbliche(app) {
         }
     });
 
-    app.post('/api/auth/forgot-password', apiLimiter, async (req, res) => {
+    // La stessa risposta, e subito, in ogni caso: con la posta che impiega un secondo e mezzo il
+    // tempo di risposta diceva se l'account esiste. Il lavoro vero si fa dopo aver risposto.
+    app.post('/api/auth/forgot-password', apiLimiter, recuperoLimiter, (req, res) => {
         const { identificativo } = req.body;
         if (!identificativo) return res.status(400).json({ message: 'Inserisci username o email.' });
-
-        // La stessa risposta in ogni caso: non deve rivelare chi è registrato.
-        const genericResponse = { message: 'Se l\'account esiste ed ha un\'email associata, riceverai un link di ripristino.' };
-
-        try {
-            const result = await pool.query('SELECT id, username, email FROM users WHERE username = $1 OR email = $1', [String(identificativo).toLowerCase()]);
-
-            if (result.rowCount === 0) {
-                return res.status(200).json(genericResponse);
-            }
-
-            const user = result.rows[0];
-            if (!user.email) {
-                logger.warn(`[Forgot password] Richiesta per l'utente ${user.username} che non ha un'email associata.`);
-                return res.status(200).json(genericResponse);
-            }
-
-
-            const resetToken = crypto.randomBytes(32).toString('hex');
-            const tokenHash = await bcrypt.hash(resetToken, 10);
-            const expireDate = new Date(Date.now() + 3600000);
-
-
-            await pool.query(
-                'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
-                [tokenHash, expireDate, user.id]
-            );
-
-
-            const resetLink = `https://${domainName}/reset-password.html?token=${resetToken}&id=${user.id}`;
-
-            const emailResult = await sendEmailUtility(
-                user.email,
-                "Recupero Password ORION",
-                `Hai richiesto il ripristino della password.\nClicca sul seguente link per impostare una nuova password (valido per 1 ora): \n\n${resetLink}`
-            );
-
-            if (!emailResult.success) {
-                logger.error(`[Forgot password] Invio email fallito per l'utente ${user.username}: ${emailResult.error}`);
-            }
-            res.status(200).json(genericResponse);
-
-        } catch (error) {
-            logger.error('Errore forgot password:', error);
-            res.status(500).json({ message: 'Errore interno del server.' });
-        }
+        res.status(200).json({ message: 'Se l\'account esiste ed ha un\'email associata, riceverai un link di ripristino. Se non arriva, guarda nella posta indesiderata: se ne possono chiedere al massimo tre all\'ora.' });
+        mandaLinkDiRecupero(String(identificativo).toLowerCase()).catch(e => logger.error('Errore forgot password:', e));
     });
+
+    async function mandaLinkDiRecupero(identificativo) {
+        const result = await pool.query(
+            `SELECT id, username, email, password IS NULL AND reset_token_expires > NOW() AS attivazione_valida
+               FROM users WHERE username = $1 OR lower(email) = $1`, [identificativo]);
+        const user = result.rows[0];
+        if (!user) return;
+        if (!user.email) {
+            logger.warn(`[Forgot password] Richiesta per l'utente ${user.username} che non ha un'email associata.`);
+            return;
+        }
+        // Il link nuovo prenderebbe il posto di quello d'attivazione, magari stampato col QR: chiunque sappia
+        // il nome utente potrebbe renderlo inutile.
+        if (user.attivazione_valida) {
+            logger.warn(`[Forgot password] ${user.username} non ha ancora attivato l'account e il link di attivazione vale ancora: non lo sostituisco.`);
+            return;
+        }
+        const attesa = attesaLinkRecupero(user.id);
+        if (attesa) {
+            logger.warn(`[Forgot password] Troppi link chiesti per l'utente ${user.username}: il prossimo fra ${Math.ceil(attesa / 60)} minuti.`);
+            return;
+        }
+        linkRecuperoMandato(user.id);
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = await bcrypt.hash(resetToken, 10);
+        await pool.query('UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
+            [tokenHash, new Date(Date.now() + 3600000), user.id]);
+        const resetLink = `https://${domainName}/reset-password.html?token=${resetToken}&id=${user.id}`;
+        const emailResult = await sendEmailUtility(
+            user.email,
+            "Recupero Password ORION",
+            `Hai richiesto il ripristino della password.\nClicca sul seguente link per impostare una nuova password (valido per 1 ora): \n\n${resetLink}`
+        );
+        if (!emailResult.success) {
+            logger.error(`[Forgot password] Invio email fallito per l'utente ${user.username}: ${emailResult.error}`);
+        }
+    }
 
     app.get('/api/public/volunteer/:token', apiLimiter, async (req, res) => {
         const token = req.params.token;

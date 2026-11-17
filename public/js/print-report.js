@@ -144,7 +144,7 @@ async function generatePrintPage() {
             updates.forEach(update => {
                 const li = document.createElement('li');
                 const p = document.createElement('p');
-                p.textContent = update.update_text || ''; 
+                p.textContent = (update.update_text || '') + (update.voce_trascrizione ? ` «${update.voce_trascrizione}» (trascrizione automatica)` : '');
                 const updaterName = update.updater_fullname || 'Sistema/Sconosciuto';
                 const updateDate = new Date(update.update_timestamp).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
                 const small = document.createElement('small');

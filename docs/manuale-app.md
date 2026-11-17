@@ -41,7 +41,14 @@ Dopo cinque password sbagliate di fila l'account si ferma per qualche minuto,
 e il messaggio dice quanto aspettare.
 
 Chi non è dell'associazione e ha ricevuto un QR dal centro operativo usa
-**Accedi con un QR** e lo inquadra.
+**Accedi con un QR** e lo inquadra. Chi ha già ORION con la propria
+associazione non deve uscire: in fondo alla home tocca **Entra in un altro
+ORION** e inquadra il QR (oppure lo inquadra con la fotocamera del telefono e
+tocca «Apri nell'app»). L'app chiede conferma ed entra come esterno; il
+proprio ORION resta in pausa (i suoi avvisi non arrivano finché non si torna)
+e la home lo ricorda con **Torna al tuo ORION**. Quando l'emergenza dell'altro
+centro operativo si chiude, o l'accesso viene revocato, l'app torna da sola
+nel proprio ORION, con l'impronta e le azioni rimaste in coda come prima.
 
 Poi l'app chiede i permessi, uno alla volta: le **notifiche** (per sapere quando
 si viene chiamati o mandati su un intervento), la **fotocamera** (foto e
@@ -85,12 +92,22 @@ il codice; sotto, il riquadro dell'intervento della propria squadra, con
 
 ![L'intervento](immagini/app/04-intervento.png)
 
-La schermata dell'intervento dice tutto quello che serve sul posto: priorità e
-stato, l'indirizzo con **Naviga** (apre il navigatore), chi ha chiamato con
-**Chiama**, la descrizione, i rischi e il diario. **Scatta** e **Galleria**
-aggiungono foto; **Sposta qui** corregge il punto sulla mappa con la posizione
-del telefono. In fondo si scrive nel diario. Note e foto partono anche senza
-rete: restano in coda e arrivano appena torna il campo.
+La schermata dell'intervento dice tutto quello che serve sul posto: priorità,
+stato e tipo (allagamento, albero, frana...), l'indirizzo con **Naviga** (apre
+il navigatore), chi ha chiamato con **Chiama**, la descrizione, i rischi e il
+diario. **Scatta** e **Galleria** aggiungono foto; **Sposta qui** corregge il
+punto sulla mappa con la posizione del telefono. In fondo si scrive nel
+diario. Note e foto partono anche senza rete: restano in coda e arrivano
+appena torna il campo.
+
+Sotto l'indirizzo ci sono quattro pulsanti grandi: **Partiti**, **Sul posto**,
+**Concluso**, **Rientrati**. È acceso solo il passo successivo, così un tocco
+per sbaglio non salta avanti; quelli già fatti hanno la spunta. La sala vede
+subito a che punto è la squadra, e nel diario compare "Alfa sul posto, 14:32".
+Senza rete il tocco va in coda come le note, il pulsante mostra la clessidra e
+quando torna il campo arriva con l'ora in cui lo si è toccato, non con quella
+dell'arrivo. "Concluso" vuol dire che la squadra ha finito: la segnalazione la
+chiude la sala.
 
 ![In attesa di un intervento](immagini/app/05-in-attesa.png)
 
@@ -102,10 +119,50 @@ Se c'è un caposquadra la manda il suo telefono; se tace per qualche minuto
 subentra quello di un altro membro. Smette da sola uscendo dalla squadra o alla
 chiusura dell'emergenza.
 
+![L'avviso prima di aprire il navigatore](immagini/app/35-avviso-percorso.png)
+
+**Strade chiuse e zone interdette.** Il navigatore del telefono non sa quali
+strade ha chiuso la sala. Per questo **Naviga**, prima di aprirlo, controlla
+se la strada più diretta passa da una strada chiusa o da una zona interdetta:
+se sì lo dice, e si parte sapendo dove cambiare strada. Il controllo si fa
+solo se sulla mappa dell'emergenza c'è almeno una strada chiusa o una zona
+interdetta, e chiede il percorso allo stesso servizio che usa la mappa della
+sala (OSRM), con le sole coordinate di partenza e di arrivo. Senza rete o
+senza la posizione del telefono lo dice e apre il navigatore.
+
+Durante il viaggio, mentre la posizione è condivisa, il telefono avvisa da sé:
+con una vibrazione e una frase detta a voce quando ci si avvicina (cento metri
+da una zona interdetta, ottanta da una strada chiusa che si ha davanti), con un
+allarme che suona anche col telefono in silenzioso quando si entra in una zona
+interdetta. La sala riceve lo stesso avviso. Se nella zona c'è l'intervento
+della squadra entrarci è il lavoro previsto: l'avviso è calmo, senza allarme,
+e non si avvisa avvicinandosi. Lo stesso per una strada chiusa su cui si trova
+l'intervento. Le zone restano sul telefono, così gli avvisi arrivano anche
+dove manca la rete. Le notifiche hanno due voci nelle impostazioni del
+telefono, "Strade chiuse e zone vicine" e "Ingresso in zona interdetta": si
+possono silenziare, ma in emergenza conviene di no.
+
 ![La sala dal telefono](immagini/app/19-sala.png)
 
-**Chi è in sala** (squadra COC) vede dal telefono tutte le segnalazioni aperte,
-le apre, legge il diario e scrive note: utile al coordinatore che va sul campo.
+**Chi è in sala** (squadra COC) e chi apre le emergenze (coordinatore e
+amministratore, anche fuori dalla sala: nella schermata principale c'è la voce
+**Sala operativa**) vede dal telefono tutte le segnalazioni aperte, le apre,
+legge il diario e scrive note. In cima tre numeri: le aperte, quelle da
+assegnare e quelle senza squadra da più dei minuti critici della sala. Sotto
+l'elenco ci sono le squadre con il loro impegno e lo stato (partita, sul
+posto...); toccando una squadra impegnata si apre la sua segnalazione. Le
+squadre che vengono da fuori hanno davanti la sigla della loro qualifica
+("VVF Bravo", "PL Charlie").
+
+**Squadre.** Il coordinatore, l'amministratore e chi è nella squadra COC
+trovano fra gli strumenti la voce **Squadre**, con un'emergenza aperta e anche
+fuori. Toccando una squadra se ne vedono i membri: **Capo** nomina il
+caposquadra, **Togli** fa uscire una persona, e sotto si cerca per nome fra chi
+è senza squadra e si tocca **Aggiungi**. **Sciogli la squadra** si può solo
+quando è libera dall'intervento. **Nuova squadra** chiede il nome radio, fra
+quelli liberi, e una descrizione facoltativa. Senza rete le squadre si vedono
+come all'ultima lettura ma i comandi sono spenti: cambiare le squadre senza
+che la sala lo veda farebbe confusione.
 
 ![Le mie attività](immagini/app/20-mie-attivita.png)
 
@@ -114,6 +171,77 @@ incarico dice perché è stato dato e dove: **Prendo in carico**, **Nota** (scri
 nel diario con la sigla della funzione) e **Concludi** con l'esito. Qui serve la
 rete.
 
+
+### Orion Voice
+
+![Orion Voice](immagini/app/30-voce.png)
+
+Se l'associazione ha acceso Orion Voice, durante un'emergenza chi è in squadra
+parla con la squadra e con la sala tenendo premuto **PARLA**, come con la
+radio. In fondo a ogni schermata compare una barra con il canale, chi sta
+parlando e un PARLA piccolo; toccando il nome del canale si apre la schermata
+di Orion Voice, con i messaggi del canale. Un tocco su un messaggio lo riascolta,
+tenendolo premuto lo riascolta più veloce. Se l'associazione ha acceso la
+trascrizione, sotto ogni messaggio compare anche il testo, tra virgolette: è
+automatico e può sbagliare, l'audio resta da ascoltare. La casella in cima
+cerca nei testi e nei nomi. I messaggi stanno nell'ordine in cui sono stati
+detti, anche quelli registrati senza rete e arrivati dopo. Anche i propri si
+riascoltano con un tocco, e dicono a che punto sono: in invio, consegnato,
+sentito dalla sala, ricevuto da chi ha confermato. Tutti sentono il canale **Generale** e gli avvisi della sala: i
+loro messaggi compaiono fra quelli della squadra, con il nome del canale. Il
+caposquadra sul Generale può anche parlare, scegliendolo sopra il tasto.
+
+![Mentre si parla](immagini/app/31-voce-parla.png)
+
+Si tiene premuto PARLA, si aspetta il bip e si parla; lasciando, il messaggio
+parte e un doppio bip dice che è arrivato. Se il canale è occupato si sente un
+tono basso e il tasto dice chi sta parlando. Trascinando il dito in su il
+microfono resta aperto senza tenere premuto (un tocco poi invia); trascinandolo
+fuori dal tasto il messaggio si annulla. Un messaggio dura al massimo un
+minuto: negli ultimi dieci secondi il tasto conta alla rovescia. Chi preferisce
+può scegliere nelle impostazioni **Tocca e ritocca**: il primo tocco apre, il
+secondo invia.
+
+![Senza rete](immagini/app/32-voce-senza-rete.png)
+
+Senza rete il tasto diventa arancione e dice **REGISTRA, partirà dopo**: il
+messaggio si registra lo stesso e parte da solo appena torna il campo, con
+l'ora in cui è stato detto. Ne restano in attesa al massimo cinque. Se la cosa
+è urgente, senza rete si usa la radio.
+
+![La barra di Orion Voice](immagini/app/33-barra-voce.png)
+
+I messaggi arrivano anche a schermo spento e ad app chiusa, finché nelle
+notifiche c'è "Orion Voice". Una voce alla volta: se ne arrivano due, la
+seconda aspetta la fine della prima, e i messaggi della sala con priorità alta
+passano davanti. La voce normale si sente al volume dei contenuti
+multimediali, quella urgente al volume della sveglia. Durante una telefonata i
+messaggi aspettano e partono alla fine. Quelli arrivati mentre il telefono era
+senza rete si ascoltano con **Ascolta** in cima alla schermata.
+
+![PARLA a telefono bloccato](immagini/app/34-voce-telefono-bloccato.png)
+
+Dalla notifica, **Apri Orion Voice** apre il tasto anche a telefono bloccato, senza
+sbloccarlo: si vedono solo il canale e chi parla. Sui telefoni da lavoro con il
+tasto laterale per parlare basta quello; il tasto dell'auricolare si accende
+nelle impostazioni di Orion Voice (l'ingranaggio), dove si sceglie anche il
+microfono dell'auricolare Bluetooth, la **sensibilità del microfono** (se in
+sala si sente piano: Alta o Massima) e il volume. La prima volta l'app chiede il
+microfono, propone di far suonare i messaggi urgenti anche con "Non
+disturbare" e fa fare una **Prova voce**: si parla e ci si riascolta come ci
+sentono gli altri. Dopo un riavvio del telefono Orion Voice riparte quando si apre
+ORION. Se la stessa persona entra da un altro telefono Orion Voice passa lì, e su
+questo compare **Riprendi qui**.
+
+**Il pulsante PTT Bluetooth**, quello che si aggancia al giubbotto, si collega
+prima al telefono dalle impostazioni Bluetooth di Android. Poi, nelle
+impostazioni di Orion Voice, si tocca **Impara** e si preme il pulsante: da lì
+in avanti, tenendolo premuto si parla come con PARLA. Il volume e i tasti del
+telefono non si possono scegliere, perché si premono per sbaglio in tasca. Con
+l'app aperta funziona subito; per usarlo anche a telefono bloccato o con ORION
+chiusa si attiva "Orion Voice, pulsante PTT" fra i servizi di accessibilità di
+Android (il tasto per arrivarci è nelle stesse impostazioni): legge soltanto i
+tasti e lascia passare tutti quelli che non sono il pulsante.
 
 ## 4. La chiamata della sala
 
@@ -185,7 +313,11 @@ Download.
 
 Da I miei dati si apre **Il mio profilo**: la foto del tesserino (scattata o
 dalla galleria, da inquadrare nell'ovale), i dati anagrafici, la password, il
-fascicolo in PDF e gli avvisi sul telefono. Cambiando la password gli altri
+fascicolo in PDF e gli avvisi sul telefono. Chi apre le emergenze trova anche
+**Avvisami delle novità della sala**: acceso, con un'emergenza aperta arriva
+una notifica per una segnalazione ad alta priorità, per una segnalazione
+rimasta senza squadra troppo a lungo e per una squadra entrata in una zona
+interdetta, anche quando non si è in sala. Cambiando la password gli altri
 dispositivi devono rientrare. **Conferma gli accessi** collega questo telefono
 alla verifica in due passaggi, o lo scollega, chiedendo la password.
 
@@ -229,7 +361,31 @@ sul telefono e si apre anche senza rete: sono i documenti "sempre con me" e i
 libretti del materiale che si ha in carico.
 
 
-## 9. Il magazzino
+## 9. La mappa
+
+![La mappa con il radar della pioggia](immagini/app/36-mappa.png)
+
+**Mappa**, dalla schermata principale, mostra il territorio con quello che la
+sala ha disegnato: strade chiuse e zone interdette, zone di pericolo, aree del
+piano (attesa, accoglienza, ammassamento). Le segnalazioni e le squadre non ci
+sono: per l'intervento della propria squadra c'è la sua schermata. Toccando
+una zona o una strada si leggono nome, livello e note. Il punto blu è il
+telefono, se ha il permesso della posizione; il pulsante col mirino ci porta
+la mappa. Dalla schermata dell'intervento, "Vedile tutte sulla mappa" apre la
+stessa mappa.
+
+![I livelli della mappa](immagini/app/37-mappa-livelli.png)
+
+Il pulsante in alto a destra sceglie il fondo (strade o satellite, e la
+cartografia del territorio se l'associazione l'ha caricata sul server) e cosa
+mostrare: i tre gruppi di zone, il radar della pioggia e i fulmini, come nella
+mappa della sala. Il radar ha in basso l'ora dell'immagine e ▶ per far
+scorrere l'ultima ora. Quando la sala cambia qualcosa la mappa si aggiorna da
+sola. Senza rete si apre lo stesso, con le zone dell'ultima volta e le
+tessere già viste; il radar e il satellite servono la rete.
+
+
+## 10. Il magazzino
 
 ![Il magazzino](immagini/app/21-magazzino.png)
 
@@ -281,7 +437,7 @@ verbali, giorni prima di segnalare il materiale fuori, categorie, ubicazioni e
 i propri avvisi via email. La stampa delle etichette resta sul web.
 
 
-## 10. Iscrivere un volontario
+## 11. Iscrivere un volontario
 
 Chi gestisce l'anagrafica trova nella schermata principale **Iscrivi un
 volontario**: nome, cognome ed email facoltativa. L'app mostra un QR da far
@@ -290,7 +446,7 @@ come nel primo accesso. Il link vale sette giorni; se c'è l'email parte anche
 lì. I ruoli diversi da volontario si danno dal web.
 
 
-## 11. La segreteria
+## 12. La segreteria
 
 ![La segreteria](immagini/app/27-segreteria.png)
 
@@ -306,7 +462,7 @@ cataloghi e tesserini restano sul web. Senza rete la segreteria non si apre:
 sono dati sanitari e sul telefono non si tengono.
 
 
-## 12. Gli aggiornamenti
+## 13. Gli aggiornamenti
 
 Quando l'associazione mette sul server una versione nuova, l'app se ne
 accorge la prima volta che la si apre (o, se resta chiusa, entro un giorno),
@@ -319,7 +475,7 @@ poi le volte successive non chiede più niente. Dati e accesso restano. L'app
 installa solo un file firmato con la stessa chiave e più recente.
 
 
-## 13. Quando qualcosa non va
+## 14. Quando qualcosa non va
 
 | Cosa succede | Cosa fare |
 |---|---|

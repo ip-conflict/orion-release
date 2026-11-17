@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+quandoPronto(() => {
     const $ = (id) => document.getElementById(id);
     const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
     const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -194,7 +194,10 @@ document.addEventListener('DOMContentLoaded', () => {
             titoloPassati.textContent = quantiPassati === 1 ? 'Un giorno già passato' : `${quantiPassati} giorni già passati`;
             agenda.prepend(passati);
         }
-        if (!agenda.children.length) agenda.appendChild(el('p', 'nota', 'Niente in calendario questo mese.'));
+        if (!agenda.children.length) {
+            agenda.appendChild(paginaVuota('Niente in calendario questo mese. Esercitazioni, servizi e riunioni compaiono qui con le convocazioni.',
+                dati?.organizza ? { etichetta: 'Organizza un\'attività', suClick: () => apriForm() } : null));
+        }
         else if (agenda.children.length === 1 && quantiPassati) agenda.appendChild(el('p', 'nota', 'Da oggi alla fine del mese non c\'è niente in calendario.'));
         agenda.hidden = false;
     }

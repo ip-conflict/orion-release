@@ -163,3 +163,33 @@
 :root[data-theme="light"] {
     color-scheme: light;
 }
+
+/* Chi usa la tastiera deve vedere dove si trova. */
+:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+
+/* I campi scrivibili hanno il fondo dei campi; il grigio resta a quelli spenti o di sola lettura.
+   !important perché molte pagine scrivono il fondo nello stile in linea. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(:disabled):not([readonly]),
+select:not(:disabled),
+textarea:not(:disabled):not([readonly]) {
+    background-color: var(--form-input-bg) !important;
+    color: var(--text-color);
+}
+input:disabled, select:disabled, textarea:disabled, input[readonly], textarea[readonly] {
+    background-color: var(--secondary-bg-color) !important;
+    color: var(--text-muted);
+}
+
+.pagina-vuota { padding: 22px 18px; text-align: center; color: var(--text-muted); }
+.pagina-vuota p { margin: 0 0 12px; line-height: 1.5; }
+.pagina-vuota .button-style { display: inline-block; width: auto; text-decoration: none; }
+
+/* Avvisi, errori e conferme: fondo tenue, bordo a sinistra, testo scuro (contrasto almeno 4,5 a 1). */
+.messaggio { margin: 12px 0 0; padding: 10px 14px; border-radius: 8px; border-left: 4px solid var(--border-color); background: var(--secondary-bg-color); color: var(--text-color); font-size: 0.95rem; line-height: 1.45; text-align: left; }
+.messaggio:empty { display: none; }
+.messaggio-avviso { background: var(--warning-soft-bg); border-left-color: var(--warning-color); color: var(--warning-text); }
+.messaggio-errore { background: var(--danger-soft-bg); border-left-color: var(--danger-color); color: var(--danger-text); }
+.messaggio-ok { background: var(--success-soft-bg); border-left-color: var(--success-color); color: var(--success-text); }
+.messaggio-info { background: var(--info-soft-bg); border-left-color: var(--info-text); color: var(--info-text); }
+
+.bollino-qualifica { display: inline-flex; align-items: center; padding: 0 6px; border-radius: 999px; border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--anello-ente, #0B233F); font-family: Arial, Helvetica, sans-serif; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em; line-height: 1.45; margin-right: 6px; white-space: nowrap; vertical-align: middle; }

@@ -43,3 +43,7 @@
     background: var(--form-input-bg, var(--bg-color, #fff)); color: var(--text-color, #212529); font-size: 1em;
 }
 .mfa-scheda input.mfa-codice { max-width: 14rem; }
+.dispositivi-titolo { font-size: 1em; margin: 1rem 0 0.3rem; }
+.mfa-telefoni li .dispositivo-quando { display: block; font-size: 0.85em; color: var(--text-muted, #6c757d); }
+.riga-avvisi-sala { display: flex; gap: 10px; align-items: flex-start; line-height: 1.45; cursor: pointer; }
+.riga-avvisi-sala input { margin-top: 4px; }

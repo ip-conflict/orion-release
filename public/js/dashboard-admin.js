@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+quandoPronto(() => {
     console.log("Pagina Dashboard Admin caricata.");
 
     const settingsForm = document.getElementById('settings-form');
@@ -19,6 +19,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const smtpSecureInput = document.getElementById('smtp-secure');
     const smtpUserInput = document.getElementById('smtp-user');
     const smtpPassInput = document.getElementById('smtp-pass');
+
+    // Le porte le sceglie il server (attiva-drone.sh), non questa pagina: qui si vedono per aprirle sul router.
+    function mostraPorteDrone(stato) {
+        const blocco = document.getElementById('drone-porte-blocco');
+        const campo = document.getElementById('drone-max-dirette');
+        if (!blocco || !campo || !stato?.porte) return;
+        campo.value = stato.max_dirette;
+        campo.dataset.caricato = 'si';
+        const quanti = () => parseInt(campo.value, 10) || 3;
+        const scrivi = () => {
+            document.getElementById('drone-porte').textContent = stato.configurato
+                ? `Porte da aprire in ingresso verso questo server, le stesse per tutti i droni: ${stato.porte.rtmp}/TCP (RTMP, dal drone) e ${stato.porte.webrtc}/UDP (WebRTC, verso la sala). Banda in ingresso da prevedere: circa ${quanti() * 4} Mbit/s con ${quanti()} droni in onda; oltre il massimo il drone in più viene respinto e la sala lo vede nel pannello.`
+                : 'Le porte le assegna attiva-drone.sh quando si installa MediaMTX su questo server.';
+        };
+        campo.addEventListener('input', scrivi);
+        scrivi();
+        blocco.hidden = false;
+    }
+    const maxDroneCaricato = () => document.getElementById('drone-max-dirette')?.dataset.caricato === 'si';
 
     const enableSegBtn = document.getElementById('enable-segreteria');
     const constraintsDiv = document.getElementById('segreteria-constraints');
@@ -162,6 +181,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (enableFunzioniBtn) enableFunzioniBtn.checked = String(settings.funzioni_enabled) === 'true';
                     const enableAttivitaBtn = document.getElementById('enable-attivita');
                     if (enableAttivitaBtn) enableAttivitaBtn.checked = String(settings.attivita_enabled) !== 'false';
+                    const enableVoceBtn = document.getElementById('enable-voce');
+                    if (enableVoceBtn) enableVoceBtn.checked = String(settings.voce_enabled) === 'true';
+                    const enableDroneBtn = document.getElementById('enable-drone');
+                    if (enableDroneBtn) enableDroneBtn.checked = String(settings.drone_enabled) === 'true';
+                    fetchApi('/api/drone/stato').then(d => {
+                        mostraPorteDrone(d);
+                        const nota = document.getElementById('drone-configurazione');
+                        if (!nota || d?.configurato) return;
+                        nota.textContent = 'MediaMTX non è configurato su questo server: anche acceso, il drone non funziona finché non lo si installa.';
+                        nota.className = 'messaggio messaggio-avviso';
+                        nota.hidden = false;
+                    }).catch(() => {});
+                    const tastoVoce = document.getElementById('voce-tasto');
+                    if (tastoVoce && settings.voce_tasto) tastoVoce.value = settings.voce_tasto;
                     const vociMagazzinoMenu = document.getElementById('sidebar-magazzino');
                     if (vociMagazzinoMenu) {
                         vociMagazzinoMenu.style.display =
@@ -184,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("Errore nel caricamento delle impostazioni:", error);
-            showFeedback(settingsFeedback, "Errore nel caricamento delle impostazioni.", 'error');
+            notifica("Impostazioni non lette: ricarica la pagina prima di cambiarle.", 'errore');
         }
     }
 
@@ -195,8 +228,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const allertaEsito = document.getElementById('allerta-esito');
     let centroMappaAllerta = null;
 
+    let comuniDivisiAllerta = {};
     function scriviZonaAllerta() {
         if (!allertaZona) return;
+        const divise = comuniDivisiAllerta[allertaComune.value];
+        if (divise) {
+            const scelta = divise.find(z => z.codice === centroMappaAllerta?.codice) || divise[0];
+            allertaZona.textContent = `${allertaComune.value} è diviso fra le zone ${divise.map(z => z.codice).join(' e ')}: vale ${scelta.codice} (${scelta.nome}), ` +
+                (scelta.codice === centroMappaAllerta?.codice ? 'quella in cui cade il centro della mappa.' : 'perché il centro della mappa non cade in nessuna delle due. Sposta il centro della mappa nella parte giusta del comune.');
+            return;
+        }
         allertaZona.textContent = allertaComune.value
             ? ''
             : centroMappaAllerta
@@ -212,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         (r.comuni || []).forEach(c => allertaComune.add(new Option(c, c)));
         allertaComune.value = (r.comuni || []).includes(scelto) ? scelto : '';
         centroMappaAllerta = r.centro_mappa;
+        comuniDivisiAllerta = r.comuni_divisi || {};
         scriviZonaAllerta();
     }
 
@@ -264,59 +306,193 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    async function handleSettingsSubmit(event) {
-        event.preventDefault();
-        const submitButton = settingsForm.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvataggio...';
+    // I campi vuoti vogliono dire "valore predefinito"; la virgola all'italiana diventa punto.
+    function controllaMappa() {
+        const leggi = (input) => (input?.value ?? '').trim().replace(',', '.');
+        const fuori = (testo, minimo, massimo, intero) => {
+            if (testo === '') return false;
+            const n = Number(testo);
+            return !Number.isFinite(n) || n < minimo || n > massimo || (intero && !Number.isInteger(n));
+        };
+        const lat = leggi(mapCenterLatInput), lon = leggi(mapCenterLonInput), zoom = leggi(mapZoomInput);
+        const erroreCentro = [fuori(lat, -90, 90) && 'la latitudine va da -90 a 90', fuori(lon, -180, 180) && 'la longitudine va da -180 a 180']
+            .filter(Boolean).join('; ');
+        const erroreZoom = fuori(zoom, 1, 18, true) ? 'Lo zoom è un numero intero da 1 a 18.' : '';
+        const scrivi = (id, testo) => { const e = document.getElementById(id); if (e) { e.textContent = testo; e.hidden = !testo; } };
+        scrivi('map-center-errore', erroreCentro ? `Non va: ${erroreCentro} (per esempio 45.4064 oppure 45,4064).` : '');
+        scrivi('map-zoom-errore', erroreZoom);
+        if (erroreCentro || erroreZoom) return null;
+        if (mapCenterLatInput) mapCenterLatInput.value = lat;
+        if (mapCenterLonInput) mapCenterLonInput.value = lon;
+        return { lat, lon, zoom };
+    }
 
-        const settingsToUpdate = {
-            association_name: associationNameInput?.value?.trim() || '',
-            map_center_lat: mapCenterLatInput?.value?.trim() || '',
-            map_center_lon: mapCenterLonInput?.value?.trim() || '',
-            map_zoom_level: mapZoomInput?.value?.trim() || '',
-            minuti_attesa_critica: minutiAttesaInput?.value?.trim() || '',
-            smtp_host: smtpHostInput?.value?.trim() || '',
-            smtp_port: smtpPortInput?.value?.trim() || '',
+    // I valori come li mostra la pagina, nella forma in cui si salvano. La password della posta non c'è:
+    // non torna dal server, si manda solo se scritta.
+    function valoriPagina() {
+        const spunta = (id) => (document.getElementById(id)?.checked ? 'true' : 'false');
+        const testo = (input) => input?.value?.trim() || '';
+        return {
+            association_name: testo(associationNameInput),
+            map_center_lat: testo(mapCenterLatInput).replace(',', '.'),
+            map_center_lon: testo(mapCenterLonInput).replace(',', '.'),
+            map_zoom_level: testo(mapZoomInput),
+            minuti_attesa_critica: testo(minutiAttesaInput),
+            smtp_host: testo(smtpHostInput),
+            smtp_port: testo(smtpPortInput),
             smtp_secure: smtpSecureInput?.value || 'true',
-            smtp_user: smtpUserInput?.value?.trim() || '',
-            smtp_pass: smtpPassInput?.value?.trim() || '',
-            badge_qr_always_on: badgeAlwaysOnInput?.checked ? 'true' : 'false',
-            ...(badgeQrEnabledInput ? { badge_qr_enabled: badgeQrEnabledInput.checked ? 'true' : 'false' } : {}),
-            ...(document.getElementById('badge-cf-barcode') ? { badge_cf_barcode: document.getElementById('badge-cf-barcode').checked ? 'true' : 'false' } : {}),
-            ...(appAndroidInput ? { app_android_enabled: appAndroidInput.checked ? 'true' : 'false' } : {}),
-            magazzino_enabled: enableMagBtn?.checked ? 'true' : 'false',
-            funzioni_enabled: enableFunzioniBtn?.checked ? 'true' : 'false',
-            ...(document.getElementById('enable-attivita') ? { attivita_enabled: document.getElementById('enable-attivita').checked ? 'true' : 'false' } : {}),
+            smtp_user: testo(smtpUserInput),
+            badge_qr_always_on: spunta('badge-qr-always-on'),
+            badge_qr_enabled: spunta('badge-qr-enabled'),
+            badge_cf_barcode: spunta('badge-cf-barcode'),
+            app_android_enabled: spunta('app-android-enabled'),
+            magazzino_enabled: spunta('enable-magazzino'),
+            funzioni_enabled: spunta('enable-funzioni'),
+            attivita_enabled: spunta('enable-attivita'),
+            voce_enabled: spunta('enable-voce'),
+            drone_enabled: spunta('enable-drone'),
+            ...(maxDroneCaricato() ? { drone_max_dirette: testo(document.getElementById('drone-max-dirette')) } : {}),
+            voce_tasto: document.getElementById('voce-tasto')?.value || 'F9',
             ...valoriAllerta(),
-            card_district_label: cardDistrictLabelInput?.value?.trim() || '',
-            card_regional_entity_name: cardRegionalEntityNameInput?.value?.trim() || '',
+            card_district_label: testo(cardDistrictLabelInput),
+            card_regional_entity_name: testo(cardRegionalEntityNameInput),
             segreteria_config: JSON.stringify({
                 enabled: enableSegBtn?.checked || false,
                 block_on_medical: blockMed?.checked || false,
                 block_on_course: blockCourse?.checked || false,
                 notify_user: notifyUserBtn?.checked || false,
                 notify_admin: notifyAdminsBtn?.checked || false,
-                custom_emails: customEmailsInput?.value?.trim() || '',
+                custom_emails: testo(customEmailsInput),
                 notice_days: leggiGiorniPreavviso(),
-                custom_user_email_template: customEmailTemplateInput?.value?.trim() || ''
+                custom_user_email_template: testo(customEmailTemplateInput)
             })
         };
+    }
 
-        try {
-            await fetchApi('/api/branding/settings', {
-                method: 'PUT',
-                body: JSON.stringify(settingsToUpdate)
-            });
-            showFeedback(settingsFeedback, 'Impostazioni salvate con successo!', 'success');
-            document.title = `Pannello Amministrazione - ${settingsToUpdate.association_name || 'ORION'}`;
-        } catch (error) {
-            showFeedback(settingsFeedback, `Errore: ${error.message}`, 'error');
-        } finally {
-            submitButton.disabled = false;
-            submitButton.innerHTML = '<i class="fas fa-save"></i> Salva';
+    // Si manda solo quello che è cambiato rispetto a quanto letto: salvare la mappa non deve toccare
+    // i moduli, e due amministratori non devono cancellarsi le scelte a vicenda.
+    let copia = null;
+    function cambiati() {
+        if (!copia) return {};
+        const ora = valoriPagina();
+        const diversi = Object.fromEntries(Object.entries(ora).filter(([k, v]) => copia[k] !== v));
+        if (smtpPassInput?.value?.trim()) diversi.smtp_pass = smtpPassInput.value.trim();
+        return diversi;
+    }
+    const barraSalva = document.getElementById('barra-salva');
+    function aggiornaBarra() {
+        const quanti = Object.keys(cambiati()).length;
+        barraSalva.hidden = quanti === 0;
+        if (quanti) {
+            settingsFeedback.textContent = 'Hai modifiche non salvate';
+            settingsFeedback.classList.remove('errore');
         }
     }
+    window.addEventListener('beforeunload', (e) => {
+        if (Object.keys(cambiati()).length) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    // Gli interruttori dei moduli valgono subito, ognuno con la sua sola chiave.
+    const MODULI = {
+        'enable-segreteria': ['segreteria_config', 'Segreteria'], 'enable-magazzino': ['magazzino_enabled', 'Magazzino'],
+        'enable-funzioni': ['funzioni_enabled', 'Funzioni di supporto'], 'enable-attivita': ['attivita_enabled', 'Attività e calendario'],
+        'enable-voce': ['voce_enabled', 'Orion Voice'], 'enable-drone': ['drone_enabled', 'Drone'], 'badge-qr-enabled': ['badge_qr_enabled', 'QR dei volontari'],
+        'app-android-enabled': ['app_android_enabled', 'App Android']
+    };
+    function esitoModulo(interruttore) {
+        const contenitore = interruttore.closest('.option-card')?.parentElement || interruttore.closest('.form-group');
+        let esito = contenitore.querySelector(':scope > .esito-modulo');
+        if (!esito) {
+            esito = document.createElement('span');
+            esito.className = 'esito-modulo';
+            esito.setAttribute('role', 'status');
+            contenitore.appendChild(esito);
+        }
+        return esito;
+    }
+    for (const [id, [chiave, nome]] of Object.entries(MODULI)) {
+        const interruttore = document.getElementById(id);
+        interruttore?.addEventListener('change', async () => {
+            const acceso = interruttore.checked;
+            let valore = acceso ? 'true' : 'false';
+            if (chiave === 'segreteria_config') {
+                const conf = JSON.parse(copia?.segreteria_config || '{}');
+                conf.enabled = acceso;
+                valore = JSON.stringify(conf);
+            }
+            const esito = esitoModulo(interruttore);
+            interruttore.disabled = true;
+            try {
+                await fetchApi('/api/branding/settings', { method: 'PUT', body: JSON.stringify({ [chiave]: valore }) });
+                if (copia) copia[chiave] = valore;
+                esito.textContent = `${nome} ${acceso ? 'acceso' : 'spento'}.`;
+                esito.className = 'esito-modulo ok';
+            } catch (err) {
+                interruttore.checked = !acceso;
+                if (constraintsDiv && enableSegBtn) constraintsDiv.style.display = enableSegBtn.checked ? 'block' : 'none';
+                if (magazzinoNote && enableMagBtn) magazzinoNote.style.display = enableMagBtn.checked ? 'block' : 'none';
+                esito.textContent = `Non salvato: ${err.message}`;
+                esito.className = 'esito-modulo errore';
+            } finally {
+                interruttore.disabled = false;
+                aggiornaBarra();
+            }
+        });
+    }
+
+    async function handleSettingsSubmit(event) {
+        event.preventDefault();
+        const mappa = controllaMappa();
+        if (!mappa) {
+            settingsFeedback.textContent = 'Correggi i valori della mappa segnati in rosso.';
+            settingsFeedback.classList.add('errore');
+            return;
+        }
+        const daSalvare = cambiati();
+        if (!Object.keys(daSalvare).length) { aggiornaBarra(); return; }
+        const submitButton = settingsForm.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        try {
+            await fetchApi('/api/branding/settings', { method: 'PUT', body: JSON.stringify(daSalvare) });
+            const { smtp_pass: _password, ...salvati } = daSalvare;
+            Object.assign(copia, salvati);
+            if (smtpPassInput && daSalvare.smtp_pass) {
+                smtpPassInput.value = '';
+                smtpPassInput.placeholder = 'Salvata: lascia vuoto per non cambiarla';
+            }
+            if ('association_name' in daSalvare) document.title = `Pannello Amministrazione - ${daSalvare.association_name || 'ORION'}`;
+            aggiornaBarra();
+            notifica('Impostazioni salvate.', 'successo');
+        } catch (error) {
+            settingsFeedback.textContent = `Non salvato: ${error.message}`;
+            settingsFeedback.classList.add('errore');
+        } finally {
+            submitButton.disabled = false;
+        }
+    }
+
+    document.getElementById('annulla-modifiche')?.addEventListener('click', async () => {
+        if (smtpPassInput) smtpPassInput.value = '';
+        await loadAndApplySettings();
+        copia = valoriPagina();
+        aggiornaBarra();
+    });
+    settingsForm?.addEventListener('input', (e) => { if (!MODULI[e.target.id]) aggiornaBarra(); });
+    settingsForm?.addEventListener('change', (e) => { if (!MODULI[e.target.id]) aggiornaBarra(); });
+
+    const indice = document.querySelectorAll('.impostazioni-indice a');
+    const osservatore = new IntersectionObserver((voci) => {
+        for (const v of voci) {
+            if (!v.isIntersecting) continue;
+            indice.forEach(a => a.classList.toggle('in-vista', a.getAttribute('href') === `#${v.target.id}`));
+            const tendina = document.getElementById('impostazioni-vai');
+            if (tendina) tendina.value = v.target.id;
+        }
+    }, { rootMargin: '-15% 0px -70% 0px' });
+    document.querySelectorAll('.sezione-impostazioni, .sezione-esterna').forEach(s => osservatore.observe(s));
+    document.getElementById('impostazioni-vai')?.addEventListener('change', (e) => {
+        document.getElementById(e.target.value)?.scrollIntoView({ behavior: 'smooth' });
+    });
 
     async function handleLogoUpload() {
         if (!logoInput.files || logoInput.files.length === 0) return;
@@ -460,7 +636,9 @@ document.addEventListener('DOMContentLoaded', () => {
         'documento.eliminato': 'Documento eliminato',
         'impostazioni.modificate': 'Impostazioni modificate',
         'libretto.visita_eliminata': 'Visita eliminata dal libretto',
-        'libretto.corso_eliminato': 'Corso eliminato dal libretto'
+        'libretto.corso_eliminato': 'Corso eliminato dal libretto',
+        'esterno_temporaneo.codice_riletto': 'Codice di un esterno riletto',
+        'esterno_temporaneo.invito_rimandato': 'Codice di un esterno mandato per email'
     };
 
     const azioneDistruttiva = (azione) => /eliminat|sospeso|resettata/.test(azione);
@@ -580,8 +758,58 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mapPickerBtn) mapPickerBtn.addEventListener('click', openMapPicker);
     if (closeMapPickerModalBtn) closeMapPickerModalBtn.addEventListener('click', closeMapPicker);
     if (cancelMapSelectionBtn) cancelMapSelectionBtn.addEventListener('click', closeMapPicker);
-    if (confirmMapSelectionBtn) confirmMapSelectionBtn.addEventListener('click', confirmMapSelection);
+    if (confirmMapSelectionBtn) confirmMapSelectionBtn.addEventListener('click', () => { confirmMapSelection(); aggiornaBarra(); });
 
-    loadAndApplySettings();
+    loadAndApplySettings().then(() => { copia = valoriPagina(); aggiornaBarra(); });
     caricaRegistro();
+});
+
+// La trascrizione si sceglie a parte dal salvataggio: un modello nuovo fa partire uno scaricamento lungo.
+document.addEventListener('DOMContentLoaded', () => {
+    const scelta = document.getElementById('voce-trascrizione-modello');
+    const stato = document.getElementById('voce-trascrizione-stato');
+    const applica = document.getElementById('voce-trascrizione-applica');
+    if (!scelta || !stato || !applica) return;
+    let attesa = null;
+
+    function mostra(d) {
+        clearTimeout(attesa);
+        scelta.replaceChildren(new Option('Spenta', ''), ...d.modelli.map(m =>
+            new Option(`${m.nome}: ${m.mb} MB, circa ${m.memoria_mb} MB di memoria${m.memoria_sufficiente ? '' : ' (non bastano)'}${m.scaricato ? '' : ', da scaricare'}`, m.id)));
+        scelta.value = d.modello || '';
+        const inCorso = d.modelli.find(m => m.scaricamento && !m.scaricamento.errore);
+        const fallito = d.modelli.find(m => m.scaricamento?.errore && m.id === d.modello);
+        const scelto = d.modelli.find(m => m.id === d.modello);
+        if (!d.programma) stato.textContent = 'Questa installazione non ha il programma di trascrizione: serve l\'immagine Docker di ORION.';
+        else if (inCorso) stato.textContent = `Scarico il modello ${inCorso.nome}: ${inCorso.scaricamento.ricevuti_mb} di ${inCorso.scaricamento.totale_mb} MB...`;
+        else if (fallito) stato.textContent = `Scaricamento del modello ${fallito.nome} non riuscito: ${fallito.scaricamento.errore}.`;
+        else if (scelto) {
+            stato.textContent = `Attiva con il modello ${scelto.nome}` +
+                (d.rapporto != null ? `: ${String(d.rapporto).replace('.', ',')} s di calcolo per ogni secondo di voce` : '') +
+                (d.in_coda ? `, ${d.in_coda} messaggi in coda.` : '.') +
+                (d.rapporto > 1 ? ' Più lenta del parlato: in un\'emergenza intensa la coda cresce, meglio un modello più veloce.' : '') +
+                (d.ultimo_errore ? ` L'ultimo messaggio non è stato trascritto: ${d.ultimo_errore.messaggio}.` : '');
+        } else stato.textContent = 'Spenta.';
+        if (d.programma && d.come_alzare_la_memoria && d.modelli.some(m => !m.memoria_sufficiente)) {
+            stato.textContent += ` Memoria libera per la trascrizione: ${d.memoria_libera_mb} MB. ${d.come_alzare_la_memoria}`;
+        }
+        if (inCorso) attesa = setTimeout(aggiorna, 2000);
+    }
+
+    async function aggiorna() {
+        try {
+            mostra(await fetchApi('/api/voce/trascrizione'));
+        } catch (e) {
+            stato.textContent = e.message;
+        }
+    }
+
+    applica.addEventListener('click', async () => {
+        try {
+            mostra(await fetchApi('/api/voce/trascrizione', { method: 'POST', body: JSON.stringify({ modello: scelta.value || null }) }));
+        } catch (e) {
+            stato.textContent = e.message;
+        }
+    });
+    aggiorna();
 });

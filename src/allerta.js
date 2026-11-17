@@ -9,7 +9,7 @@ import { pool } from './db.js';
 import { dataItaliana, oggiLocale } from './date.js';
 import { cifraFile, inviaFile } from './cifratura.js';
 import { LIVELLI, RISCHI, leggiBollettino, livelloMassimo } from './bollettinoDpc.js';
-import { REGIONI, comuniDi, zonaDelComune, zonaDelPunto } from './allertaRegioni.js';
+import { REGIONI, comuniDi, comuniDivisi, zonaDelComune, zonaDelPunto } from './allertaRegioni.js';
 import { checkAdminRole } from './autenticazione.js';
 import { protectedDocsDir } from './caricamenti.js';
 import { sqlHaPermesso } from './permessi.js';
@@ -43,12 +43,10 @@ export async function riferimento() {
     if (!regione) return null;
     const comune = (s.allerta_comune || '').trim() || null;
     let zona = null;
-    if (comune) {
-        zona = zonaDelComune(regione, comune);
-    } else {
-        const lat = parseFloat(s.map_center_lat), lon = parseFloat(s.map_center_lon);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) zona = zonaDelPunto(regione, lat, lon);
-    }
+    const lat = parseFloat(s.map_center_lat), lon = parseFloat(s.map_center_lon);
+    const centro = Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
+    if (comune) zona = zonaDelComune(regione, comune, centro);
+    else if (centro) zona = zonaDelPunto(regione, centro[0], centro[1]);
     return {
         regione, comune,
         modo: comune ? 'comune' : 'centro_mappa',
@@ -279,7 +277,7 @@ export function registraRotteAllerta(app) {
             const info = REGIONI[rif.regione];
             const base = {
                 attiva: true,
-                regione: { codice: rif.regione, nome: info.nome, ente: info.ente, pagina_ufficiale: info.paginaUfficiale },
+                regione: { codice: rif.regione, nome: info.nome, ente: info.ente || null, pagina_ufficiale: info.paginaUfficiale || null },
                 riferimento: { modo: rif.modo, comune: rif.comune },
                 zona: rif.zona,
                 in_emergenza: !!(activeEmergency && !activeEmergency.simulazione),
@@ -336,6 +334,7 @@ export function registraRotteAllerta(app) {
             res.json({
                 regioni: elenco,
                 comuni: comuniDi(regione),
+                comuni_divisi: comuniDivisi(regione),
                 centro_mappa: z ? { codice: z.codice, nome: z.nome } : null
             });
         } catch (e) {

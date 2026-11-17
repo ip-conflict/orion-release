@@ -2,7 +2,7 @@ import './config.js';
 import fs from 'fs';
 import logger from './logger.js';
 import path from 'path';
-import { ETICHETTA_PRIORITA, ETICHETTA_STATO, MOTIVI_SENZA_SQUADRA } from './costanti.js';
+import { ETICHETTA_PRIORITA, ETICHETTA_STATO, ETICHETTA_STATO_SQUADRA, MOTIVI_SENZA_SQUADRA, STATI_SQUADRA, TIPI_SEGNALAZIONE } from './costanti.js';
 import { pool } from './db.js';
 import { vociDiarioSala } from './diarioSala.js';
 import { ETICHETTE_MOVIMENTO } from './magazzino.js';
@@ -78,7 +78,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     const [diarioSala, segnalazioni, aggiornamenti, assegnazioni, immagini, documenti, operazioni, registroSquadre, materiali, materialiFuori, nomeAssociazione, incarichi, elementiMappa] = await Promise.all([
         vociDiarioSala(pool, emergencyId),
         pool.query(`
-            SELECT r.id, r.emergency_report_number, r.title, r.description, r.status, r.priority,
+            SELECT r.id, r.emergency_report_number, r.title, r.description, r.status, r.priority, r.tipo,
                    r.location_address, r.latitude, r.longitude, r.environmental_hazard,
                    r.no_team_reason,
                    r.reporter_name, r.reporter_contact, r.created_at, r.updated_at,
@@ -163,6 +163,10 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
                     FROM elementi_mappa WHERE emergency_id = $1 ORDER BY creato_il`, [emergencyId])
             .then(r => r.rows).catch(() => [])
     ]);
+    const messaggiVocali = (await pool.query(
+        `SELECT tipo, nome_radio, autore_nome, autore_squadra, da_sala, report_id, priorita, stato, differito, registrato_il,
+                durata_ms, ricevuto_da_nome, presa_da_nome, presa_il, trascrizione
+           FROM voce_messaggi WHERE emergency_id = $1 AND stato <> 'in_diretta' ORDER BY registrato_il, id`, [emergencyId])).rows;
 
     const perSegnalazione = (righe, chiave = 'report_id') => {
         const mappa = new Map();
@@ -174,6 +178,16 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     };
     const diari = perSegnalazione(aggiornamenti.rows);
     const squadrePerReport = perSegnalazione(assegnazioni.rows);
+    // L'ultimo valore di ogni stato: una correzione della sala prende il posto del tocco sbagliato.
+    const tempiSquadre = new Map();
+    for (const t of (await pool.query(
+        `SELECT x.report_id, x.nome_radio, x.stato, x.quando FROM stati_squadra x JOIN reports r ON r.id = x.report_id
+          WHERE r.emergency_id = $1 ORDER BY x.quando, x.id`, [emergencyId])).rows) {
+        const chiave = `${t.report_id}|${t.nome_radio}`;
+        if (!tempiSquadre.has(chiave)) tempiSquadre.set(chiave, {});
+        tempiSquadre.get(chiave)[t.stato] = t.quando;
+    }
+    const minuti = (da, a) => (da && a ? `${Math.max(0, Math.round((new Date(a) - new Date(da)) / 60000))} min` : null);
     const immaginiPerReport = new Map(immagini.rows.map(r => [r.report_id, r.quante]));
 
     const alta = segnalazioni.rows.filter(r => r.priority === 'High').length;
@@ -206,6 +220,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         parti.push(`Incarichi funzioni : ${incarichi.length}${rimasti ? ` (${rimasti} rimasti aperti)` : ''}`);
     }
     if (diarioSala.length) parti.push(`Note di sala ......: ${diarioSala.length}`);
+    if (messaggiVocali.length) parti.push(`Messaggi vocali ...: ${messaggiVocali.length}`);
     if (materiali.rows.length) {
         const mezziEMateriali = new Set(materiali.rows.map(m => m.bene_denominazione)).size;
         parti.push(`Mezzi e materiali .: ${mezziEMateriali}` +
@@ -225,6 +240,12 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
     });
 
     parti.push(titoloSezione(2, 'Segnalazioni'));
+    const perTipo = new Map();
+    for (const r of segnalazioni.rows) perTipo.set(r.tipo || 'altro', (perTipo.get(r.tipo || 'altro') || 0) + 1);
+    if (segnalazioni.rows.length) {
+        parti.push(`Per tipo: ${Object.entries(TIPI_SEGNALAZIONE).filter(([c]) => perTipo.has(c)).map(([c, nome]) => `${nome} ${perTipo.get(c)}`).join(', ')}`);
+        parti.push('');
+    }
     if (segnalazioni.rows.length === 0) {
         parti.push('Nessuna segnalazione registrata durante questa emergenza.');
     }
@@ -233,6 +254,7 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
         const priorita = ETICHETTA_PRIORITA[r.priority] || r.priority || 'N.D.';
         const stato = ETICHETTA_STATO[r.status] || r.status || 'N.D.';
         parti.push(`#${numero} - ${r.title}`);
+        parti.push(`     Tipo ........: ${TIPI_SEGNALAZIONE[r.tipo] || TIPI_SEGNALAZIONE.altro}`);
         parti.push(`     Priorita' ...: ${priorita.padEnd(6)}    Stato finale: ${stato}`);
         parti.push(`     Aperta ......: ${dataOraResoconto(r.created_at)} da ${(r.creatore || '').trim() || 'utente rimosso'}`);
         parti.push(`     Ultimo agg. .: ${dataOraResoconto(r.updated_at)}`);
@@ -251,6 +273,14 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             ? squadre.map(s => `${s.nome} (dalle ${dataOraResoconto(s.assigned_at, true)})`).join(', ')
             : (motivoSenzaSquadra ? `nessuna - ${motivoSenzaSquadra.toLowerCase()}` : 'nessuna assegnata');
         parti.push(`     Squadre .....: ${descrizioneSquadre}`);
+        for (const sq of squadre) {
+            const tempi = { assegnata: sq.assigned_at, ...(tempiSquadre.get(`${r.id}|${sq.nome_radio}`) || {}) };
+            if (Object.keys(tempi).length < 2) continue;
+            const passi = STATI_SQUADRA.filter(st => tempi[st]).map(st => `${ETICHETTA_STATO_SQUADRA[st]} ${dataOraResoconto(tempi[st], true)}`);
+            const durate = [minuti(tempi.assegnata, tempi.sul_posto) && `arrivo in ${minuti(tempi.assegnata, tempi.sul_posto)}`,
+                minuti(tempi.sul_posto, tempi.conclusa) && `sul posto ${minuti(tempi.sul_posto, tempi.conclusa)}`].filter(Boolean);
+            parti.push(`     Tempi ${String(sq.nome_radio || sq.nome).padEnd(7, '.')}: ${passi.join(', ')}${durate.length ? ` (${durate.join(', ')})` : ''}`);
+        }
         const funzioniReport = incarichi.filter(i => i.report_id === r.id);
         if (funzioniReport.length) {
             parti.push(`     Funzioni ....: ${funzioniReport.map(i => `${i.sigla} ${i.stato === 'concluso' ? 'conclusa' : 'ancora aperta'}`).join(', ')}`);
@@ -411,6 +441,39 @@ export async function componiResocontoEmergenza(emergencyId, autore = null) {
             if (note) parti.push(note);
             parti.push('');
         });
+    }
+
+    if (messaggiVocali.length) {
+        parti.push(titoloSezione(elementiMappa.length ? 9 : 8, 'Comunicazioni vocali'));
+        parti.push("L'audio non e' nel resoconto: si ascolta e si scarica dall'archivio, con il permesso");
+        parti.push("di consultare le emergenze passate, e ogni ascolto resta nel registro delle operazioni.");
+        parti.push('');
+        const perCanale = new Map();
+        messaggiVocali.forEach(m => {
+            const nome = m.nome_radio || { avviso: 'Avvisi a tutti', generale: 'Generale', diretto: 'Canali diretti' }[m.tipo] || m.tipo;
+            const dati = perCanale.get(nome) || { messaggi: 0, durata: 0 };
+            dati.messaggi++;
+            dati.durata += m.durata_ms || 0;
+            perCanale.set(nome, dati);
+        });
+        perCanale.forEach((d, nome) => parti.push(`${nome.padEnd(18, '.')}: ${d.messaggi} ${d.messaggi === 1 ? 'messaggio' : 'messaggi'}, ${Math.round(d.durata / 1000)} s`));
+        const numeroSegnalazione = new Map(segnalazioni.rows.map(r => [r.id, r.emergency_report_number ?? r.id]));
+        const legati = messaggiVocali.filter(m => m.report_id);
+        if (legati.length) {
+            parti.push('');
+            parti.push('Messaggi legati alle segnalazioni:');
+            legati.forEach(m => {
+                const segni = [m.differito ? 'registrato senza rete' : '', m.stato === 'interrotto' ? 'interrotto' : '', m.ricevuto_da_nome ? `ricevuto da ${m.ricevuto_da_nome}` : ''].filter(Boolean);
+                parti.push(`[${dataOraResoconto(m.registrato_il)}] #${numeroSegnalazione.get(m.report_id) ?? m.report_id} ${m.autore_nome}${m.autore_squadra && !m.da_sala ? ` (${m.autore_squadra})` : ''}, ${Math.max(1, Math.round((m.durata_ms || 0) / 1000))} s${segni.length ? ` - ${segni.join(', ')}` : ''}`);
+                if (m.trascrizione) parti.push(testoRientrato(`"${m.trascrizione}" (trascrizione automatica)`, '     '));
+            });
+        }
+        const emergenzeVocali = messaggiVocali.filter(m => m.priorita === 'emergenza');
+        emergenzeVocali.forEach(m => {
+            parti.push(`EMERGENZA [${dataOraResoconto(m.registrato_il)}] ${m.autore_nome}: ${m.presa_da_nome ? `presa in carico da ${m.presa_da_nome} alle ${dataOraResoconto(m.presa_il)}` : 'mai presa in carico'}`);
+            if (m.trascrizione) parti.push(testoRientrato(`"${m.trascrizione}" (trascrizione automatica)`, '     '));
+        });
+        parti.push('');
     }
 
     const sigillo = emergenza.sigillo_chiusura || await sigilloAttuale().then(testoSigillo).catch(() => null);

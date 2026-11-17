@@ -1007,3 +1007,9 @@ a.riga-bene { color: inherit; text-decoration: none; }
 .azione-consegna:hover { background: var(--button-hover-bg); }
 .azione-consegna[hidden] { display: none; }
 button.azione-avviso { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-weight: 700; }
+
+.elenco-persone { list-style: none; margin: 4px 0 0; padding: 4px; max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); box-shadow: 0 6px 16px var(--shadow-color-light); }
+.elenco-persone[hidden] { display: none; }
+.elenco-persone li { padding: 9px 10px; border-radius: 6px; cursor: pointer; }
+.elenco-persone li:hover, .elenco-persone li[aria-selected="true"] { background: var(--secondary-bg-color); }
+.elenco-persone li.nessuno { cursor: default; color: var(--text-muted); }

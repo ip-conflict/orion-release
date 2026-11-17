@@ -40,13 +40,37 @@
                 <p style="margin: 5px 0 0 0; color: var(--text-muted);">Personalizza le configurazioni di base del sistema</p>
             </header>
 
-            <div style="display: flex; justify-content: flex-start;">
-                
-                <div class="settings-panel" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 25px;">Configurazione Generale</h2>
-                    
+            <div class="impostazioni-layout">
+            <nav class="impostazioni-indice" aria-label="Sezioni delle impostazioni">
+                <ul>
+                    <li><a href="#sez-moduli">Moduli</a></li>
+                    <li><a href="#sez-associazione">Associazione e tesserino</a></li>
+                    <li><a href="#sez-mappa">Mappa e centro operativo</a></li>
+                    <li><a href="#sez-allerta">Bollettino di allerta</a></li>
+                    <li><a href="#sez-posta">Posta</a></li>
+                    <li><a href="#sez-condizioni">Condizioni d'uso</a></li>
+                    <li><a href="#sez-piano">Livelli del piano</a></li>
+                    <li><a href="#sez-registro">Registro operazioni</a></li>
+                </ul>
+            </nav>
+            <label class="impostazioni-indice-telefono">Vai a
+            <select id="impostazioni-vai">
+                <option value="sez-moduli">Moduli</option>
+                <option value="sez-associazione">Associazione e tesserino</option>
+                <option value="sez-mappa">Mappa e centro operativo</option>
+                <option value="sez-allerta">Bollettino di allerta</option>
+                <option value="sez-posta">Posta</option>
+                <option value="sez-condizioni">Condizioni d'uso</option>
+                <option value="sez-piano">Livelli del piano</option>
+                <option value="sez-registro">Registro operazioni</option>
+            </select>
+            </label>
+            <div class="impostazioni-contenuto">
                     <form id="settings-form">
-                        
+                        <section id="sez-moduli" class="sezione-impostazioni">
+                        <h2>Moduli</h2>
+                        <p class="sezione-spiega">Gli interruttori valgono subito, senza premere Salva.</p>
+
                         <div class="form-group" style="padding: 25px; background: rgba(16, 185, 129, 0.03); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; margin-bottom: 30px;">
                             
                             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -210,6 +234,62 @@
                         </div>
 
                         <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
+                                        Orion Voice
+                                    </h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Il push-to-talk durante le emergenze: ogni squadra ha il suo canale, la sala ascolta e risponde dal centro operativo, ogni messaggio finisce nel diario della segnalazione.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-voce" name="voce_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <label for="voce-tasto" style="margin: 0;">Tasto PARLA predefinito delle postazioni</label>
+                                <select id="voce-tasto" name="voce_tasto" style="width: auto;">
+                                    <option value="F9">F9</option>
+                                    <option value="F2">F2</option>
+                                    <option value="F4">F4</option>
+                                    <option value="F8">F8</option>
+                                    <option value="Pause">Pausa</option>
+                                    <option value="ScrollLock">Bloc Scorr</option>
+                                    <option value="Insert">Ins</option>
+                                </select>
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <label for="voce-trascrizione-modello" style="margin: 0;">Trascrizione dei messaggi, sul server</label>
+                                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;">
+                                    <select id="voce-trascrizione-modello" style="width: auto;"><option value="">Spenta</option></select>
+                                    <button type="button" id="voce-trascrizione-applica" class="button-style button-small">Applica</button>
+                                </div>
+                                <p id="voce-trascrizione-stato" style="margin: 6px 0 0; font-size: 0.85rem; color: var(--text-muted);"></p>
+                            </div>
+                            <p style="margin: 15px 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">La voce c'è solo a emergenza aperta, esercitazioni comprese. In sala sentono e parlano i membri della squadra COC; ogni postazione può cambiare il suo tasto dal pannello Orion Voice. L'audio resta con l'emergenza archiviata, entra nei backup e si cancella quando si elimina l'emergenza. Serve l'app Android aggiornata; prima di accenderlo aggiornate la valutazione d'impatto (DPIA) e l'informativa. La trascrizione gira su questo server, senza servizi esterni: il modello si scarica una volta (da 142 a 547 MB) e il più accurato chiede più memoria e più tempo; la pagina dice quanti secondi di calcolo servono per ogni secondo di voce.</p>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color);">Drone</h3>
+                                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Le riprese del drone in diretta nel centro operativo e sullo schermo a parete, registrate con l'emergenza.</p>
+                                </div>
+                                <label class="modern-toggle">
+                                    <input type="checkbox" id="enable-drone" name="drone_enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p id="drone-configurazione" class="messaggio" hidden></p>
+                            <div id="drone-porte-blocco" hidden style="margin-top: 15px;">
+                                <label for="drone-max-dirette" style="color: var(--text-color); font-weight: 600;">Droni in onda insieme, al massimo</label>
+                                <input type="number" id="drone-max-dirette" name="drone_max_dirette" min="1" max="20" placeholder="3" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); max-width: 120px;">
+                                <p id="drone-porte" style="margin: 10px 0 0; font-size: 0.9rem; color: var(--text-color); line-height: 1.5;"></p>
+                            </div>
+                            <p style="margin: 15px 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Il drone trasmette al server con il programma MediaMTX, che si installa insieme a ORION (manuale tecnico, "Il drone"). Le chiavi per il pilota si danno dal centro operativo, una per emergenza o simulazione, e smettono di valere alla chiusura. Le riprese restano cifrate con l'emergenza, entrano nei backup e si cancellano quando si elimina l'emergenza. Riprendono persone e case: prima di accenderlo aggiornate la valutazione d'impatto (DPIA) e l'informativa.</p>
+                        </div>
+
+                        <div class="form-group" style="padding: 25px; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; margin-bottom: 30px;">
                             <div>
                                 <h3 style="margin: 0 0 5px 0; font-size: 1.2rem; color: var(--text-color); display: flex; align-items: center; gap: 10px;">
                                     Tesserino QR Pubblico
@@ -257,6 +337,10 @@
                             </label>
                         </div>
 
+                        </section>
+
+                        <section id="sez-associazione" class="sezione-impostazioni">
+                        <h2>Associazione e tesserino</h2>
                         <div class="form-group">
                             <label for="association-name" style="color: var(--text-color); font-weight: 600;">Nome Associazione</label>
                             <input type="text" id="association-name" name="association_name" placeholder="Es. Protezione Civile del Comune" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
@@ -303,6 +387,10 @@
                             <small id="logo2-upload-feedback" class="feedback-message" style="display: block; margin-top: 8px;"></small>
                         </div>
 
+                        </section>
+
+                        <section id="sez-mappa" class="sezione-impostazioni">
+                        <h2>Mappa e centro operativo</h2>
                         <div class="form-group">
                             <label for="map-center-lat" style="color: var(--text-color); font-weight: 600;">Centro Mappa di Default (Lat, Lon)</label>
                             <div class="input-group" style="display: flex; gap: 10px;">
@@ -312,16 +400,16 @@
                                     Mappa
                                 </button>
                             </div>
+                            <p class="errore-campo" id="map-center-errore" role="alert" hidden style="color: var(--danger-color, #b91c1c); margin: 6px 0 0;"></p>
                         </div>
 
                         <div class="form-group">
                             <label for="map-zoom" style="color: var(--text-color); font-weight: 600;">Livello Zoom Iniziale (1-18)</label>
                             <input type="number" id="map-zoom" name="map_zoom_level" min="1" max="18" placeholder="Es. 13" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                            <p class="errore-campo" id="map-zoom-errore" role="alert" hidden style="color: var(--danger-color, #b91c1c); margin: 6px 0 0;"></p>
                         </div>
                         
-                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
-
-                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Centro Operativo</h3>
+                        <h3 class="sottotitolo-impostazioni">Centro operativo</h3>
 
                         <div class="form-group">
                             <label for="minuti-attesa-critica" style="color: var(--text-color); font-weight: 600;">Minuti prima di segnalare una richiesta senza squadra</label>
@@ -331,9 +419,10 @@
                             </small>
                         </div>
 
-                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
+                        </section>
 
-                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Bollettino di allerta</h3>
+                        <section id="sez-allerta" class="sezione-impostazioni">
+                        <h2>Bollettino di allerta</h2>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Il colore dell'allerta meteo-idro di oggi e domani nella zona del Comune, nel centro operativo. Con un'emergenza aperta ogni versione del bollettino entra da sola nei documenti dell'emergenza. Finché non scegli la Regione ORION non lo legge.</p>
 
                         <div class="form-group">
@@ -365,9 +454,10 @@
                             </div>
                         </div>
 
-                        <hr style="margin: 30px 0; border-color: var(--border-light-color);">
+                        </section>
 
-                        <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Configurazione Email (SMTP)</h3>
+                        <section id="sez-posta" class="sezione-impostazioni">
+                        <h2>Posta</h2>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Serve per le email di attivazione degli account, il recupero della password e gli avvisi delle scadenze.</p>
 
                         <details id="guida-smtp" style="margin-bottom: 20px; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color);">
@@ -419,17 +509,16 @@
                             <div id="email-prova-esito" role="status" aria-live="polite" style="margin-top: 10px; font-size: 0.9rem; line-height: 1.45;"></div>
                         </div>
 
-                        <div class="form-actions" style="margin-top: 30px; text-align: right; border-top: 1px solid var(--border-light-color); padding-top: 20px;">
-                            <span id="settings-feedback" class="feedback-message" style="margin-right: 15px; font-weight: 600;"></span>
-                            <button type="submit" class="button-style">
-                                Salva
-                            </button>
+                        </section>
+
+                        <div id="barra-salva" class="barra-salva" hidden>
+                            <span id="settings-feedback" class="barra-salva-testo" role="status">Hai modifiche non salvate</span>
+                            <button type="button" id="annulla-modifiche" class="button-style button-secondary">Annulla</button>
+                            <button type="submit" class="button-style">Salva</button>
                         </div>
                     </form>
-                </div>
-            </div>
 
-            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+            <div id="sez-condizioni" class="sezione-esterna">
                 <div class="settings-panel" id="pannello-privacy" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Condizioni d'uso</h2>
                     <p style="margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Al primo accesso, e ogni volta che il testo cambia, chi usa ORION (dal browser o dall'app) legge le condizioni d'uso e le accetta prima di continuare. ORION propone un testo già scritto: dice chi risponde dell'installazione e dei dati, che il programma è fornito così com'è, l'impegno alla riservatezza e quali dati restano dopo che una persona viene eliminata. Si può riscrivere per intero.</p>
@@ -451,7 +540,7 @@
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+            <div id="sez-piano" class="sezione-esterna">
                 <div class="settings-panel" id="pannello-piano" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Livelli del piano sulla mappa</h2>
                     <p style="margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">Zone di pericolosità e aree d'emergenza del piano comunale, sempre visibili nel centro operativo come livelli da accendere e spegnere. Da QGIS: tasto destro sul livello, <em>Esporta › Salva elementi come…</em>, formato <strong>GeoJSON</strong> (o KML) e sistema di riferimento <strong>EPSG:4326 - WGS 84</strong>. Un file per tipo: per esempio tutte le aree a pericolosità idraulica in un file, le aree di attesa in un altro. Si possono anche disegnare a mano dalla mappa del centro operativo.</p>
@@ -494,9 +583,9 @@
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: flex-start; margin-top: 30px;">
+            <div id="sez-registro" class="sezione-esterna">
                 <div class="settings-panel" style="width: 100%; background: var(--surface-color); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Registro Operazioni</h2>
+                    <h2 style="margin-top: 0; font-size: 1.3rem; margin-bottom: 8px;">Registro operazioni</h2>
                     <p style="margin: 0 0 20px 0; color: var(--text-muted); font-size: 0.9rem;">
                         Chi ha creato, modificato o eliminato squadre, utenti, emergenze, documenti e impostazioni.
                     </p>
@@ -524,6 +613,8 @@
                             <option value="impostazioni.modificate">Impostazioni modificate</option>
                             <option value="libretto.visita_eliminata">Visita eliminata</option>
                             <option value="libretto.corso_eliminato">Corso eliminato</option>
+                            <option value="esterno_temporaneo.codice_riletto">Codice di un esterno riletto</option>
+                            <option value="esterno_temporaneo.invito_rimandato">Codice di un esterno mandato per email</option>
                         </select>
                         <button type="button" id="audit-refresh" class="button-style button-secondary">
                             Aggiorna
@@ -554,6 +645,8 @@
                         </button>
                     </div>
                 </div>
+            </div>
+            </div>
             </div>
         </main>
     </div>

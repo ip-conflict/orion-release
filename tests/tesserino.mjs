@@ -1,7 +1,8 @@
 // Il modello del tesserino scelto dall'amministratore (badge_modello): il
 // server lo salva solo ripulito, rifiuta colori, testi e misure assurdi, e
 // vuoto vuol dire il tesserino predefinito. Le pagine lo leggono fra le
-// impostazioni pubbliche. Alla fine rimette il modello com'era.
+// impostazioni pubbliche. Sul retro restano solo gli elementi che possono
+// starci. Alla fine rimette il modello com'era.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/tesserino.mjs
 
 import 'dotenv/config';
@@ -34,6 +35,7 @@ try {
         testi: { qualifica: '  OPERATORE ' },
         posizioni: { qr: { x: 10.123, y: 40, w: 44, h: 44 } },
         nascosti: ['bandiera_ue', 'foto', 'inventato'],
+        retro: ['codice', 'qr', 'codice', 'nome'],
         estraneo: 'via'
     };
     const r = await salva(JSON.stringify(buono));
@@ -41,13 +43,14 @@ try {
     const m = JSON.parse(await letto() || '{}');
     verifica('e si legge fra le impostazioni pubbliche, ripulito',
         m.colori?.fascia_alta === '#8b1a1a' && m.testi?.qualifica === 'OPERATORE' && m.posizioni?.qr?.x === 10.12
-        && JSON.stringify(m.nascosti) === '["bandiera_ue"]' && !('estraneo' in m), m);
+        && JSON.stringify(m.nascosti) === '["bandiera_ue"]' && JSON.stringify(m.retro) === '["codice","qr"]' && !('estraneo' in m), m);
 
     for (const [descr, valore] of [
         ['un colore che non è esadecimale', { colori: { nome: 'red' } }],
         ['un testo troppo lungo', { testi: { qualifica: 'X'.repeat(41) } }],
         ['una misura assurda', { posizioni: { foto: { x: 0, y: 0, w: 1e6, h: 10 } } }],
-        ['una misura che non è un numero', { posizioni: { foto: { x: 'a', y: 0, w: 10, h: 10 } } }]
+        ['una misura che non è un numero', { posizioni: { foto: { x: 'a', y: 0, w: 10, h: 10 } } }],
+        ['un retro che non è un elenco', { retro: 'codice' }]
     ]) {
         const no = await salva(JSON.stringify(valore));
         verifica(`rifiutato: ${descr}`, no.stato === 400, no);

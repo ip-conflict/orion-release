@@ -1,0 +1,358 @@
+/* ORION Voce nel centro operativo. */
+
+#pannello-voce {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 901;
+    display: flex;
+    align-items: stretch;
+    pointer-events: none;
+}
+#toggle-voce-btn {
+    pointer-events: auto;
+    align-self: flex-start;
+    margin-top: 62px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 12px;
+    border: 1px solid var(--border-color);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    background: var(--surface-color);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: -2px 2px 8px var(--shadow-color, rgba(0,0,0,0.18));
+}
+/* Finché l'audio non è attivo la linguetta resta gialla: è il primo errore da evitare. */
+#toggle-voce-btn.voce-muta {
+    /* Nel tema scuro il fondo d'avviso è semitrasparente: sopra la mappa sparirebbe. */
+    background: linear-gradient(var(--warning-soft-bg, #fef3c7), var(--warning-soft-bg, #fef3c7)), var(--surface-color, #fff);
+    color: var(--warning-text, #92400e);
+    border-color: var(--warning-color, #f59e0b);
+}
+#toggle-voce-btn.voce-in-onda i { color: var(--success-color); animation: voce-lampeggio 1s ease-in-out infinite; }
+#pannello-voce:not(.chiuso) #toggle-voce-btn { display: none; }
+#contenuto-voce {
+    position: relative;
+    pointer-events: auto;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface-color);
+    border-left: 1px solid var(--border-color);
+    box-shadow: -4px 0 16px var(--shadow-color, rgba(0,0,0,0.2));
+}
+#pannello-voce.chiuso #contenuto-voce { display: none; }
+body.voce-aperta .leaflet-top.leaflet-right,
+body.voce-aperta .leaflet-bottom.leaflet-right { right: 350px; }
+body.voce-aperta #contenitore-avvisi { right: 416px; max-width: 320px; }
+/* Per la sala il pannello è fisso: la linguetta non serve e gli eventi si aprono alla sua sinistra. */
+body.voce-fissa #toggle-voce-btn { display: none; }
+body.voce-fissa #pannello-eventi { right: 341px; }
+body.voce-aperta.eventi-aperti .leaflet-top.leaflet-right,
+body.voce-aperta.eventi-aperti .leaflet-bottom.leaflet-right { right: 670px; }
+body.voce-aperta.eventi-aperti #contenitore-avvisi { right: 736px; }
+/* La barra delle squadre resta al centro della parte di mappa che si vede. */
+body.voce-aperta #team-status-panel { left: calc((100% - 341px) / 2) !important; max-width: min(800px, calc(100% - 381px)) !important; }
+body.voce-aperta.eventi-aperti #team-status-panel { left: calc((100% - 652px) / 2) !important; max-width: min(800px, calc(100% - 692px)) !important; }
+
+#contenuto-voce .intestazione-eventi { gap: 8px; box-sizing: border-box; min-height: 48px; }
+.spia-diretta.spenta { background: var(--danger-color); }
+.voce-comandi { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+.voce-comandi input[type="range"] { width: 80px; }
+#chiudi-voce-btn {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+}
+.voce-icona {
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    padding: 3px 7px;
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+.voce-icona:hover { background: var(--list-item-hover-bg); }
+.voce-icona:disabled { opacity: 0.4; cursor: default; }
+
+.voce-scollegata, .voce-nota {
+    padding: 8px 14px;
+    font-size: 0.8rem;
+}
+.voce-scollegata { background: var(--danger-soft-bg); color: var(--danger-text); font-weight: 600; }
+.voce-nota { color: var(--text-muted); }
+
+/* Sopra l'intestazione e non in mezzo: comparendo spingerebbe giù il PARLA che si sta tenendo premuto. */
+#voce-trasmissione {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--danger-color);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+#voce-trasmissione.ultimi-secondi { background: #ea580c; }
+.voce-secondi { margin-left: auto; font-variant-numeric: tabular-nums; }
+.voce-livello {
+    width: 40px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.3);
+    overflow: hidden;
+    position: relative;
+}
+.voce-livello::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: calc(var(--livello, 0) * 100%);
+    background: #fff;
+}
+
+.voce-canali { list-style: none; margin: 0; padding: 0; flex-shrink: 0; max-height: 45%; overflow-y: auto; }
+.voce-canale {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 12px;
+    border-bottom: 1px solid var(--border-light-color, var(--border-color));
+    border-left: 5px solid var(--colore-canale, var(--border-color));
+}
+.voce-canale.muto { opacity: 0.65; }
+.voce-canale.parla-ora { background: var(--success-soft-bg); }
+.voce-canale.in-attesa { animation: voce-attesa 1.2s ease-in-out infinite; }
+.voce-canale.nessuno-ascolta { background: var(--warning-soft-bg); }
+.voce-corpo { flex: 1; min-width: 0; }
+.voce-testa { display: flex; align-items: center; gap: 6px; }
+.voce-testa strong { font-size: 0.95rem; }
+.voce-presenze { font-size: 0.72rem; color: var(--text-muted); }
+.voce-cuffia, .voce-chiudi-diretto {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+}
+.voce-chiudi-diretto { margin-left: 0; }
+.voce-cuffia.accesa { color: var(--primary-color); }
+.voce-stato { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.voce-stato button {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+.voce-stato button:hover { text-decoration: underline; }
+.voce-in-attesa { color: var(--warning-text) !important; font-weight: 700 !important; }
+.voce-chi-parla { color: var(--success-text); font-weight: 700; }
+.voce-nessuno { font-size: 0.75rem; font-weight: 700; color: var(--warning-text); }
+.voce-da-sentire {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--danger-color);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.voce-onda { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; vertical-align: middle; }
+.voce-onda i { display: block; width: 3px; background: currentColor; animation: voce-onda 0.9s ease-in-out infinite; }
+.voce-onda i:nth-child(2) { animation-delay: 0.15s; }
+.voce-onda i:nth-child(3) { animation-delay: 0.3s; }
+
+.voce-parla {
+    flex-shrink: 0;
+    min-width: 72px;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--primary-color);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+}
+.voce-parla:disabled { background: var(--button-disabled-bg); color: var(--button-disabled-text); cursor: not-allowed; }
+.voce-parla.in-trasmissione, .voce-parla:active { background: var(--danger-color); }
+.voce-parla-grande { width: 100%; padding: 14px; font-size: 0.95rem; margin-bottom: 4px; }
+
+.voce-tutti {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.voce-tutti:empty { display: none; }
+.voce-avviso {
+    flex: 1;
+    background: var(--surface-color);
+    color: var(--danger-text);
+    border: 2px solid var(--danger-color);
+}
+
+.voce-cronologia { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.voce-filtri { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
+.voce-filtri select { flex: 1; min-width: 0; font-size: 0.78rem; padding: 4px; }
+.voce-storia { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.voce-messaggio {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-light-color, var(--border-color));
+    border-left: 3px solid var(--colore-canale, transparent);
+}
+.voce-messaggio.in-ascolto { background: var(--success-soft-bg); }
+.voce-canale-chip { font-weight: 700; color: var(--text-color); }
+.voce-autore { font-size: 0.85rem; }
+.voce-trascrizione, .voce-nota-testo { font-size: 0.82rem; font-style: italic; color: var(--text-color); margin: 3px 0; }
+.voce-trascrizione::before, .voce-nota-testo::before { content: "«"; }
+.voce-trascrizione::after, .voce-nota-testo::after { content: "»"; }
+.voce-nota-testo[hidden] { display: none; }
+.voce-cerca { flex: 1; min-width: 0; font-size: 0.8rem; padding: 4px 8px; }
+.voce-segni { display: flex; flex-wrap: wrap; gap: 4px; }
+.voce-segno {
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--secondary-bg-color);
+    color: var(--text-muted);
+}
+.voce-segno.ok { background: var(--success-soft-bg); color: var(--success-text); }
+.voce-segno.da-sentire { background: var(--warning-soft-bg); color: var(--warning-text); font-weight: 700; }
+.voce-segno.alta { background: var(--warning-soft-bg); color: var(--warning-text); }
+.voce-segno.emergenza { background: var(--danger-color); color: #fff; font-weight: 700; }
+.voce-azioni { display: flex; gap: 6px; flex-wrap: wrap; }
+.voce-ricevuto {
+    border: 1px solid var(--success-color);
+    background: var(--surface-color);
+    color: var(--success-text);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.voce-sposta { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; max-height: 180px; overflow-y: auto; }
+
+#voce-fascia-attiva {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: linear-gradient(var(--warning-soft-bg, #fef3c7), var(--warning-soft-bg, #fef3c7)), var(--surface-color, #fff);
+    color: var(--warning-text, #92400e);
+    border-bottom: 1px solid var(--warning-color, #f59e0b);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+#voce-fascia-attiva[hidden] { display: none; }
+#voce-trasmissione[hidden] { display: none; }
+#voce-emergenze { flex-shrink: 0; }
+.voce-emergenza {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: #b91c1c;
+    color: #fff;
+    font-size: 1rem;
+    animation: voce-allarme 1.2s ease-in-out infinite;
+}
+.voce-emergenza > i { font-size: 1.5rem; }
+.voce-emergenza-testo { flex: 1; }
+.voce-emergenza a { color: #fff; font-weight: 700; }
+.voce-emergenza .button-style { background: #fff; color: #b91c1c; border: none; }
+.voce-emergenza .voce-prendo { background: #111827; color: #fff; font-weight: 800; }
+
+.team-status-item { position: relative; }
+.voce-barra { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; opacity: 0.55; }
+.team-status-item.voce-parla-ora { box-shadow: 0 0 0 2px var(--success-color); }
+.team-status-item.voce-parla-ora .voce-barra { opacity: 1; color: var(--success-text); }
+.voce-nome-barra { font-size: 0.72rem; font-weight: 700; }
+
+.voce-menu-squadra { padding: 4px 0 6px; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; display: flex; flex-direction: column; gap: 2px; }
+.voce-diretto-membro {
+    margin-left: auto;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.nota-vocale .voce-nota-azioni { display: inline-flex; gap: 4px; margin-left: 6px; }
+
+.leaflet-marker-icon.voce-parla-ora { animation: voce-pulsa 0.9s ease-in-out infinite; z-index: 9999 !important; }
+
+@keyframes voce-onda { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+@keyframes voce-attesa { 0%, 100% { background: var(--surface-color); } 50% { background: var(--warning-soft-bg); } }
+@keyframes voce-lampeggio { 50% { opacity: 0.3; } }
+@keyframes voce-allarme { 0%, 100% { background: #b91c1c; } 50% { background: #7f1d1d; } }
+@keyframes voce-pulsa { 0%, 100% { filter: drop-shadow(0 0 0 rgba(22,163,74,0)); transform-origin: center; } 50% { filter: drop-shadow(0 0 10px rgba(22,163,74,0.95)); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .voce-onda i, .voce-canale.in-attesa, .voce-emergenza, .leaflet-marker-icon.voce-parla-ora, #toggle-voce-btn.voce-in-onda i { animation: none; }
+}
+
+/* Pannello ripiegato: una colonna stretta che lascia la mappa alla sala. */
+#contenuto-voce .voce-compatta { display: none; }
+#contenuto-voce.ripiegato { width: 64px; }
+#contenuto-voce.ripiegato > :not(.voce-compatta) { display: none; }
+#contenuto-voce.ripiegato .voce-compatta { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; height: 100%; box-sizing: border-box; overflow-y: auto; }
+.voce-espandi, #ripiega-voce-btn { border: 1px solid var(--border-color); background: var(--surface-color); color: var(--text-color); border-radius: 8px; width: 40px; height: 40px; cursor: pointer; }
+#ripiega-voce-btn { width: 32px; height: 32px; }
+.voce-tessere { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.voce-tessera { position: relative; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--secondary-bg-color); border: 2px solid var(--colore-canale, var(--border-color)); font-weight: 700; font-size: 0.85rem; }
+.voce-tessera.parla-ora { background: var(--colore-canale, var(--primary-color)); color: #fff; }
+.voce-tessera.muto { opacity: 0.5; }
+.voce-tessera .voce-onda { position: absolute; bottom: 2px; }
+.voce-tessera .voce-da-sentire { position: absolute; top: -6px; right: -6px; }
+.voce-parla-compatto { width: 54px; padding: 10px 2px; font-size: 0.75rem; flex-direction: column; }
+body.voce-ripiegata.voce-aperta .leaflet-top.leaflet-right,
+body.voce-ripiegata.voce-aperta .leaflet-bottom.leaflet-right { right: 74px; }
+body.voce-ripiegata.voce-aperta #contenitore-avvisi { right: 140px; }
+body.voce-ripiegata.voce-fissa #pannello-eventi { right: 65px; }
+body.voce-ripiegata.voce-aperta #team-status-panel { left: calc((100% - 65px) / 2) !important; max-width: min(800px, calc(100% - 105px)) !important; }
+body.voce-ripiegata.voce-aperta.eventi-aperti #team-status-panel { left: calc((100% - 376px) / 2) !important; max-width: min(800px, calc(100% - 416px)) !important; }
+body.voce-ripiegata.voce-aperta.eventi-aperti .leaflet-top.leaflet-right,
+body.voce-ripiegata.voce-aperta.eventi-aperti .leaflet-bottom.leaflet-right { right: 394px; }

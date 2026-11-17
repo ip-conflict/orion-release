@@ -22,7 +22,10 @@ dice se qualcuna ha un problema di sicurezza noto. Express 5 lascia
 `server.js` lo rimette a oggetto vuoto, come le rotte si aspettano. Le
 librerie del browser (mappa, icone, PDF, QR) non stanno nel repository:
 `copy-libs.js` le copia da `node_modules` in `public/vendor` a ogni
-installazione.
+installazione. Nell'immagine Docker, dopo la copia, i loro pacchetti si
+tolgono da `node_modules` (l'elenco sta nel Dockerfile), perché il server non
+li usa e pesavano un terzo delle dipendenze: una libreria che il server
+comincia a importare va tolta da quell'elenco.
 Il programma e il suo database girano in container Docker, uno per
 associazione (capitolo 2). Davanti c'è Nginx, che fa da proxy, gestisce il
 certificato HTTPS e lascia passare il WebSocket. Docker tiene acceso il
@@ -71,8 +74,8 @@ cartella sua sotto `/srv/orion/<nome>`, un utente di sistema suo (un numero
 da 20001 in su) e una porta sua che risponde solo sulla macchina stessa.
 Davanti a tutte c'è lo stesso Nginx, con un sito e un certificato per
 dominio. Accanto alle istanze gira l'agente (`/usr/local/sbin/orion-agente`,
-da `scripts/docker/orion-agente.sh`), che esegue gli aggiornamenti chiesti
-dalla pagina Sistema e fa i backup notturni.
+da `scripts/docker/orion-agente.sh`), che esegue gli aggiornamenti e i cambi di
+memoria chiesti dalla pagina Sistema e fa i backup notturni.
 
 ### Cosa serve
 
@@ -102,6 +105,24 @@ loopback), oppure un DNS locale deve far puntare i nomi all'indirizzo
 interno: così la sala lavora anche con internet giù. Con IPv6 pubblico, o si
 inoltrano anche lì le porte 80 e 443, o non si pubblicano record AAAA.
 
+Con il drone acceso ogni istanza aggiunge due porte in ingresso, le stesse
+qualunque sia il numero di droni (capitolo "Il drone"); le altre restano
+quelle di sopra.
+
+| Verso | Porta | Da dove o per cosa |
+|---|---|---|
+| Ingresso al server | 80 e 443/TCP | Browser della sala, app, schermo a parete, Let's Encrypt; comuni a tutte le istanze |
+| Ingresso al server | RTMP dell'istanza/TCP (1935, 1936...) | Radiocomando del drone, dalla sua SIM: da qualunque indirizzo |
+| Ingresso al server | WebRTC dell'istanza/UDP (8189, 8190...) | Browser della sala che guardano la diretta |
+| Uscita dal server | 80 e 443/TCP, 53, 123, 587 o 465 | Come sopra; il video verso la sala viaggia come risposta sulla porta UDP di WebRTC |
+
+La sala operativa, anche lontana dal server, non apre nessuna porta in
+ingresso: è sempre lei a chiamare il server. In uscita deve poter
+raggiungere il server sulla 443/TCP e, per vedere il drone, sulla porta UDP
+di WebRTC della sua istanza. Le reti che bloccano l'UDP in uscita, come
+capita in quelle comunali, lasciano lavorare la sala ma senza video del
+drone: va chiesto di aprire quella porta verso l'indirizzo del server.
+
 ### Preparare la macchina
 
 Una volta per macchina, dalla cartella del codice:
@@ -119,14 +140,27 @@ anche in Nginx un sito predefinito che non risponde: chi arriva con
 l'indirizzo IP, o con un nome che non è di un'istanza, non finisce dentro
 nessuna.
 
+L'agente sta sulla macchina e non cambia quando un'istanza si aggiorna: le
+immagini portano il programma, non l'agente. Ogni versione di ORION sa quale
+versione dell'agente si aspetta (`AGENTE_ATTESO` in `src/manutenzione.js`,
+`AGENTE_VERSIONE` nello script) e, se quello sulla macchina è più vecchio, la
+pagina Sistema lo dice fra le avvertenze e non offre le funzioni che lui non
+conosce. Si aggiorna dalla cartella del repository portata alla versione
+nuova (`git pull`), con `sudo install -m 755 scripts/docker/orion-agente.sh
+/usr/local/sbin/orion-agente`, oppure rilanciando `prepara-host.sh`.
+
 ### Creare un'istanza
 
 ```
-sudo scripts/docker/nuova-istanza.sh <nome> <dominio> <versione>
+sudo scripts/docker/nuova-istanza.sh <nome> <dominio> [versione]
 ```
 
 Il nome è fatto di minuscole, cifre e trattini, il dominio deve già puntare
-alla macchina. Lo script sceglie la prima porta libera da 3101 in su, genera
+alla macchina. Senza versione si installa l'ultima pubblicata: lo script la
+legge dai tag del registro (`ghcr.io` dà un token di sola lettura senza
+account) e scarta quelli con il trattino, che sono versioni di prova; se il
+registro non risponde, o l'immagine è costruita in sede, chiede di indicarla.
+Lo script sceglie la prima porta libera da 3101 in su, genera
 password e segreti, prepara le cartelle con i permessi giusti, scarica
 l'immagine `ghcr.io/ip-conflict/orion:<versione>`, controlla che contenga
 davvero quella versione, avvia i container e aspetta che il programma
@@ -134,6 +168,29 @@ risponda. Poi scrive il sito di Nginx e chiede il certificato a Let's Encrypt
 (con `ORION_EMAIL` per l'indirizzo degli avvisi); se non ci riesce lo dice, e
 basta rilanciare `sudo certbot --nginx -d <dominio>` quando le porte sono
 aperte. `--senza-nginx` salta questa parte.
+
+Il sito di Nginx accetta richieste fino a 100 MB, tranne il caricamento dei
+backup dalla pagina Sistema, che arriva a 500 MB e ha una sua `location`. Le
+istanze create prima di questa regola tagliano un backup grande con un errore
+poco chiaro: si aggiunge a mano, nel blocco `server` di
+`/etc/nginx/sites-available/<dominio>` (e nella copia per HTTPS che certbot ha
+scritto nello stesso file), prima di `location /`, questo blocco con la porta
+dell'istanza, e si ricarica Nginx con `sudo nginx -t && sudo systemctl reload
+nginx`. Le istruzioni `proxy_*` vanno ripetute perché in Nginx una `location`
+non eredita quelle di un'altra.
+
+```nginx
+location = /api/sistema/backup/carica {
+    client_max_body_size 520M;
+    proxy_request_buffering off;
+    proxy_pass http://127.0.0.1:<porta>;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
 
 L'immagine si può anche costruire sulla macchina, per esempio prima che
 l'immagine ufficiale di una versione sia pubblicata: `sudo docker build -t
@@ -143,19 +200,56 @@ con un nome semplice l'agente chiederebbe gli aggiornamenti a Docker Hub, dove
 chiunque può pubblicare un'immagine con quel nome. Per aggiornare si
 costruisce la versione nuova con lo stesso nome; quando l'immagine ufficiale
 c'è, basta mettere `ORION_IMMAGINE=ghcr.io/ip-conflict/orion` nel `.env`
-dell'istanza.
+dell'istanza. La costruzione non compila niente: scarica le dipendenze e
+copia il programma di trascrizione dall'immagine `orion-whisper`, già
+compilata (si veda la trascrizione più avanti), e richiede un paio di minuti
+anche su un server piccolo. Le costruzioni successive riprendono le
+dipendenze dalla cache di Docker finché `package-lock.json` non cambia
+davvero, anche se cambia il numero di versione di ORION.
+
+Per le prove conviene che l'immagine la costruisca GitHub, così il server
+scarica soltanto e non tiene sul disco la cache di costruzione. Nel
+repository di sviluppo il workflow "Immagine", lanciato a mano con una
+versione di prova come `1.4.2-test.1`, pubblica `ghcr.io/ip-conflict/orion-dev`:
+un nome diverso da quello di `orion-release`, così una prova non prende mai il
+posto di una versione vera, e un pacchetto privato, perché contiene il codice.
+Il server di prova accede una volta sola con `sudo docker login ghcr.io`,
+usando come password un token di GitHub con il solo permesso
+`read:packages`; poi nel `.env` dell'istanza si mette
+`ORION_IMMAGINE=ghcr.io/ip-conflict/orion-dev` e si aggiorna con `sudo
+orion-agente aggiorna <istanza> 1.4.2-test.1`. La versione va sempre
+indicata, perché quelle con il trattino non si scelgono da sole. Il workflow
+tiene gli strati delle dipendenze nella cache di GitHub, e una costruzione
+che non le cambia richiede un paio di minuti. Su un host
+preparato prima che `prepara-host.sh` installasse buildx, Docker avvisa che il
+vecchio costruttore è deprecato: si toglie con `sudo apt install
+docker-buildx`.
+
+Ogni versione lascia sul disco la sua immagine, e ogni costruzione la sua
+cache. Dopo il backup notturno l'agente toglie le immagini senza nome, la cache
+di costruzione più vecchia di una settimana e, per ogni nome di immagine di
+ORION, tutte le versioni tranne le tre più recenti e quelle in uso: bastano
+per tornare indietro. `sudo orion-agente pulisci` lo fa subito e mostra lo
+spazio occupato da Docker. I log dei container sono tenuti a tre file da 10
+MB: `prepara-host.sh` lo imposta per tutto l'host in
+`/etc/docker/daemon.json`, il `compose.yaml` delle istanze per i propri.
 
 Il primo amministratore non si chiede durante l'installazione: si crea dal
 browser. ORION, avviato senza amministratori, genera un codice di
 configurazione monouso e lo scrive in `dati/PRIMO-ACCESSO.txt` dentro la
 cartella dell'istanza; lo script lo mostra alla fine. La pagina di accesso,
 finché l'amministratore non c'è, mostra al posto del login il modulo
-"Configurazione iniziale": codice, nome, cognome, username, email facoltativa
-e password, con le stesse regole di ogni altra password di ORION. Il codice
-serve perché fra la fine dell'installazione e il primo accesso l'indirizzo è
-già pubblico, e senza codice l'amministratore lo diventerebbe il primo che
-arriva. Creato l'amministratore, il file si cancella, il modulo non compare
-più e la rotta risponde 409. Il vecchio `create-admin.js` resta come strumento
+"Configurazione iniziale": codice, nome, cognome, email facoltativa e
+password, con le stesse regole di ogni altra password di ORION. Lo username lo
+forma il server come per tutti (cognome e iniziale del nome, `generateUsername`)
+e il modulo lo mostra in anteprima. Il codice serve perché fra la fine
+dell'installazione e il primo accesso l'indirizzo è già pubblico, e senza
+codice l'amministratore lo diventerebbe il primo che arriva. Creato
+l'amministratore, si entra subito con una sessione che vale come verificata:
+il codice letto sul server e la password sono già due fattori. La verifica in
+due passaggi, obbligatoria per l'amministratore, si attiva all'accesso
+successivo, come per chiunque non l'abbia ancora. Il file si cancella, il
+modulo non compare più e la rotta risponde 409. Il vecchio `create-admin.js` resta come strumento
 di emergenza, dentro il container: `sudo docker compose -f
 /srv/orion/<nome>/compose.yaml exec -e ADMIN_USERNAME=<nome> -e
 ADMIN_PASSWORD=<password> app node create-admin.js`.
@@ -184,6 +278,36 @@ nell'immagine. Il database sta in una rete senza uscita verso internet; ha un
 ruolo suo, `orion_db_user`, padrone del database `orion_db` ma non
 superutente. I limiti di memoria (`ORION_MEMORIA` e `ORION_MEMORIA_DB` nel
 `.env`, di base 1 GB e 512 MB) impediscono che un'istanza rallenti le altre.
+
+La memoria del programma si cambia dalla pagina Sistema, riquadro "Memoria di
+ORION", con la password: la pagina scrive una richiesta `tipo=memoria` e
+l'agente la esegue come un aggiornamento, con la stessa regola
+(`ORION_AGGIORNAMENTI`) e mai con un'emergenza aperta. I conti li fa l'agente,
+che vede tutte le istanze della macchina. Dalla memoria totale (`MemTotal` di
+`/proc/meminfo`) toglie una parte per il sistema, Docker e Nginx (un giga, o il
+15% sulle macchine grandi), i limiti scritti delle altre istanze, programma e
+database, e il database di questa: quello che resta è la memoria libera. Dalla
+pagina un'istanza non va oltre un tetto, di base 3 GB (bastano per ogni
+modello di trascrizione), che chi gestisce la macchina cambia con
+`ORION_MEMORIA_MASSIMA` nel `.env` dell'istanza: così un'associazione non si
+prende la memoria libera che servirebbe alle altre. Si contano i
+limiti e non l'uso del momento, così la somma dei limiti non supera mai la
+memoria della macchina, nemmeno con tutte le istanze piene insieme; due
+richieste da istanze diverse si mettono in fila su un blocco unico
+(`/srv/orion/.blocco-memoria`), perché non facciano il conto sulla stessa
+memoria. Abbassare si può sempre, fino a 768 MB; alzare solo dentro il massimo,
+che l'agente ricontrolla anche se la pagina l'ha già fatto. All'istanza
+l'agente dice solo la sua memoria, quella del suo database e il suo massimo:
+la memoria della macchina e quella delle altre istanze direbbero a
+un'associazione chi altro ospita il server, e quanto è grande. Poi scrive
+`ORION_MEMORIA` nel `.env`, ricrea il container del programma (circa un minuto
+di fermo) e, se il controllo di salute non passa, rimette il valore di prima.
+`sudo orion-agente memoria` mostra i limiti di ogni istanza, la memoria libera
+e il massimo dalla pagina, e avvisa se la somma supera la macchina (lo fa anche
+`nuova-istanza.sh` dopo aver creato un'istanza); `sudo orion-agente memoria
+<nome> <MB>` la cambia senza passare dalla pagina, anche oltre il tetto ma mai
+oltre la memoria libera. Un processo che non è ORION, sulla stessa macchina, l'agente non
+lo vede: chi ce lo mette deve lasciargli spazio abbassando le istanze.
 
 Le istanze sulla stessa macchina non vedono i file né il database delle
 altre, ma la macchina resta una: chi è root, o amministra Docker, vede tutto,
@@ -215,6 +339,7 @@ cartella, scritti da `nuova-istanza.sh` e leggibili solo da root.
 | `.env` | `ORION_PORTA`, `ORION_UID` | la porta sulla macchina e l'utente dell'istanza |
 | `.env` | `ORION_AGGIORNAMENTI` | `automatici`, `chiedi` o `bloccati` (capitolo 7) |
 | `.env` | `ORION_MEMORIA`, `ORION_MEMORIA_DB`, `ORION_POSTGRES_IMMAGINE` | limiti di memoria e immagine del database |
+| `.env` | `ORION_MEMORIA_MASSIMA` | fin dove la pagina Sistema può alzare `ORION_MEMORIA` (3 GB) |
 | `.env` | `POSTGRES_PASSWORD`, `ORION_DB_PASSWORD` | le password del database |
 | `orion.env` | `JWT_SECRET`, `COOKIE_SECRET` | i segreti di sessioni e cookie |
 | `orion.env` | `DOMAIN_NAME`, `TZ` | il dominio e il fuso orario |
@@ -228,10 +353,81 @@ senza sapere cosa si fa: cambiare `JWT_SECRET` fa uscire tutti.
 La mappa del centro operativo usa servizi di OpenStreetMap chiesti dal
 browser della sala, non dal server: le tessere della mappa
 (tile.openstreetmap.org, il satellite da server.arcgisonline.com), gli
-indirizzi (photon.komoot.io e nominatim.openstreetmap.org) e i percorsi
-delle squadre (router.project-osrm.org). Sono gli unici indirizzi esterni
-ammessi dalla Content-Security-Policy in `src/server.js`. Senza rete la mappa
-resta vuota e il percorso diventa linea d'aria; tutto il resto funziona.
+indirizzi (photon.komoot.io e nominatim.openstreetmap.org), i percorsi
+delle squadre (router.project-osrm.org) e il radar della pioggia e i fulmini
+del Dipartimento della Protezione Civile (l'ora dell'ultimo dato da
+radar-api.protezionecivile.it, i dati dall'archivio
+s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com, l'ultima immagine
+di riserva da radar-geowebcache.protezionecivile.it). Sono gli unici indirizzi esterni ammessi dalla
+Content-Security-Policy in `src/server.js`. Senza rete la mappa resta vuota e
+il percorso diventa linea d'aria; tutto il resto funziona.
+
+Il radar (`public/js/radar-meteo.js`) è il prodotto SRI, l'intensità di
+pioggia al suolo, con licenza CC BY-SA: l'attribuzione "Radar-DPC" compare
+sulla mappa. Le immagini passate e i fulmini vengono dall'archivio da cui
+legge la piattaforma radar.protezionecivile.it, che non è documentato: le
+tessere sono WebP a 256 pixel, ai soli zoom 6 e 7, con il dato nel canale
+rosso (0-255 per 0-100 mm/h), in
+`SRI/AAAA/MM/GG/hhmm/z/x/y/sri.webp` (ora UTC); i fulmini sono file binari
+ogni cinque minuti, `LGT/lgt_5min_<millisecondi>.bin`, nel formato 2 che la
+piattaforma legge. La pagina colora le tessere da sé con la scala del
+Dipartimento (più visibile per la pioggia debole) e le ingrandisce per gli
+zoom più alti.
+
+Poiché l'archivio può cambiare senza preavviso, nulla di quello che arriva si
+usa senza controllo. All'accensione e a ogni aggiornamento (ogni due minuti)
+si scarica una tessera di prova sull'Italia centrale per l'ultima ora
+annunciata dall'API, o per una delle due precedenti se l'archivio è in
+ritardo. Se manca o non è nel formato atteso (misura diversa, colori al posto
+del dato in scala di grigio), la pagina passa da sola al servizio WMS, che dà
+solo l'ultima immagine, lo scrive nel riquadro e riprova l'archivio ogni dieci
+minuti. Lo stesso succede se durante l'animazione arriva una tessera non
+valida. Un file dei fulmini che non si legge si scarta e il riquadro dice
+"Fulmini non disponibili"; uno che manca (403) è normale, perché escono con
+una decina di minuti di ritardo e restano poco. Senza risposta dall'API il
+riquadro dice "Radar non raggiungibile". Ogni richiesta ha un limite di
+dieci secondi. `tests/radar-regole.mjs` prova le regole senza rete,
+`tests/radar-sala.mjs` prova la mappa con il servizio simulato, guasti
+compresi. Il WMS di riserva vela di nero trasparente tutta l'area coperta dai
+radar e non ha CORS: un filtro SVG applicato dal CSS toglie il velo.
+
+La mappa dell'app è una pagina Leaflet negli asset dell'app
+(`app/src/main/assets/mappa`), aperta in una WebView da un'origine https
+finta, appassets.androidplatform.net, che l'app serve da sé
+(`CaricatoreMappa`): così valgono CSP, CORS e moduli JavaScript come nel
+browser della sala. La pagina non ha accesso al token né a interfacce
+dell'app: riceve i dati con `ORION.avvia`, `ORION.elementi` e
+`ORION.posizione` (centro dell'associazione, elementi della mappa senza
+segnalazioni, la posizione del telefono) e chiede da sola tessere, satellite,
+radar e fulmini agli stessi servizi della sala. La cartografia del territorio
+la chiede invece l'app al server, col token, quando la pagina chiede
+`/territorio/z/x/y`. Il radar è una copia di `public/js/radar-meteo.js`: si
+cambia nel server e si ricopia nell'app. Gli elementi sono gli stessi che
+l'app tiene cifrati per gli avvisi in viaggio, quindi senza rete la mappa
+mostra quelli dell'ultima volta.
+
+L'app chiede a router.project-osrm.org il percorso dal telefono
+all'intervento quando si preme Naviga, ma solo se fra gli elementi della
+mappa c'è almeno una strada chiusa o una zona interdetta. Il controllo
+(`ControlloPercorso` nell'app) cerca le zone attraversate dal percorso e le
+strade chiuse percorse per almeno 40 metri nello stesso verso, a meno di 25
+metri dalla linea disegnata; un percorso che incrocia una strada chiusa non
+conta. La zona che contiene la partenza non conta, quella che contiene
+l'arrivo si dice a parte.
+
+La sorveglianza in viaggio (`SorveglianzaZone`) gira nel servizio della
+posizione: legge ogni posizione con precisione migliore di 50 metri, avvisa
+una volta avvicinandosi (100 metri da una zona interdetta, 80 da una strada
+chiusa, solo se la distanza cala) e una volta entrando in una zona interdetta,
+e si riarma allontanandosi di 250 metri; per uscire da una zona bisogna
+allontanarsi di 30 metri dal bordo. Le zone vengono da `/api/mappa/elementi`
+all'avvio del servizio, a ogni `reload_mappa` e ogni cinque minuti, e restano
+cifrate in `zone-in-viaggio.json` fino all'uscita. Il server fa lo stesso
+controllo d'ingresso sulle posizioni che riceve (`src/zoneSquadre.js`), con la
+stessa tolleranza di 30 metri: scrive nel diario di sala e manda
+`squadra_in_zona` alle postazioni. Le posizioni più vecchie di cinque minuti
+non contano. Lo stato "dentro" sta in memoria: dopo un riavvio del server una
+squadra già dentro una zona viene annunciata una volta.
 
 Il bollettino di allerta, se acceso nelle Impostazioni, è l'unica cosa che
 il server stesso scarica da internet: ogni quarto d'ora chiede
@@ -241,11 +437,18 @@ il server stesso scarica da internet: ogni quarto d'ora chiede
 Gli indirizzi da cui controllare le versioni nuove (il servizio delle
 release, il manifesto) li sceglie l'amministratore, ma il server non deve
 diventare il modo per raggiungere la rete interna. Per questo
-`src/indirizziEsterni.js` accetta solo `https` verso indirizzi pubblici: il
-nome si risolve prima di collegarsi, un indirizzo privato, di loopback,
-link-local, CGNAT o multicast viene rifiutato, e lo stesso controllo si
-ripete a ogni reindirizzamento. Il salvataggio della configurazione rifiuta
-subito un indirizzo che non passa. Chi tiene il manifesto su un server
+`src/indirizziEsterni.js` accetta solo `https` verso indirizzi pubblici: un
+indirizzo privato, di loopback, link-local, CGNAT, multicast o riservato alla
+documentazione viene rifiutato, e lo stesso controllo si ripete a ogni
+reindirizzamento. Gli indirizzi IPv6 si leggono come numeri, non come testo,
+perché le forme che portano dentro un IPv4 (`::ffff:7f00:1`, che il browser e
+Node scrivono al posto di `::ffff:127.0.0.1`, le forme compatibili, NAT64 e
+6to4) valgono quanto l'IPv4 che contengono. La richiesta non passa da `fetch`
+ma da `https.request` con una ricerca del nome propria: il controllo avviene
+sugli stessi indirizzi su cui poi ci si collega, così chi governa il DNS non
+può rispondere con un indirizzo pubblico al controllo e con uno interno alla
+connessione. Il salvataggio della configurazione rifiuta subito un indirizzo
+che non passa. Chi tiene il manifesto su un server
 dell'ente, raggiungibile solo dalla rete interna, mette
 `ORION_AGGIORNAMENTI_RETE_LOCALE=true` in `orion.env`: allora sono ammessi
 anche `http` e gli indirizzi interni.
@@ -389,8 +592,11 @@ Ogni quindici minuti, se nelle Impostazioni è scelta una Regione, guarda se
 c'è un bollettino di allerta nuovo (`src/allerta.js`).
 
 Ogni minuto sigilla le righe nuove dei registri (note delle segnalazioni,
-diario di sala, registro delle operazioni, movimenti, registro delle squadre)
-in `registro_integrita`. Alla chiusura di un'emergenza prende il sigillo,
+diario di sala, registro delle operazioni, movimenti, registro delle squadre,
+stati delle squadre sugli interventi) in `registro_integrita`. Sempre ogni
+minuto, con un'emergenza aperta, cerca le segnalazioni senza squadra da più dei
+minuti critici delle Impostazioni e ne avvisa chi apre le emergenze
+(`controllaSegnalazioniInRitardo()` in `src/avvisiSala.js`). Alla chiusura di un'emergenza prende il sigillo,
 lo salva in `emergencies.sigillo_chiusura` (lo riportano resoconto e punto di
 situazione), lo restituisce a chi chiude e lo manda per email agli
 amministratori, se la posta è configurata.
@@ -531,7 +737,8 @@ fa il commit, si crea il tag `v1.2.3` e da quel tag una release su GitHub con
 le note: sono le note che gli amministratori leggono nella pagina Sistema
 prima di aggiornare. Una release in bozza o segnata come pre-release non viene
 proposta a nessuno. La release fa partire il workflow
-`.github/workflows/immagine.yml`, che pubblica `ghcr.io/<proprietario>/orion:<versione>`
+`.github/workflows/immagine.yml`, che da `orion-release` pubblica `ghcr.io/<proprietario>/orion:<versione>`
+(dal repository di sviluppo lo stesso workflow pubblica `orion-dev`)
 con nel `package.json` il numero della release; il pacchetto va reso pubblico
 una volta nelle impostazioni di GitHub, altrimenti le macchine non lo
 scaricano. Prima di annunciare la versione va controllato che il workflow sia
@@ -597,7 +804,8 @@ backup alterati, chiave di recupero e password della posta.
 ### Lo storico inalterabile
 
 La migrazione `storico-inalterabile` mette sulle tabelle `report_updates`,
-`diario_sala`, `audit_log`, `movimenti` ed `emergency_team_log` un trigger
+`diario_sala`, `audit_log`, `movimenti` ed `emergency_team_log` (e la
+migrazione `stati-squadra` su `stati_squadra`) un trigger
 che rifiuta UPDATE, DELETE e TRUNCATE. Passano solo gli UPDATE che non
 toccano il contenuto registrato (le colonne messe a NULL dal database quando
 si elimina una persona o una squadra) e i DELETE della cancellazione di
@@ -672,6 +880,10 @@ amministratore) leggono e sostituiscono i permessi in più, con l'audit
 `haPermesso()` di `apiHelper.js` per menu e pulsanti (il menu laterale li
 rilegge a ogni pagina). La verifica in due passaggi è obbligatoria con
 `mfaRichiesta()`: per l'amministratore e per chi ha `volontari.sanitario`.
+Al login si entra con lo username o con l'email: la stessa email in due
+account (con maiuscole diverse) non apre nessuno dei due, e i tentativi
+sbagliati si contano sull'account trovato, così scrivendolo nei due modi non
+raddoppiano.
 `POST /api/users` vale per chi ha `volontari.anagrafica`, ma solo con il
 ruolo volontario se non è amministratore; il libretto, per chi ha
 l'anagrafica senza i dati sanitari, arriva senza visite e corsi
@@ -700,17 +912,49 @@ che dice il motivo (`accesso_temporaneo_finito`), così l'app lo spiega invece
 di dire "sessione scaduta".
 
 Oltre al limite per indirizzo (cento tentativi sbagliati ogni quarto d'ora
-dalla stessa rete), c'è un limite per account, in `src/tentativiAccesso.js`:
-dopo cinque password sbagliate di fila sullo stesso nome utente l'account si
-ferma per un minuto, e ogni errore successivo raddoppia la pausa fino a un
-massimo di quindici minuti. L'accesso risponde 429 con `Retry-After` e un
-messaggio che dice quanto aspettare, che la pagina d'accesso e l'app mostrano
-così come arriva. Vale per qualunque nome scritto, esistente o no, così la
-risposta non rivela quali account ci sono; una password giusta azzera il
-conto, e dopo un'ora senza errori si riparte da capo. Il conto sta in memoria:
-un riavvio lo azzera. La pausa è breve apposta, perché chi la provoca per
-tenere fuori qualcuno lo tiene fuori per minuti e non per giorni.
-`npm run test:tentativi` lo prova su un server acceso.
+dalla stessa rete), c'è un limite per account, in `src/tentativiAccesso.js`.
+Si conta per account e per rete (l'indirizzo IPv4, o la rete /64 in IPv6): dopo
+cinque password sbagliate sullo stesso nome dalla stessa rete, quella rete si
+ferma per un minuto su quel nome, e ogni errore successivo raddoppia la pausa
+fino a un massimo di quindici minuti. Le altre reti non sono toccate: chi
+insiste da fuori non tiene fuori il coordinatore che entra dalla sala. Contato
+sul solo account, invece, bastava un tentativo a ogni fine pausa per tenere
+fuori una persona per sempre. Contro chi prova da molte reti insieme c'è una
+seconda soglia per l'account intero: trenta errori in un'ora, da qualunque
+rete, fermano l'account per cinque minuti, una pausa fissa che i tentativi
+fatti nel frattempo non allungano; dopo, per rimetterla, servono altri trenta
+errori. Questa pausa non ferma le reti da cui la persona è entrata con la
+password negli ultimi trenta giorni (fino a venti per account, ricordate solo
+da un accesso riuscito): chi attacca da molte reti non tiene fuori il
+coordinatore dalla sua sala. Prima un errore solo, appena finita la pausa, la
+rimetteva, e otto reti bastavano per tenere fuori dalle reti nuove la persona
+per 48 minuti all'ora. Quando succede la persona riceve un'email e
+nel registro delle operazioni resta `accesso.molti_tentativi`. L'accesso
+risponde 429 con `Retry-After` e un messaggio che dice quanto aspettare, che la
+pagina d'accesso e l'app mostrano così come arriva. Vale per qualunque nome
+scritto, esistente o no, così la risposta non rivela quali account ci sono; una
+password giusta azzera il conto della rete da cui si entra, e dopo un'ora senza
+errori si riparte da capo. L'accesso dell'app con il token di rinnovo o con la
+chiave del telefono non passa da queste pause: in emergenza è la via sicura per
+entrare comunque. I controlli ancora in corso contano come errori: senza, cento
+richieste mandate insieme passavano tutte il controllo prima che bcrypt
+finisse la prima, e una password giusta in mezzo entrava anche dopo la pausa.
+Oltre la soglia ne passa uno alla volta, gli altri ricevono 429. Il conto sta
+in memoria: un riavvio lo azzera, reti fidate comprese. La rete è
+quella vera solo dietro nginx, come nelle istanze in container: con la porta di
+ORION esposta direttamente, chiunque se la sceglierebbe con `X-Forwarded-For`.
+`npm run test:tentativi` lo prova su un server acceso, `npm run test:sicurezza`
+anche senza.
+
+Il link di ripristino (`POST /api/auth/forgot-password`) ha due tetti. Per
+account se ne mandano al massimo tre all'ora: ogni link nuovo annulla il
+precedente, e senza tetto chi conosce un nome terrebbe sempre scaduto quello
+che la persona sta per aprire, oltre a riempirle la casella. Oltre il tetto la
+richiesta risponde come sempre, perché la risposta non deve dire quali account
+esistono, ma non manda niente: resta valido l'ultimo link mandato e nel log
+c'è un avviso con il tempo che manca al prossimo. Per rete passano dieci
+richieste ogni quarto d'ora, qualunque nome si scriva, poi la risposta è 429.
+Anche questi conti stanno in memoria.
 
 Le regole di una password nuova sono in `src/password.js` e valgono dovunque
 se ne sceglie una (primo accesso, cambio password, link di ripristino): almeno
@@ -1045,14 +1289,28 @@ amministratori). Il modello calcola una volta l'elenco delle forme
 stampa e in nodi SVG per l'anteprima; i testi si misurano con lo stesso
 Roboto del PDF, caricato da `vfs_fonts.js` come FontFace. Il modello scelto
 dall'amministratore sta in `badge_modello` (impostazione pubblica):
-`{ colori, testi, posizioni, nascosti }`, con `posizioni` nullo per la
+`{ colori, testi, posizioni, nascosti, retro }`, con `posizioni` nullo per la
 disposizione automatica, che si adatta a QR, codice fiscale ed ente.
+`retro` elenca gli elementi spostati sul retro, scelti fra QR, codice a barre,
+scritta centrale, loghi e bandiere; ogni posizione vale sulla facciata del
+suo elemento, e il retro automatico (`automaticheRetro`) mette il codice
+largo in basso, il QR con scritta e loghi sopra, le bandiere in fondo. Il
+retro c'è solo se contiene qualcosa di visibile (`conRetro`): allora
+`facciate()` dà due disegni per tesserino, e `inPdf()` fa una pagina per
+disegno nell'ordine ricevuto, con lo sfondo di ciascuna pagina in
+`background` come funzione della pagina. La segreteria li mette in fila
+tesserino per tesserino (stampanti fronte-retro) o prima tutti i fronti e
+poi tutti i retri (stampanti a una facciata, con le tessere rimesse girate).
 `PUT /api/branding/settings` lo accetta solo dopo `validaModelloTesserino`
 (`src/modelloTesserino.js`): colori `#rrggbb`, testi da 1 a 40 caratteri,
 misure numeriche entro il tesserino, chiavi note; vuoto vuol dire il
 tesserino predefinito. Il disegno impone le misure minime (QR 38 pt di lato,
 codice a barre largo almeno 231 moduli da tre punti a 300 dpi) e mette QR e
-barre su bianco. Gli elenchi delle chiavi stanno nei due file e vanno tenuti
+barre su bianco. Il QR non usa il nodo `qr` di pdfMake, che arrotonda il
+modulo a punti interi e rimpiccioliva un QR di 33 moduli da 58 a 33 punti:
+la matrice viene da qrcodejs (`_oQRCode`, un campo interno della versione
+in `vendor`) e ogni modulo è un numero intero di punti della stampante,
+come le barre; lo stesso disegno fa l'anteprima del configuratore. Gli elenchi delle chiavi stanno nei due file e vanno tenuti
 uguali; `npm run test:tesserino` prova il controllo del server.
 
 ### Le condizioni d'uso e la loro accettazione
@@ -1119,7 +1377,19 @@ una sfida casuale; la sessione la dà `POST /api/accesso/mfa` con la sfida e il
 codice. Le sfide stanno in memoria, durano cinque minuti e cadono dopo cinque
 codici sbagliati (`sfida_scaduta`); un riavvio del server le perde e si
 rientra con la password. Entrambe le rotte stanno sotto il limite dei
-tentativi d'accesso. Un'app che non conosce il secondo passo mostra il
+tentativi d'accesso. Siccome con la password giusta si ha una sfida nuova
+quante volte si vuole, i codici dell'app sbagliati si contano anche per
+account, sopra le sfide: al decimo i codici dell'app di quella persona si
+fermano per cinque minuti, e ogni errore dopo la pausa la raddoppia fino a
+un'ora. La risposta è 429 con un messaggio che dice quanto aspettare. Chi
+sbaglia lì ha già la password, quindi la pausa vale per l'account e non per la
+rete, e alla prima pausa della giornata la persona riceve un'email che le dice
+di cambiare la password; nel registro resta `mfa.molti_codici_sbagliati`.
+Durante la pausa la persona vera entra lo stesso con la conferma dal telefono
+collegato o con un codice di riserva, che con 50 bit non si indovinano. Un
+codice dell'app giusto azzera il conto, come lo azzera togliere la verifica.
+Come per le password, i codici ancora in verifica contano come errori, così
+un'ondata di richieste mandate insieme su più sfide non scavalca il conto. Un'app che non conosce il secondo passo mostra il
 messaggio della risposta, che dice di aggiornarla.
 
 Per gli amministratori è obbligatoria. A un amministratore senza verifica
@@ -1263,6 +1533,72 @@ emergenza; `GET /api/situazione` lo porta nel campo `quadro`, anche per
 un'emergenza chiusa. Entrambe le rotte escludono gli esterni.
 `npm run test:quadro` prova controlli, salvataggio e proposta.
 
+**Il tipo.** `reports.tipo` (migrazione `tipo-segnalazione`) vale uno dei
+codici di `TIPI_SEGNALAZIONE` in `src/costanti.js`, con un vincolo nel
+database; di serie `altro`. Si manda nella creazione e nella modifica (un
+codice sconosciuto è 400) e `GET /api/segnalazioni/tipi` dà codici ed
+etichette. `GET /api/situazione` lo conta in `per_tipo`, il resoconto ha una
+riga per tipo.
+
+**Le vicine.** `GET /api/reports/vicine?lat=&lon=` restituisce al massimo
+cinque segnalazioni aperte dell'emergenza in corso entro cento metri, con la
+distanza in `metri`. La distanza è calcolata in SQL con la formula
+dell'emisenoverso, senza estensioni geografiche del database; fuori emergenza
+la risposta è vuota, agli esterni 403. Il modulo di creazione la chiama prima
+di salvare.
+
+**Lo stato delle squadre.** Ogni assegnazione (`report_team_assignments`) ha
+`stato` (assegnata, partita, sul_posto, conclusa, rientrata, in quest'ordine:
+`STATI_SQUADRA`) e `stato_il`. `POST /api/reports/:id/teams/:teamId/stato`
+con `{ stato, quando }` lo cambia: lo possono i membri della squadra, esterni
+compresi, e gli interni; tornare indietro solo gli interni (agli altri 409),
+lo stesso stato due volte è 409. `quando` è l'ora del tocco mandata dall'app
+quando il cambio parte dalla coda senza rete: vale se non è più di due minuti
+nel futuro e non più vecchia di sei ore, altrimenti si usa adesso. La rotta
+accetta la chiave d'idempotenza. Ogni cambio scrive una nota di sistema nel
+diario, una riga in `stati_squadra` (segnalazione, squadra, nome radio,
+stato, ora, autore), che entra nello storico sigillato, e manda
+`reload_reports` e `reload_squadre`. Il resoconto ne ricava per ogni squadra
+il tempo di arrivo (da assegnata a sul posto) e la permanenza sul posto.
+`GET /api/squadre` porta lo stato in `active_target_info.stato`.
+`npm run test:stati-squadra` prova chi può cambiare cosa, l'ora dalla coda,
+diario, resoconto e sigillo.
+
+**Le esportazioni.** `GET /api/admin/emergencies/:id/segnalazioni.csv` e
+`GET /api/admin/emergencies/:id/mappa.geojson` (`src/esportazioni.js`)
+vogliono `emergenze.archivio` e un'emergenza chiusa (409 se è aperta). Il CSV
+ha il BOM e il punto e virgola, come lo vuole Excel in italiano, e una cella
+che comincia con `=`, `+`, `-` o `@` prende un apostrofo davanti perché Excel
+non la esegua come formula. Il GeoJSON ha un punto per ogni segnalazione con
+coordinate e le forme di `elementi_mappa` dell'emergenza, comprese quelle
+tolte (con `rimosso_il`). Ogni scaricamento va nel registro come
+`emergenza.esportata`. `npm run test:segnalazioni-nuove` prova tipo, vicine,
+avvisi ed esportazioni.
+
+### La qualifica di esterni e squadre
+
+`users.qualifica` e `squadre.qualifica` (migrazione `qualifiche`) valgono uno
+dei codici di `QUALIFICHE` in `src/costanti.js`, con un vincolo nel database,
+oppure NULL: vuol dire del gruppo. `leggiQualifica()` tratta la stringa vuota
+come NULL e risponde 400 a un codice sconosciuto. La qualifica di una persona
+si scrive solo con il ruolo esterno (`POST` e `PUT /api/users`, che accettano
+anche `ente`; per gli altri ruoli ente e qualifica tornano NULL) e negli
+accessi temporanei (`POST /api/esterni-temporanei`, `PUT …/persona`); la
+squadra nuova di un temporaneo prende la sua se `nuova_squadra.qualifica` non
+dice altro. `PUT /api/squadre/:id` cambia la qualifica solo se il campo c'è,
+così l'app e i client vecchi non la cancellano; la squadra COC resta sempre
+del gruppo. Il trigger `assegnazione_nome_squadra` copia la qualifica in
+`report_team_assignments` all'assegnazione, come nome e nome radio, e le
+letture delle segnalazioni la riportano in `assigned_teams` anche dopo lo
+scioglimento. `GET /api/qualifiche` dà codici e nomi; sigle e colori (fondo,
+scritta, anello) stanno in `public/js/qualifiche.js` (e nell'app, solo le
+sigle, in `Qualifiche` di `ModelliSquadre.kt`), che costruisce etichette,
+cartellini e segnaposti con il DOM. Il segnaposto è il cerchio delle squadre
+del gruppo con la lettera del nome radio, nel colore dell'ente e con
+l'etichetta della sigla sotto. La Croce Rossa ha un codice suo (migrazione
+`croce-rossa`, che allarga i due vincoli); prima stava con `sanitario`.
+`npm run test:qualifiche` prova scelta, eredità, modifica e storico.
+
 ### Il caposquadra e la posizione delle squadre
 
 Il caposquadra è un segno sul membro (`squadra_membri.caposquadra`), con un
@@ -1362,7 +1698,7 @@ Protezione Civile pubblica ogni giorno (di norma entro le 16, con eventuali
 aggiornamenti) nel repository
 `pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica`, con licenza
 CC-BY 4.0. È la sintesi delle valutazioni dei Centri Funzionali Decentrati,
-quindi per il Veneto riporta quelle del CFD regionale. Il server scarica
+quindi per ogni Regione riporta quelle del suo Centro Funzionale. Il server scarica
 l'archivio dell'ultimo bollettino, `files/all/latest_all.zip`, con
 `If-None-Match`: finché non cambia, la risposta è un 304 senza contenuto.
 
@@ -1385,10 +1721,20 @@ node scripts/zone-allerta.mjs veneto
 ```
 
 dagli stessi dati aperti. Va rigenerato se la Regione ridisegna le zone (il
-Veneto è passato da 8 a 25 zone). Per aggiungere una Regione basta una voce
-in `REGIONI` di `src/allertaRegioni.js` (nome, prefisso dei codici, per
-esempio `Lomb-`, ente e pagina ufficiale) e il suo catalogo generato con lo
-script: il resto non cambia.
+Veneto è passato da 8 a 25 zone). Ci sono tutte le Regioni dei dati del
+Dipartimento: in `REGIONI` di `src/allertaRegioni.js` ognuna ha nome e
+prefisso dei codici (`Lomb-`, `Tren-` per le due Province autonome, che nei
+dati sono le due zone di una stessa voce). Nome dell'ente e pagina ufficiale
+sono facoltativi e ci sono solo dove li si è letti dal sito della Regione
+(oggi il Veneto): senza, la finestra del bollettino scrive "Centro Funzionale
+competente" e non mostra il collegamento agli avvisi della Regione.
+
+In diverse Regioni un comune diviso fra due bacini sta in più zone (Perugia,
+Cagliari, Messina e una sessantina in Piemonte). `zonaDelComune()` sceglie
+allora quella in cui cade il centro della mappa, o la prima se il centro è
+fuori da tutte; `GET /api/allerta/regioni` manda `comuni_divisi` e le
+Impostazioni dicono quale zona vale. Le prove (`tests/allerta.mjs`) cercano il
+capoluogo di ogni Regione per nome e per coordinate e vogliono la stessa zona.
 
 Con un'emergenza vera aperta, ogni versione nuova e quella in vigore
 all'apertura entrano in `emergency_documents` (con `bollettino_id`, una volta
@@ -1439,6 +1785,14 @@ Chi produce una notifica usa `notifica` o `notificaA` di `appMobile.js`;
 chi deve toglierla perché ha perso significato usa `scadi`, per tipo, per
 categoria, per riferimento o per persona. Chi produce cosa si legge in
 `CATEGORIA_DEL_TIPO` di `appMobile.js`, che elenca tutti i tipi.
+
+Gli avvisi della sala (`src/avvisiSala.js`, tipo `avviso_sala`, categoria
+emergenza) vanno a chi ha `emergenze.apertura`, non è temporaneo e non ha
+spento `users.avvisi_sala` (`GET` e `PUT /api/users/me/avvisi-sala`, il
+secondo solo con quel permesso). Partono per una segnalazione nuova ad alta
+priorità (non a chi l'ha creata), per una segnalazione senza squadra oltre i
+minuti critici e per una squadra entrata in una zona interdetta. La chiave
+(`alta:`, `ritardo:`, `zona:` con l'id) fa arrivare ogni fatto una volta sola.
 
 L'app riceve le notifiche dal WebSocket della sessione quando è aperta. Ad
 app chiusa le riceve con il token degli avvisi (`src/avvisi.js`, tabella
@@ -1529,6 +1883,342 @@ password, avvisi di scadenza ai volontari, report mensile, avvisi del
 magazzino a chi li ha chiesti.
 
 
+### Orion Voice
+
+La voce è un modulo che si accende dalle impostazioni (`voce_enabled`) ed
+esiste solo a emergenza aperta, simulazioni comprese. Vive in `src/voce.js`,
+con i canali in `src/voceCanali.js`, la parola in `src/voceParola.js` e il
+contenitore audio in `src/voceOgg.js`. Non passa da servizi esterni e il
+server non decodifica l'audio: telefono e browser mandano pacchetti Opus già
+pronti (mono, 16 kHz, pacchetti da 40 a 60 ms), il server li inoltra a chi
+ascolta e alla fine li mette in un file Ogg Opus, che il browser riproduce
+così com'è.
+
+I canali non sono una tabella: si ricavano a ogni controllo da squadre,
+caposquadra, squadra COC e permessi. "Sala" vuol dire i membri della squadra
+COC; "chi coordina" chi ha il permesso `emergenze.apertura`.
+
+| Canale | Chi ascolta | Chi parla |
+|---|---|---|
+| `squadra:<id>` | i membri della squadra e la sala | gli stessi, la sala con precedenza |
+| `generale` | tutti quelli che hanno un canale | sala, chi coordina, capisquadra |
+| `avvisi` | tutti quelli che hanno un canale | sala e chi coordina, sempre in priorità alta |
+| `diretto:<persona>` | la persona, la sala, chi coordina | gli stessi; lo aprono sala e chi coordina |
+
+Il volontario ha quindi un solo canale su cui parlare, la sua squadra, e
+ascolta il generale e gli avvisi: quello che la sala dice a tutte le squadre
+arriva anche a lui, mentre a parlarci sono pochi, così il generale non
+diventa il traffico di tutte le squadre. Una squadra senza caposquadra parla
+con la sala dal suo canale: per farla parlare sul generale basta nominare il
+caposquadra dal centro operativo. Le priorità sono tre: normale, alta (sala
+e chi coordina) ed emergenza (chiunque, sopra tutto, anche chi sul canale
+della squadra ascolta soltanto; sul generale e sugli avvisi no, perché
+arriverebbe a tutti).
+
+Su un canale parla una persona alla volta, come in radio. Chi ha la parola
+vive in memoria: se il server riparte, tutti i canali ripartono liberi. La
+sala prende la parola anche a canale occupato, l'emergenza la prende sempre;
+chi viene interrotto riceve `interrotto` e il suo messaggio resta salvato
+come interrotto. Un messaggio dura al massimo 60 secondi, sotto il mezzo
+secondo non si salva, e una persona ne salva al massimo 30 al minuto (i tocchi
+a vuoto, i canali occupati e i messaggi annullati non contano).
+
+Il collegamento è un WebSocket suo, `/voce`, distinto da quello del tempo
+reale, che va solo dal server ai client e ha messaggi di 4 KB al massimo. Il
+web entra con la sessione (cookie), il telefono con il token voce:
+`POST /api/voce/token` con la sessione, poi `Authorization: Voce <token>`. Il
+token vale per l'emergenza in corso e per nient'altro, non scade con la
+sessione (che dura un giorno e si rinnova con l'impronta, cosa che con il
+telefono in tasca non succede) e cade con la chiusura dell'emergenza, con
+`chiudiSessioni` e con la sospensione della persona. Un telefono per persona:
+il secondo fa uscire il primo con `chiuso`/`altro_telefono`; le postazioni
+web non hanno limite. Il server manda un ping ogni 25 secondi, perché Nginx
+chiude dopo 60 secondi un collegamento muto: così la configurazione delle
+istanze già installate non va toccata. Ogni 3 secondi ricontrolla tutti i
+collegati con una lettura sola: chi è uscito dalla squadra perde il canale
+(e se stava parlando il messaggio si chiude), chi è sospeso o ha la sessione
+chiusa viene scollegato, alla chiusura dell'emergenza o allo spegnimento del
+modulo escono tutti.
+
+I comandi viaggiano come testo JSON con il campo `t`, l'audio come trame
+binarie. Dal client al server una trama è il numero del pacchetto (2 byte)
+seguito dal pacchetto Opus; dal server a chi ascolta è il numero del
+messaggio (4 byte), il numero del pacchetto (2 byte) e il pacchetto.
+
+| Dal client | Risposta | Cosa fa |
+|---|---|---|
+| `parla` (`uuid`, `canale`, `priorita`, `differito`, `eta_ms`) | `parla_ok` con `ricevuti`, oppure `occupato` con chi parla, oppure `negato` con `motivo` | chiede la parola; con lo stesso `uuid` riprende un messaggio interrotto dalla rete |
+| `fine` (`uuid`, `pacchetti`) | `salvato`, `annullato` o `manca` | chiude il messaggio |
+| `annulla` (`uuid`) | `annullato` | il dito trascinato fuori dal tasto |
+| `ascoltato` (`id`, `in_diretta`) | | dalla sala vale come "riprodotto in sala" |
+| `ricevuto` (`id`) | | la conferma esplicita della sala |
+| `ciao` (`ultimo`) | `persi` | i messaggi arrivati mentre il client era scollegato |
+| `cuffie` (`canali`) | | i canali che una postazione di sala ascolta, per "nessuna postazione ascolta" |
+
+Dal server arrivano anche `stato` all'apertura, `canali` quando cambiano,
+`parola` con chi sta parlando, `inizio` e `fine` di un messaggio in diretta,
+`messaggio` per uno arrivato in differita, `riprodotto` e `ricevuto` per le
+conferme, `presenze` alla sala (per ogni canale quanti telefoni hanno la voce
+accesa e quante postazioni lo ascoltano), `presa_in_carico` quando la sala
+prende un'emergenza e `chiuso` prima di uno scollegamento voluto. Un messaggio
+di emergenza può portare `posizione` (`lat`, `lon`); senza, la sala vede
+l'ultima posizione della squadra.
+
+Il messaggio è identificato dall'`uuid` che sceglie il telefono, così un invio
+ripetuto dopo una caduta non lo duplica. Se la rete cade a metà frase il
+canale torna libero (anche quando il collegamento non si chiude: il telefono
+manda un pacchetto ogni 60 ms anche nelle pause, e cinque secondi senza audio
+bastano, invece del minuto che servirebbe al ping per accorgersene), chi ascolta riceve `fine` con stato `in_ritardo`, e il
+server tiene il messaggio aperto per dieci minuti: il telefono si ricollega,
+ripete `parla` con lo stesso `uuid`, il server risponde con quanti pacchetti
+ha già e il resto arriva come `messaggio`. Passati dieci minuti si salva
+quello che c'è. Un messaggio registrato senza rete parte con
+`differito: true` e con `eta_ms`, da quanto tempo è stato registrato secondo
+l'orologio che non salta del telefono (lo stesso criterio delle posizioni):
+non chiede la parola e arriva intero, con l'ora vera.
+
+L'audio sta in `protected_uploads/voce/<emergenza>/<uuid>.ogg`, cifrato con
+la chiave dell'istanza come gli altri file (senza chiave resta in chiaro e lo
+cifra il giro orario), entra nei backup con il resto e si cancella quando si
+elimina l'emergenza. Le tabelle sono `voce_messaggi` (con una copia del nome
+radio e del nome di chi parla, perché squadre e persone possono sparire),
+`voce_ascolti`, `voce_diretti` e `token_voce`. Un messaggio di squadra si
+lega alla segnalazione a cui la squadra era assegnata quando è iniziato e
+finisce nel suo diario come nota con `voce_id`; il testo della nota
+("Messaggio vocale da Alfa, 12 s") lo leggono anche le app vecchie, la stampa
+e il resoconto. Gli avvisi a tutti e i messaggi di emergenza finiscono nel
+diario di sala.
+
+Le rotte HTTP: `GET /api/voce/stato` (canali e ruolo di chi chiede),
+`GET /api/voce/messaggi` (cronologia dei propri canali, a pagine con
+`prima`), `GET /api/voce/messaggi/:id/audio` (il file; di un'emergenza
+archiviata solo con `emergenze.archivio`, e l'ascolto finisce nel registro
+delle operazioni), `POST /api/voce/messaggi/:id/ascolto` e `/ricevuto`,
+`POST /api/voce/diretti` (con `user_id` o `username`) e
+`DELETE /api/voce/diretti/:persona`, `GET /api/voce/emergenze` (le emergenze
+non ancora prese in carico, con il telefono se la Segreteria è accesa, la
+stessa regola dei membri delle squadre), `POST /api/voce/messaggi/:id/presa-in-carico`,
+`POST /api/voce/messaggi/:id/segnalazione` (sposta un messaggio su un'altra
+segnalazione: le note non si cambiano, se ne scrive una in tutte e due),
+`GET /api/voce/archivio/:emergenza` (con `emergenze.archivio`) e
+`GET /api/voce/statistiche` (per la pagina Sistema: ritardo medio e al
+novantesimo percentile, messaggi in differita, collegati). Il ritardo di un
+messaggio in diretta è quanto l'ultimo pacchetto arriva dopo la fine del
+parlato; i messaggi ripresi o registrati senza rete si contano a parte. Un
+esterno temporaneo sente solo i messaggi arrivati da quando è entrato in
+squadra, e parla solo se nella creazione dell'accesso è rimasta la casella
+"Può parlare" (`users.voce_parla`). Il contesto dell'app porta `moduli.voce` e
+la capacità `voce`; il resoconto ha la sezione "Comunicazioni vocali".
+
+Nel web la voce vive in `public/js/voce-co.js` (pannello, barra delle
+squadre, tasti, emergenza), `public/js/voce-audio.js` (microfono, codifica,
+riproduzione, toni), `public/js/voce-cattura.js` (l'AudioWorklet che porta il
+microfono a 16 kHz) e `public/css/voce.css`; `centro-operativo.js` ha solo gli
+agganci `window.voceSala` e `window.orionCentro`. Codifica e decodifica le fa
+il browser con WebCodecs (Opus a 16 kHz, pacchetti da 60 ms, circa 20
+kbit/s); il microfono si cattura alla frequenza della scheda audio perché
+Firefox non collega il microfono a un contesto audio con una frequenza
+diversa. Un browser senza `AudioEncoder` ascolta soltanto, e senza
+`AudioDecoder` sente i messaggi a fine trasmissione, dal file. La
+riproduzione è una coda: una voce alla volta, con un margine di 350 ms contro
+i salti della rete, alta priorità ed emergenza davanti; mentre la postazione
+parla la coda aspetta. Il microfono si apre alla pressione e si chiude al
+rilascio; la richiesta della parola parte insieme all'apertura, e i pacchetti
+registrati prima del sì partono subito dopo. Il rilascio si ascolta sul
+documento e alla perdita del fuoco della finestra: il pannello si ridisegna
+mentre si tiene premuto, e senza questo il messaggio andrebbe avanti fino al
+minuto. Le cuffie spente valgono per la postazione e stanno nel browser; il
+tasto per parlare è uno per tutti, l'impostazione `voce_tasto` (F9), e parla
+sull'ultimo canale usato con PARLA. Per
+chi è in sala (squadra COC o permesso `emergenze.apertura`) il pannello è
+fisso: la classe `voce-fissa` sul corpo della pagina toglie linguetta e
+chiusura e sposta la colonna degli eventi alla sua sinistra; per gli altri il
+pannello si apre al posto degli eventi.
+
+La trascrizione sta in `src/voceTrascrizione.js` e usa whisper.cpp. Non lo
+compila chi costruisce ORION: `docker/whisper.Dockerfile` lo compila una volta
+per versione nell'immagine `ghcr.io/ip-conflict/orion-whisper`, che contiene
+solo i suoi file, e il Dockerfile di ORION li copia da lì
+(`ARG WHISPER_IMMAGINE`). La pubblica il workflow "Whisper", da solo quando
+`docker/whisper.Dockerfile` cambia su `master` oppure a mano; il pacchetto va
+lasciato pubblico, perché i server lo scaricano senza credenziali. Per una
+versione nuova di whisper.cpp si cambiano versione e commit in
+`docker/whisper.Dockerfile` e il nome in `WHISPER_IMMAGINE`. Il workflow non
+guarda il resto del codice, quindi può girare anche da un repository che ha
+soltanto questi due file. Senza accesso al registro
+l'immagine si costruisce in locale, `sudo docker build -f
+docker/whisper.Dockerfile -t localhost/orion-whisper:v1.9.5 docker`, e poi
+ORION con `--build-arg WHISPER_IMMAGINE=localhost/orion-whisper:v1.9.5`: su
+due processori sono alcuni minuti, una volta sola.
+
+whisper.cpp è fissato a una versione e a un commit, senza OpenMP e con tre
+varianti per i processori x86 caricate all'avvio (`GGML_BACKEND_DL`): x86-64
+di base, AVX2 e AVX-512, così la stessa immagine va su ogni macchina e usa il
+meglio che trova. whisper.cpp ne compila quattordici; le altre undici si
+tolgono dal suo `CMakeLists.txt` perché quintuplicavano il tempo di
+compilazione per pochi punti di velocità. I compilatori in parallelo sono
+quanti ne regge la memoria libera (circa 700 MB ciascuno), così un server
+piccolo non va in swap. Il programma sta in `/opt/whisper`, circa 21 MB; `ORION_WHISPER` ne indica un altro, ed è così
+che le prove usano `tests/whisper-finto.sh`. I modelli non sono
+nell'immagine: l'amministratore ne sceglie uno (`POST /api/voce/trascrizione`,
+impostazione `voce_trascrizione`), il server lo scarica da Hugging Face in
+`<dati>/modelli` controllando prima lo spazio libero e poi l'impronta SHA-1
+pubblicata da whisper.cpp, e un file diverso non si usa. `ORION_MODELLI_ORIGINE`
+cambia l'indirizzo, per un'istanza senza accesso a internet che li tiene su
+un server suo.
+
+| Modello | File | Disco | Memoria circa |
+|---|---|---|---|
+| Veloce | `ggml-base.bin` | 142 MB | 400 MB |
+| Equilibrata | `ggml-small.bin` | 466 MB | 900 MB |
+| Accurata | `ggml-large-v3-turbo-q5_0.bin` | 547 MB | 1,3 GB |
+
+Il limite di memoria del container (`ORION_MEMORIA`, di base 1 GB) vale anche
+per la trascrizione, che gira nello stesso container: con "Equilibrata" o
+"Accurata" va alzato, dalla pagina Sistema (riquadro "Memoria di ORION", che
+accanto a ogni valore dice quali modelli ci stanno) o con `sudo orion-agente
+memoria <istanza> <MB>`. A mano, scrivendo `ORION_MEMORIA` nel `.env`, il valore
+vale solo dopo `docker compose -f /srv/orion/<istanza>/compose.yaml up -d`, e
+l'agente non controlla che ci stia. Il server legge il limite dal cgroup
+(`memory.max`), toglie quanto occupa già Node e rifiuta con 409 un modello
+che non ci sta: senza, whisper veniva ucciso a ogni messaggio. Un messaggio
+salvato entra in una coda in memoria, uno alla volta: il server ricava il WAV a 16 kHz dai pacchetti Opus con
+`opus-decoder` (WebAssembly, in `src/voceOgg.js`), lancia `whisper-cli` con
+priorità bassa, lingua italiana, i nomi radio delle squadre come
+suggerimento e un core lasciato libero, e scrive il testo in
+`voce_messaggi.trascrizione` con lo stato (`fatta`, `vuota`, `errore`) e il
+tempo impiegato. Chi ascolta il canale riceve `trascritto` (`id`, `testo`).
+Il testo non entra nella nota del diario, che è storico inalterabile: la
+rotta della segnalazione lo porta accanto, come `voce_trascrizione`, e lo
+mostrano diario, stampa, archivio e resoconto. Dopo un riavvio, o quando si
+accende la trascrizione, il server riprende i messaggi dell'ultimo giorno
+non ancora trascritti. Cambiare modello svuota la coda, ferma il messaggio in
+lavoro e riprende quelli dell'ultimo giorno, compresi quelli finiti in
+`errore`; l'ultimo errore compare nello stato (`ultimo_errore`) finché un
+messaggio non va a buon fine. La colonna generata `ricerca` (tsvector italiano) con
+il suo indice GIN serve la ricerca: `q` su `GET /api/voce/messaggi` e su
+`/api/voce/archivio/:emergenza` trova le parole intere con le loro varianti
+("motopompe" trova "motopompa") e, con un confronto semplice, pezzi di parola
+e nomi. `GET /api/voce/trascrizione` dà lo stato per la pagina delle
+impostazioni, con il rapporto fra tempo di calcolo e durata della voce.
+
+
+### Il drone
+
+Il drone trasmette a MediaMTX, un programma libero che riceve video in
+diretta e lo ridistribuisce senza ricodificarlo, in un container accanto a
+ORION. Il percorso è questo: il drone manda il video al radiocomando, l'app
+di volo (DJI Pilot 2 sul Matrice 4E) lo invia in RTMP all'indirizzo
+`rtmp://<dominio>/drone/<chiave>`, MediaMTX lo riceve e lo registra, la sala
+lo guarda in WebRTC con un ritardo di circa un secondo. Chi può trasmettere e
+chi può guardare lo decide ORION: MediaMTX, prima di accettare una
+connessione, chiama `POST /api/drone/autorizza?s=<segreto>` (fuori
+dall'accesso, prima dei limiti per rete, con il segreto dell'istanza
+confrontato in tempo costante).
+
+**Le chiavi.** `POST /api/drone/chiavi` (permesso `emergenze.apertura`, con
+un'emergenza o una simulazione aperta) crea una chiave casuale di 32
+caratteri, la restituisce una volta sola con l'indirizzo completo e il QR, e
+nel database (`chiavi_drone`, migrazione `drone`) tiene l'impronta SHA-256
+per riconoscerla e la chiave cifrata per costruire l'indirizzo della
+diretta. MediaMTX accetta chi trasmette solo in RTMP o SRT, con una chiave
+non revocata dell'emergenza in corso: chiusa l'emergenza, le sue chiavi non
+valgono più e chi stava trasmettendo viene staccato
+(`chiudiDiretteEmergenza()`, che usa l'API di MediaMTX); `DELETE
+/api/drone/chiavi/:id` toglie una chiave e stacca subito il pilota.
+`GET /api/drone/dirette` elenca le chiavi dell'emergenza con lo stato in onda,
+letto dall'API di MediaMTX, senza mai riportare chiave o impronta. Ogni dieci
+secondi il server confronta le dirette in corso e, se cambiano, manda
+`reload_drone` alle postazioni.
+
+**La visione.** Il browser non parla con MediaMTX: manda la sua proposta
+WebRTC (WHEP, senza trickle ICE) a `POST /api/drone/dirette/:id/whep`, ORION
+controlla la sessione (interni, non esterni) e la gira a MediaMTX con le sue
+credenziali (`orion` e il segreto), che MediaMTX accetta come unico
+spettatore. La sessione WHEP torna al browser come
+`/api/drone/sessioni/<uuid>`, chiudibile solo da chi l'ha aperta. Così la
+chiave non arriva mai al browser e chi conosce l'indirizzo di MediaMTX non
+guarda niente. Il video passa invece direttamente fra il browser e MediaMTX,
+sulla porta UDP di WebRTC annunciata con il dominio dell'istanza
+(`webrtcAdditionalHosts`). Ogni diretta guardata, nel pannello o in una
+finestra staccata (`drone-co.js`), è una sessione WHEP sua, che si chiude
+quando la si smette di guardare o il drone esce di onda. Lo schermo a parete apre da solo il primo drone in
+onda in un riquadro.
+
+**Le registrazioni.** MediaMTX registra ogni diretta in spezzoni MP4 da
+quindici minuti in `drone/registrazioni/drone/<chiave>/`. Ogni minuto
+`raccogliRegistrazioni()` prende gli spezzoni in cui MediaMTX non scrive più
+da 90 secondi, li cifra in flusso (AES-256-GCM, come gli altri file) in
+`protected_uploads/drone/<emergenza>/`, li registra in `registrazioni_drone`
+e cancella l'originale; senza la chiave dei dati li lascia dove sono e
+riprova. Uno spezzone di una chiave che ORION non conosce più si cancella.
+Le riprese si vedono dall'archivio (`GET /api/drone/registrazioni`,
+`…/:id/file`) con le stesse regole dell'emergenza: durante l'emergenza gli
+interni, dopo chi ha `emergenze.archivio`; il file si decifra al volo mentre
+parte, quindi un file alterato si interrompe a metà invece di non partire.
+Ogni visione e ogni scaricamento vanno nel registro delle operazioni, come la
+chiave data, la diretta iniziata e la ripresa raccolta. Le riprese entrano
+nei backup e si cancellano con l'emergenza.
+
+**Installazione.** Sull'host, dopo aver creato l'istanza:
+
+```
+sudo scripts/docker/attiva-drone.sh <nome> [porta-rtmp] [porta-webrtc]
+```
+
+Lo script copia `compose.yaml` e `mediamtx.yml` nella cartella dell'istanza,
+crea `drone/registrazioni` dell'utente dell'istanza, scrive nel `.env`
+`COMPOSE_PROFILES=drone`, il segreto (`ORION_DRONE_SEGRETO`), il dominio e le
+porte, apre nel firewall la porta RTMP (TCP) e quella di WebRTC (UDP) e avvia
+il container `drone`. Le porte si possono dare a mano; se mancano, lo script
+tiene quelle che l'istanza ha già, oppure prende le prime libere partendo da
+1935 e 8189, saltando quelle del drone di altre istanze e quelle su cui
+qualcosa sull'host è già in ascolto (per saperlo usa `ss`, del pacchetto
+iproute2). Così più istanze sullo stesso host ricevono 1935 e 8189, poi 1936
+e 8190, e via così; il messaggio finale dice quali porte ha scelto. Le porte
+sono due per istanza qualunque sia il numero di droni: MediaMTX riceve tutti
+i piloti sulla stessa porta RTMP, distinti dalla chiave nell'indirizzo, e
+manda tutte le dirette WebRTC dalla stessa porta UDP. Le porte riservate
+stanno nel `.env` di ogni istanza (`ORION_DRONE_PORTA_RTMP`,
+`ORION_DRONE_PORTA_WEBRTC`), ed è lì che lo script guarda quelle delle
+altre; `sudo scripts/docker/attiva-drone.sh --elenco` le mostra tutte, per
+sapere cosa aprire sul router. Per cambiarle si rilancia lo script con le
+porte nuove: rifiuta quelle di un'altra istanza e quelle già in ascolto
+sull'host, toglie dal firewall le vecchie regole e ricorda di chiudere le
+vecchie porte sul router e di ridare al pilota l'indirizzo, che contiene la
+porta RTMP quando non è 1935. Il container gira con
+l'utente dell'istanza, il file system in sola lettura e nessun privilegio;
+l'API (9997) e il WHEP (8889) restano nella rete dei container. Se il
+server sta dietro un router, le due porte vanno inoltrate al server. Poi si
+accende il modulo in Impostazioni, Moduli, Drone: la pagina dice se MediaMTX
+non è configurato e mostra le porte dell'istanza (`GET /api/drone/stato`, che
+le legge da `ORION_DRONE_RTMP_PORTA` e `ORION_DRONE_WEBRTC_PORTA`) e il numero
+massimo di droni in onda insieme (`drone_max_dirette`, da 1 a 20, di serie
+3). Il massimo protegge la banda della connessione, circa 4 Mbit/s in
+ingresso per drone: quando MediaMTX chiede se un pilota può trasmettere e ce
+ne sono già tanti in onda (lui escluso, se si sta ricollegando), ORION
+risponde di no, lo scrive nel registro (`drone.respinto`) e il pannello della
+sala dice chi è stato respinto e perché. Se in quel momento l'API di MediaMTX
+non risponde, il pilota passa: il limite è sulla banda, non sull'accesso. Fuori dai container le variabili sono `ORION_DRONE_SEGRETO`
+(almeno 16 caratteri, senza il modulo non parte), `ORION_DRONE_API` e
+`ORION_DRONE_WEBRTC` (di serie `http://drone:9997` e `http://drone:8889`),
+`ORION_DRONE_HOST` e `ORION_DRONE_RTMP_PORTA` per l'indirizzo dato al
+pilota, `ORION_DRONE_WEBRTC_PORTA` per mostrare la porta UDP nelle Impostazioni, `ORION_DRONE_REGISTRAZIONI` per la cartella degli spezzoni.
+
+**Il Matrice 4E.** In DJI Pilot 2: Diretta (Live Stream), RTMP
+personalizzato, l'indirizzo completo dato da ORION (o inquadrato dal QR). Il
+video va in H.264, perché H.265 molti browser non lo mostrano, a 720p o
+1080p, con 2-4 Mbit/s: il radiocomando deve avere una SIM dati o il
+collegamento a un hotspot.
+
+`npm run test:drone` prova chiavi, autorizzazioni, visione, sessioni,
+raccolta, cifratura e permessi con un MediaMTX finto
+(`tests/mediamtx-finto.mjs`); il video vero si prova con MediaMTX e un flusso
+mandato da `ffmpeg` (`ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30
+-c:v libx264 -preset veryfast -tune zerolatency -f flv
+rtmp://<dominio>/drone/<chiave>`).
+
+
 ## 10. L'app Android
 
 L'app richiede Android 8 (API 26) o successivo. Si compila con Gradle 9,
@@ -1587,6 +2277,74 @@ persona e si cancellano all'uscita. Sono esclusi dai backup del telefono come
 tutto il resto. Il calendario e le presenze non si tengono sul telefono:
 si leggono ogni volta dal server.
 
+La voce nell'app vive nel pacchetto `voce`. `MotoreVoce` tiene lo stato
+(canali, chi parla, trasmissione, cronologia, messaggi propri con le loro
+conferme) e parla col server attraverso `CollegamentoVoce`, un WebSocket OkHttp
+suo che si riapre da solo con un'attesa che cresce fino a dieci secondi; i
+codici di chiusura 4000 (voce spenta), 4002 (niente emergenza) e 4001/4003
+(token rifiutato, altro telefono) fermano i tentativi. Il token voce si chiede
+con la sessione e si tiene cifrato nell'archivio della sessione, legato
+all'emergenza; regge una sessione scaduta, non l'uscita né la sospensione.
+La codifica Opus la fa Concentus, una traduzione in Java puro di libopus con
+licenza BSD: niente librerie native da compilare per ogni processore. Si
+registra a 16 kHz con la sorgente `VOICE_COMMUNICATION`, che toglie eco e
+rumore, in pacchetti da 60 ms a 20 kbit/s; quando la coda d'invio di OkHttp
+supera i quattro secondi il bitrate scende a 12 kbit/s e risale quando la rete
+si riprende.
+
+Il microfono è acceso solo fra la pressione e il rilascio. La richiesta della
+parola parte insieme all'apertura del microfono e i pacchetti registrati prima
+del sì partono subito dopo, così la prima parola non si perde. Se la rete cade
+mentre si parla, il messaggio continua a registrarsi e alla riapertura parte
+con lo stesso `uuid`, `differito` ed `eta_ms`; un messaggio registrato senza
+rete va in una coda cifrata sul telefono (al massimo cinque, poi PARLA dice di
+usare la radio) e parte da solo al ritorno della rete. L'orologio che conta
+`eta_ms` è `elapsedRealtime`, che non salta se si cambia l'ora del telefono.
+
+La riproduzione (`Riproduttore`) è una coda con una voce alla volta: alta
+priorità ed emergenza passano davanti e interrompono quella in corso, che poi
+riprende da dove era. Prima di partire una diretta aspetta cinque pacchetti di
+margine. La voce normale va sul volume dei contenuti multimediali
+(`USAGE_MEDIA`), quella urgente su quello della sveglia (`USAGE_ALARM`); il
+fuoco audio abbassa la musica senza fermarla. Con il permesso di accesso a
+"Non disturbare" i messaggi urgenti lo superano, rimettendo il filtro com'era a
+fine messaggio. Durante una telefonata la coda aspetta e la notifica dice
+quanti messaggi ci sono in attesa. Suoni e vibrazioni dei vari stati sono in
+`SegnaliAndroid`; il cambio di canale deciso dalla sala lo annuncia la sintesi
+vocale del telefono.
+
+Con la voce attiva gira `ServizioVoce`, un servizio in primo piano di tipo
+`mediaPlayback` e `microphone`, con la notifica che ha "Apri PARLA".
+`AttivitaParla` si apre dalla notifica anche a telefono bloccato e mostra solo
+canale, chi parla e PARLA. Il servizio si avvia solo con l'app davanti, perché
+da dietro le quinte Android non concede il microfono; dopo un riavvio del
+telefono la voce riparte alla prima apertura di ORION. Lo stesso servizio
+ascolta il ritorno della rete, i tasti PTT dei telefoni da lavoro (gli intent
+`android.intent.action.PTT.down`/`up`, `com.sonim.intent.action.PTT_KEY_DOWN`/`UP`,
+`com.runbo.ptt.key.down`/`up`) e, se lo si accende dalle impostazioni della
+voce, il tasto dell'auricolare con una `MediaSession`. Un tasto tenuto
+premuto parla finché lo si tiene; un colpo breve, come quello degli auricolari
+Bluetooth che mandano pressione e rilascio insieme, apre e il colpo successivo
+invia. Il microfono dell'auricolare Bluetooth passa da `setCommunicationDevice`
+(Android 12 e successivi) o dallo SCO. I pulsanti PTT Bluetooth che si
+presentano come tastiera si imparano dalle impostazioni di Orion Voice: l'app
+tiene il codice del tasto e, se viene da un dispositivo esterno, anche il suo
+descrittore, così lo stesso tasto premuto sul telefono non fa parlare; il
+volume si accetta solo da un dispositivo esterno. Con l'app davanti li prende
+`onKeyDown` e `onKeyUp` delle attività; a telefono bloccato o con l'app chiusa
+serve `ServizioTastiVoce`, un servizio di accessibilità facoltativo che chiede
+solo i tasti (`flagRequestFilterKeyEvents`, niente contenuto delle finestre)
+e lascia passare tutti quelli che non sono il pulsante.
+
+L'interfaccia è in `ui/voce`: `BarraVoce` in fondo a tutte le schermate,
+`SchermataVoce` con la cronologia, `TastoParla` con i gesti (tenere premuto,
+scorrere in su per bloccare, trascinare fuori per annullare, oppure "tocca e
+ritocca"), `TastoEmergenza` da tenere due secondi e `PrimoAvvioVoce`. I test
+su JVM sono `VoceTest` (codifica, protocollo, motore contro un server finto),
+`VoceSchermataTest` (gesti e schermate) e `VoceServerVeroTest`, che prova due
+telefoni contro un server vero preparato con `tests/voce-app-prepara.mjs` e
+parte solo con `ORION_PROVA_VOCE`.
+
 
 ## 11. Provare
 
@@ -1598,23 +2356,67 @@ con dati e backup nella cartella del codice. Lì aggiornamenti e ritorni non
 ci sono, perché li fa l'agente: si provano con `tests/container.mjs`, più
 sotto.
 
-Il server ha una batteria di prove che gira contro un'istanza vera, con il
-suo database:
+Le prove sono di due tipi. Quelle senza server si lanciano con `npm test`
+e durano pochi secondi: controllano che le pagine non scrivano in HTML testo
+non ripulito, che ogni pulsante sia collegato, le regole della voce e del
+radar, le difese che non hanno bisogno del database (password, pause dopo i
+tentativi sbagliati, indirizzi esterni) e i limiti di frequenza (il limite
+dell'accesso conta solo i tentativi sbagliati, `skipSuccessfulRequests`, e
+tutti i limiti rispondono in JSON con `message`, che il web e l'app
+mostrano).
 
-```
-ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD='...' npm test
-```
+Tutte le altre girano contro un'istanza vera, con il suo database, e si
+lanciano insieme con `npm run test:tutto` (`tests/batteria.mjs`). La
+batteria vuole le stesse variabili del server (`DB_*`, `JWT_SECRET`,
+`COOKIE_SECRET`, `PORT`, di solito la 3010, e `ORION_DATI_DIR` se i dati
+stanno fuori dal codice, anche dal `.env`) più `ORION_ADMIN_PASSWORD`, e un
+database di prova: rifiuta `orion_db`, il nome del database delle istanze in
+container. Avvia lei il server, e lo riavvia prima di ogni prova perché i
+limiti di frequenza stanno in memoria; crea l'amministratore se il database
+è vuoto e un volontario di prova per la prova del WebSocket; apre
+un'emergenza per le prove che la vogliono e chiude quella rimasta aperta da
+una prova caduta a metà. Alla fine stampa una riga per prova ed esce con 0
+solo se sono tutte verdi; l'uscita di ognuna va in `ORION_BATTERIA_DIR`, o
+in una cartella temporanea nuova. `npm run test:tutto -- voce allerta`
+lancia solo le prove nominate. Con Chromium in un posto diverso da quello di
+Playwright, `ORION_CHROMIUM` dice dove.
 
-`npm test` controlla che le pagine non scrivano in HTML testo non ripulito,
-che i limiti di frequenza funzionino (il limite dell'accesso conta solo i
-tentativi sbagliati, `skipSuccessfulRequests`, e tutti i limiti rispondono in
-JSON con `message`, che il web e l'app mostrano) e poi percorre l'applicazione da capo a
-fondo: accesso, ruoli, emergenze, segnalazioni, squadre, esterni temporanei,
-segreteria, magazzino, notifiche. Crea i suoi dati di prova e li toglie alla
-fine. `npm run test:websocket` prova cosa arriva all'app sul WebSocket, e
+Fra quelle con il server, `npm run test:smoke` percorre l'applicazione da
+capo a fondo: accesso, ruoli, emergenze, segnalazioni, squadre, esterni
+temporanei, segreteria, magazzino, notifiche. Crea i suoi dati di prova e li
+toglie alla fine. Lanciata da sola vuole il server avviato con
+`ORION_AGGIORNAMENTI_RETE_LOCALE=true`, perché prova il controllo degli
+aggiornamenti contro un manifesto irraggiungibile sulla macchina stessa; la
+batteria avvia già il server così. `tests/matrice-permessi.mjs` prova ogni operazione di
+`tests/matrice-permessi.json` con ogni profilo (volontario con e senza
+squadra, squadra COC, membro di una funzione, coordinatore, segreteria,
+magazziniere, esterno, amministratore, anonimo) e confronta l'esito con
+quello scritto nel file: se fallisce, una modifica ha cambiato un permesso.
+Un cambio di permessi voluto si registra rilanciandola con `--fotografa`,
+che riscrive gli esiti, e guardando il diff riga per riga prima del commit.
+`tests/numeri-segnalazioni.mjs` crea tante segnalazioni insieme e controlla
+che i numeri progressivi non si ripetano. `npm run test:clic-sala` usa la sala con i clic
+in un Chromium vero, come una persona: apre un'emergenza dal pulsante, crea le
+segnalazioni con il tipo, prova l'avviso delle vicine, il filtro, lo stato
+della squadra e la chiusura, scarica il CSV dall'archivio; poi una simulazione
+al volo interrotta da un'emergenza vera, l'esterno che entra dal QR e trova
+negate le pagine non sue, e ogni modulo spento da solo e tutti insieme (menu,
+pulsanti della sala, pagine aperte dall'indirizzo, moduli mandati all'app).
+`npm run test:clic-aree` fa lo stesso per le altre aree, con un giro per area
+in `tests/clic/` (si lancia anche uno solo, per nome): consegna e rientro del
+magazzino con la conferma dei DPI, visite e corsi in segreteria con il blocco
+in squadra, convocazione e presenze nel calendario, chiamata dei volontari
+fino all'ingresso in squadra, incarico a una funzione di supporto, documenti
+con versioni e visibilità, iscrizione, sospensione ed eliminazione di una
+persona con backup e sigillo dalla pagina Sistema, strade chiuse e zone
+disegnate sulla mappa, copione e regia di una simulazione. `npm run test:websocket` prova cosa arriva all'app sul WebSocket, e
 `npm run test:integrita` lo storico inalterabile facendo la parte di chi ha in
 mano il database, `npm run test:mfa` la verifica in due passaggi, `npm run test:caposquadra` il
-caposquadra e la posizione condivisa fra più telefoni, `npm run test:rischi`
+caposquadra e la posizione condivisa fra più telefoni, `npm run test:voce` la
+voce (le regole senza server in `tests/voce-regole.mjs`, poi canali, parola,
+diretta, archivio, ripresa dopo una caduta, emergenza e presa in carico;
+vuole un'emergenza aperta; `tests/voce-sala.mjs` prova il pannello Voce in un
+Chromium vero, con il microfono finto e Playwright, che è fra le dipendenze di sviluppo), `npm run test:rischi`
 i rischi scritti dalle zone di pericolo, `npm run test:strade` le strade chiuse
 che restano dopo la chiusura dell'emergenza (entrambe aprono e chiudono
 un'emergenza loro, quindi vogliono un'istanza senza emergenze in corso),
@@ -1644,10 +2446,16 @@ produzione.
 `tests/container.mjs` prova le istanze in container da capo a fondo, come
 root su una macchina con Docker: aggiornamento e ritorno chiesti dalla
 pagina Sistema ed eseguiti dall'agente, una versione che non parte,
-l'approvazione del gestore, backup notturno e ripristino, la separazione da
+l'approvazione del gestore, backup notturno e ripristino, il cambio di memoria
+con il massimo lasciato dall'altra istanza, la separazione da
 un'altra istanza. Vuole due istanze appena create con `nuova-istanza.sh` e
 due immagini in più: una versione nuova con una migrazione `prova_container`
-e una che non parte (la testa del file dice come lanciarlo).
+e una che non parte. Le tre immagini, con il prefisso `localhost/orion`, le
+costruisce `tests/container-immagini.sh` da una copia del codice e stampa le
+versioni da passare alla prova (la testa dei due file dice come lanciarli).
+Su GitHub la prova dei container parte dal flusso "Prove" lanciato a mano con
+la casella "container"; il resto delle prove parte a ogni modifica, e il
+flusso "Immagine" non pubblica se sono rosse.
 
 L'app ha i suoi test su JVM. Quelli di contratto leggono risposte vere del
 server salvate in `app/src/test/resources/risposte`: quando il server cambia

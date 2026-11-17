@@ -39,6 +39,8 @@ ORION ne presenta più di due.
 | Monitoraggio sistematico | La posizione delle squadre durante un'emergenza |
 | Interessati in posizione di debolezza verso il titolare | Volontari rispetto all'associazione che ne organizza il servizio |
 | Uso combinato di tecnologie | Web app, app per telefono, geolocalizzazione, notifiche, verifica in due passaggi con il telefono |
+| Riprese del drone | Le dirette del drone, se il modulo è acceso: registrate e conservate con l'emergenza; possono riprendere persone, targhe e abitazioni |
+| Registrazione della voce | I messaggi vocali di Orion Voice, se il modulo è acceso: registrati e conservati con l'emergenza; se l'amministratore accende la trascrizione, anche il loro testo, ricavato sul server dell'associazione senza servizi esterni |
 | Larga scala | [DA COMPILARE: numero di volontari e di persone nelle segnalazioni; per un'associazione piccola di solito no] |
 
 Conclusione proposta: la DPIA si fa. [DA COMPILARE: confermare]
@@ -56,6 +58,8 @@ frequenti e vanno confermate.
 | Tenere l'anagrafica dei volontari e il loro tesserino | Nome, cognome, codice fiscale, contatti, indirizzo, foto, ruoli | [DA COMPILARE: proposta, art. 6.1.b, rapporto associativo] |
 | Verificare l'idoneità al servizio e la formazione | Visite mediche, idoneità, certificati, corsi | [DA COMPILARE: proposta, art. 6.1.c e art. 9.2.b, obblighi di sicurezza dei volontari di protezione civile] |
 | Coordinare le emergenze e le esercitazioni | Squadre, interventi, segnalazioni, posizione delle squadre, diario di sala | [DA COMPILARE: proposta, art. 6.1.e o 6.1.d, compiti di protezione civile e interessi vitali] |
+| Vedere l'area dell'intervento dall'alto (drone, facoltativo) | Video in diretta e registrato, nome del drone o del pilota, ora; chi ha guardato le riprese | [DA COMPILARE: proposta, art. 6.1.e o 6.1.d, come il coordinamento delle emergenze] |
+| Comunicare a voce durante le emergenze (Orion Voice, facoltativo) | Messaggi vocali registrati, chi ha parlato, squadra, ora, chi li ha ascoltati, e la trascrizione automatica se accesa | [DA COMPILARE: proposta, art. 6.1.e o 6.1.d, come il coordinamento delle emergenze] |
 | Gestire il materiale consegnato | DPI e attrezzature in carico, taglie, verbali di consegna | [DA COMPILARE: proposta, art. 6.1.b e 6.1.c] |
 | Organizzare attività, chiamate e presenze | Calendario, risposte alle convocazioni, disponibilità, presenze | [DA COMPILARE: proposta, art. 6.1.b] |
 | Proteggere il sistema e ricostruire chi ha fatto cosa | Registro delle operazioni con indirizzo IP, storico inalterabile, accessi | [DA COMPILARE: proposta, art. 6.1.f, interesse legittimo alla sicurezza] |
@@ -82,6 +86,8 @@ l'amministratore può aggiungere singoli permessi a una persona.
 | Visite, idoneità, corsi e certificati | La persona e chi ha il permesso sanitario (segreteria sanitaria, amministratori) | Certificati ed esito della visita cifrati, anche nel database; nell'app si aprono solo dopo impronta o PIN e non restano sul telefono; per chi li gestisce la verifica in due passaggi è obbligatoria |
 | Posizione delle squadre | Il centro operativo durante l'emergenza | Si tiene solo l'ultima posizione di ogni squadra, non il percorso, e si cancella alla chiusura dell'emergenza |
 | Segnalazioni, interventi, diario di sala | Chi lavora all'emergenza; l'archivio solo a chi ha il permesso | Storico inalterabile |
+| Riprese del drone | Solo gli interni durante l'emergenza, poi chi ha il permesso dell'archivio; mai gli esterni | Il video resta sul server dell'associazione, senza servizi esterni; chiave per emergenza, valida fino alla chiusura; la sala guarda passando da ORION, che controlla la sessione; file cifrati; ogni visione e scaricamento nel registro delle operazioni; cancellate con l'emergenza |
+| Messaggi vocali (Orion Voice) | Chi è sul canale: la squadra e la sala per i messaggi di squadra, tutti per gli avvisi; un esterno solo da quando è entrato; l'archivio solo a chi ha il permesso | Il microfono si accende solo tenendo premuto PARLA, nessun ascolto ambientale; file cifrati; ogni ascolto dall'archivio finisce nel registro delle operazioni; sul telefono l'audio vive solo per l'emergenza in corso; la trascrizione gira sul server e segue il messaggio (stessi permessi, cancellata con l'emergenza); il servizio di accessibilità facoltativo dell'app legge solo i tasti, non lo schermo |
 | Materiale in carico | La persona, il magazzino | Verbali firmati cifrati |
 | Registro delle operazioni | Gli amministratori | Non si modifica dall'applicazione |
 
@@ -103,14 +109,16 @@ telefono, e si cancellano all'uscita.
 | Chi ospita il server | Tutto, a livello di macchina | Responsabile del trattamento (art. 28): [DA COMPILARE: nome e contratto] | Sì, se il server non è dell'associazione |
 | Fornitore della posta (SMTP) | Indirizzi email e testo dei messaggi (attivazione, recupero password, avvisi di scadenza) | [DA COMPILARE: nome e ruolo] | Facoltativo; senza, i link si consegnano a mano |
 | Google Firebase | L'identificativo del telefono e un segnale "c'è una novità", mai il contenuto delle notifiche | [DA COMPILARE: valutare se attivarlo] | Facoltativo, spento di base |
-| Servizi di mappa (OpenStreetMap, ArcGIS per il satellitare) | Le zone di mappa visualizzate e l'indirizzo IP di chi guarda | Fornitori indipendenti | Sì per la mappa; la cartografia del territorio si può scaricare sul server |
+| Servizi di mappa (OpenStreetMap, ArcGIS per il satellitare) | Le zone di mappa visualizzate e l'indirizzo IP di chi guarda, in sala e dalla mappa dell'app | Fornitori indipendenti | Sì per la mappa; la cartografia del territorio si può scaricare sul server |
 | Ricerca indirizzi (Photon, Nominatim) | Gli indirizzi scritti nella ricerca della mappa | Fornitori indipendenti | Sì per la ricerca |
-| Calcolo del percorso (OSRM) | Le coordinate di partenza e di arrivo di un percorso chiesto in sala | Fornitore indipendente | Facoltativo, solo quando si chiede il percorso |
+| Calcolo del percorso (OSRM) | Le coordinate di partenza e di arrivo di un percorso chiesto in sala, e dall'app la posizione del telefono e l'intervento quando si preme Naviga con strade chiuse o zone interdette sulla mappa | Fornitore indipendente | Facoltativo, solo quando si chiede il percorso |
+| Radar della pioggia e fulmini (Dipartimento della Protezione Civile, archivio su Amazon S3) | Le zone di mappa visualizzate coi livelli accesi e l'indirizzo IP di chi guarda, in sala e dalla mappa dell'app | Fornitore indipendente | Facoltativo, solo coi livelli accesi |
 | GitHub | Nessun dato personale: il server controlla se c'è una versione nuova | Nessuno | Facoltativo |
 | Bollettino di allerta DPC | Nessun dato personale | Nessuno | Facoltativo |
 
 Ai servizi di mappa e di ricerca non arrivano nomi di persone: solo luoghi e
-l'indirizzo IP del computer della sala. [DA COMPILARE: valutare se è
+l'indirizzo IP del computer della sala, e per il percorso chiesto dall'app
+quello del telefono del volontario. [DA COMPILARE: valutare se è
 accettabile o se servono alternative]
 
 ### 2.5 Conservazione
@@ -121,6 +129,7 @@ accettabile o se servono alternative]
 | Visite e certificati scaduti | Restano nel fascicolo | [DA COMPILARE: per quanto tenerli] |
 | Emergenze, segnalazioni, diario, registro squadre | Restano nell'archivio, inalterabili | [DA COMPILARE: proposta, il tempo richiesto dalla documentazione di protezione civile] |
 | Ultima posizione di ogni squadra | Si cancella alla chiusura dell'emergenza | Confermare |
+| Messaggi vocali | Restano con l'emergenza archiviata e si cancellano quando un amministratore la elimina; entrano nei backup | [DA COMPILARE: lo stesso tempo delle emergenze, oppure uno più breve] |
 | Registro delle operazioni (con indirizzo IP) | Non scade, finché non si imposta `ORION_REGISTRO_GIORNI`; allora le voci più vecchie escono ogni notte, e la catena d'integrità annota quali | [DA COMPILARE: proposta, 730 giorni] |
 | Notifiche | Lette 30 giorni, non lette 90 | Confermare |
 | Backup del database | 30 giorni (`ORION_BACKUP_RETENTION_DAYS`) | Confermare; le copie tenute altrove seguono la stessa regola |
@@ -185,6 +194,7 @@ valori sono proposte da confermare.
 | Ruoli e permessi controllati a ogni richiesta; sospensione e cambio password chiudono subito le sessioni | Accesso oltre il proprio ruolo |
 | Cifratura AES-256 di certificati, documenti, foto, verbali, backup e, nel database, dell'esito delle visite; la chiave sta fuori dal database e dai backup, con una chiave di recupero | Furto di disco, di backup o di una copia del database |
 | Posizioni delle squadre cancellate alla chiusura dell'emergenza; registro delle operazioni con scadenza configurabile | Conservazione oltre il necessario |
+| Voce: microfono acceso solo tenendo premuto il tasto, al massimo 60 secondi; audio cifrato sul server; ascolti dall'archivio registrati | Ascolto o registrazione oltre lo scopo |
 | Dati sul telefono cifrati con il portachiavi hardware; dati sanitari solo dopo impronta o PIN | Telefono perso |
 | HTTPS, e TLS verso il database se è su un'altra macchina | Intercettazione |
 | Registro delle operazioni e storico inalterabile con catena e sigilli | Modifiche nascoste |

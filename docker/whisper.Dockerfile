@@ -1,3 +1,9 @@
+# Il programma della trascrizione, whisper.cpp, compilato una volta per versione: l'immagine di
+# ORION ne copia soltanto i file. Lo pubblica il workflow "Whisper"; a mano:
+#   docker build -f docker/whisper.Dockerfile -t localhost/orion-whisper:v1.9.5 docker
+
+# Versione e commit fissati; solo tre varianti x86 (base, AVX2, AVX-512): le altre undici
+# quintuplicavano la compilazione per pochi punti di velocità.
 ARG WHISPER_VERSIONE=v1.9.5
 ARG WHISPER_COMMIT=d1be6fde11ac6e0407606b4e42fe72d34add8037
 

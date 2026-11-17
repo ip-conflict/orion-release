@@ -55,7 +55,7 @@ async function loadAndApplyBranding() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+quandoPronto(async () => {
     if (!haPermesso('emergenze.archivio')) {
         notifica('Accesso negato: ti serve il permesso "Consultare le emergenze passate".', 'errore');
         window.location.href = '/centro-operativo.html';
@@ -156,6 +156,110 @@ let brandingSettings = {
         emergencySelect.dispatchEvent(new Event('change'));
         riempiScelta();
     }));
+
+    // L'audio si scarica solo quando si preme play: ogni ascolto dall'archivio finisce nel registro.
+    function lettoreVoce(id) {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'none';
+        audio.src = `/api/voce/messaggi/${id}/audio`;
+        audio.className = 'ar-voce-audio';
+        return audio;
+    }
+
+    function trascrizioneVoce(testo) {
+        const p = document.createElement('p');
+        p.className = 'ar-voce-trascrizione';
+        p.title = 'Trascrizione automatica: può contenere errori';
+        p.textContent = `«${testo}»`;
+        return p;
+    }
+
+    let attesaRicercaVoce = null;
+    // Si guardano qui o si scaricano: ogni apertura finisce nel registro delle operazioni.
+    async function caricaRipreseDrone(emergencyId) {
+        const sezione = document.getElementById('archived-drone-section');
+        const elenco = document.getElementById('archived-drone-list');
+        const video = document.getElementById('archived-drone-video');
+        if (!sezione || !elenco) return;
+        sezione.hidden = true;
+        video.hidden = true;
+        video.removeAttribute('src');
+        let riprese = [];
+        try { riprese = await fetchApi(`/api/drone/registrazioni?emergenza=${encodeURIComponent(emergencyId)}`); } catch { return; }
+        if (!riprese.length) return;
+        const ora = (d) => new Date(d).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        elenco.replaceChildren(...riprese.map(r => {
+            const li = document.createElement('li');
+            li.style.cssText = 'display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-color);';
+            const minuti = Math.max(1, Math.round((new Date(r.finita_il) - new Date(r.iniziata_il)) / 60000));
+            const testo = document.createElement('span');
+            testo.style.flex = '1';
+            testo.textContent = `${r.nome_drone} · ${ora(r.iniziata_il)} · ${minuti} min · ${Math.round(r.dimensione / 1048576)} MB`;
+            const guarda = document.createElement('button');
+            guarda.type = 'button';
+            guarda.className = 'button-style button-small';
+            guarda.textContent = 'Guarda';
+            guarda.addEventListener('click', () => { video.src = `/api/drone/registrazioni/${r.id}/file`; video.hidden = false; video.play().catch(() => {}); });
+            const scarica = document.createElement('a');
+            scarica.className = 'button-style button-small button-secondary';
+            scarica.href = `/api/drone/registrazioni/${r.id}/file?scarica=1`;
+            scarica.textContent = 'Scarica';
+            li.append(testo, guarda, scarica);
+            return li;
+        }));
+        sezione.hidden = false;
+    }
+
+    async function caricaVoceArchiviata(emergencyId, cercato = '') {
+        const sezione = document.getElementById('archived-voce-section');
+        const elenco = document.getElementById('archived-voce-list');
+        const ricerca = document.getElementById('archived-voce-cerca');
+        if (!sezione || !elenco) return;
+        if (!cercato) {
+            sezione.hidden = true;
+            if (ricerca) ricerca.value = '';
+        }
+        if (!emergencyId) return;
+        if (ricerca) ricerca.oninput = () => {
+            clearTimeout(attesaRicercaVoce);
+            attesaRicercaVoce = setTimeout(() => caricaVoceArchiviata(emergencyId, ricerca.value.trim()), 300);
+        };
+        let messaggi;
+        try {
+            ({ messaggi } = await fetchApi(`/api/voce/archivio/${emergencyId}${cercato ? `?q=${encodeURIComponent(cercato)}` : ''}`));
+        } catch {
+            return;
+        }
+        if (!messaggi?.length && !cercato) return;
+        sezione.hidden = false;
+        const perCanale = {};
+        messaggi.forEach(m => {
+            const nome = m.nome_radio || (m.tipo === 'avviso' ? 'Avvisi a tutti' : m.tipo === 'generale' ? 'Generale' : 'Diretti');
+            perCanale[nome] = (perCanale[nome] || 0) + 1;
+        });
+        document.getElementById('archived-voce-riepilogo').textContent = cercato ? `${messaggi.length} messaggi trovati.` :
+            `${messaggi.length} messaggi: ` + Object.entries(perCanale).map(([n, q]) => `${n} ${q}`).join(', ') + '.';
+        elenco.innerHTML = '';
+        messaggi.forEach(m => {
+            const li = document.createElement('li');
+            const testo = document.createElement('span');
+            const quando = new Date(m.registrato_il).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+            const canale = m.nome_radio || (m.tipo === 'avviso' ? 'avviso a tutti' : m.tipo);
+            const segni = [m.priorita !== 'normale' ? m.priorita : '', m.differito ? 'differito' : '', m.stato === 'interrotto' ? 'interrotto' : '',
+                m.ricevuto_da ? `ricevuto da ${m.ricevuto_da}` : '', m.presa_da ? `presa in carico da ${m.presa_da}` : ''].filter(Boolean);
+            testo.textContent = `${quando} · ${canale} · ${m.autore.nome}${m.autore.squadra && !m.da_sala ? ` (${m.autore.squadra})` : ''} · ${Math.max(1, Math.round(m.durata_ms / 1000))} s${segni.length ? ` · ${segni.join(', ')}` : ''}`;
+            const scarica = document.createElement('a');
+            scarica.href = `/api/voce/messaggi/${m.id}/audio`;
+            scarica.download = `voce-${m.id}.ogg`;
+            scarica.className = 'button-style button-small button-secondary';
+            scarica.innerHTML = '<i class="fas fa-download"></i>';
+            scarica.title = 'Scarica l\'audio';
+            li.append(testo, lettoreVoce(m.id), scarica);
+            if (m.trascrizione) li.append(trascrizioneVoce(m.trascrizione));
+            elenco.appendChild(li);
+        });
+    }
 
     async function loadArchivedDocuments(emergencyId) {
         if (!docsListContainer || !docsSection) return;
@@ -310,11 +414,17 @@ let brandingSettings = {
             console.log("[Select Change] Emergenza selezionata:", selectedArchivedEmergency);
             loadArchivedReports(selectedArchivedEmergency.id);
             loadArchivedDocuments(selectedArchivedEmergency.id);
+            caricaVoceArchiviata(selectedArchivedEmergency.id);
+            caricaRipreseDrone(selectedArchivedEmergency.id);
             // Basta un link: il cookie di sessione viaggia da solo.
             if (downloadResocontoLink) {
                 downloadResocontoLink.href = `/api/admin/emergencies/${selectedArchivedEmergency.id}/resoconto`;
                 downloadResocontoLink.title = `Il resoconto di ${selectedArchivedEmergency.code} come file di testo, da allegare`;
             }
+            const csv = document.getElementById('esporta-csv-link');
+            const geo = document.getElementById('esporta-geojson-link');
+            if (csv) csv.href = `/api/admin/emergencies/${encodeURIComponent(selectedArchivedEmergency.id)}/segnalazioni.csv`;
+            if (geo) geo.href = `/api/admin/emergencies/${encodeURIComponent(selectedArchivedEmergency.id)}/mappa.geojson`;
             if (printResocontoLink) printResocontoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}`;
             if (printTuttoLink) printTuttoLink.href = `/situazione.html?emergenza=${encodeURIComponent(selectedArchivedEmergency.id)}&completo=1`;
             if (azioniEmergenza) azioniEmergenza.hidden = false;
@@ -322,6 +432,7 @@ let brandingSettings = {
             selectedArchivedEmergency = null;
             loadArchivedReports(null);
             loadArchivedDocuments(null);
+            caricaVoceArchiviata(null);
             if (azioniEmergenza) azioniEmergenza.hidden = true;
             emergencyDetailsDisplay.textContent = '';
         }
@@ -477,6 +588,8 @@ let brandingSettings = {
                                 
                                 li.appendChild(p);
                                 li.appendChild(small);
+                                if (update.voce_id) li.appendChild(lettoreVoce(update.voce_id));
+                                if (update.voce_trascrizione) li.appendChild(trascrizioneVoce(update.voce_trascrizione));
                                 
                                 logList.appendChild(li);
                            } catch (logErr) {

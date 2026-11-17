@@ -14,7 +14,7 @@ import 'dotenv/config';
 import { accediConFetch } from './accesso-prova.mjs';
 import { ESEMPIO, creaBollettino, servi } from './bollettino-finto.mjs';
 import { leggiBollettino, livelloMassimo } from '../src/bollettinoDpc.js';
-import { comuniDi, zonaDelComune, zonaDelPunto } from '../src/allertaRegioni.js';
+import { REGIONI, comuniDi, zonaDelComune, zonaDelPunto } from '../src/allertaRegioni.js';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const PORTA = Number(process.env.ORION_ALLERTA_PORTA || 3099);
@@ -45,10 +45,28 @@ verifica('Padova sta nella zona Vene-E1, dal comune e dal punto',
 verifica('Cortina e Rovigo nelle loro zone', zonaDelPunto('veneto', 46.5405, 12.1357)?.codice === 'Vene-A2' && zonaDelComune('veneto', 'Rovigo')?.codice === 'Vene-D1');
 verifica('un punto fuori dal Veneto non ha zona', zonaDelPunto('veneto', 60.17, 24.94) === null);
 verifica('i comuni del Veneto sono 560', comuniDi('veneto').length === 560, comuniDi('veneto').length);
+// Un capoluogo per Regione, per nome e per coordinate: le due strade devono portare alla stessa zona.
+const CAPOLUOGHI = {
+    abruzzo: ["L'Aquila", 42.3498, 13.3995], basilicata: ['Potenza', 40.6404, 15.8056], calabria: ['Catanzaro', 38.9098, 16.5877],
+    campania: ['Napoli', 40.8518, 14.2681], 'emilia-romagna': ['Bologna', 44.4949, 11.3426], 'friuli-venezia-giulia': ['Trieste', 45.6495, 13.7768],
+    lazio: ['Roma', 41.9028, 12.4964], liguria: ['Genova', 44.4056, 8.9463], lombardia: ['Milano', 45.4642, 9.19],
+    marche: ['Ancona', 43.6158, 13.5189], molise: ['Campobasso', 41.5603, 14.6627], piemonte: ['Torino', 45.0703, 7.6869],
+    puglia: ['Bari', 41.1171, 16.8719], sardegna: ['Cagliari', 39.2238, 9.1217], sicilia: ['Palermo', 38.1157, 13.3615],
+    toscana: ['Firenze', 43.7696, 11.2558], 'trentino-alto-adige': ['Trento', 46.0748, 11.1217], umbria: ['Perugia', 43.1107, 12.3908],
+    'valle-d-aosta': ['Aosta', 45.737, 7.3201]
+};
+const sbagliati = Object.entries(CAPOLUOGHI).filter(([r, [c, lat, lon]]) => {
+    const zona = zonaDelPunto(r, lat, lon);
+    return !zona || zonaDelComune(r, c, [lat, lon])?.codice !== zona.codice || !zona.comuni.includes(c);
+}).map(([r]) => r);
+verifica('ogni Regione ha il catalogo e il capoluogo cade nella sua zona', sbagliati.length === 0 && Object.keys(REGIONI).length === 20, sbagliati);
+verifica('un comune diviso fra due zone compare una volta sola fra i comuni', comuniDi('lazio').length === new Set(comuniDi('lazio')).size);
+const zonePerugia = new Set([zonaDelComune('umbria', 'Perugia', [43.1107, 12.3908])?.codice, zonaDelComune('umbria', 'Perugia', [43.2442, 12.3668])?.codice]);
+verifica('per un comune diviso decide il centro della mappa', zonePerugia.size === 2, [...zonePerugia]);
 
 console.log('\nBollettino di allerta: server');
 const ora = (piuMinuti = 0) => new Date(Date.now() + piuMinuti * 60000).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
-const primaOra = ora(), secondaOra = ora(1);
+const primaOra = ora();
 const fonte = await servi(PORTA, creaBollettino({ ora: primaOra, livelli: ESEMPIO }));
 const admin = (await accediConFetch(BASE, process.env.ORION_ADMIN_USER || 'admin', process.env.ORION_ADMIN_PASSWORD)).token;
 const prima = (await chiama('/api/branding/settings/full', { token: admin })).corpo || {};
@@ -64,7 +82,7 @@ try {
     r = await chiama('/api/allerta', { token: admin });
     verifica('senza Regione il bollettino è spento', r.stato === 200 && r.corpo?.attiva === false, r.corpo);
 
-    r = await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { allerta_regione: 'lombardia' } });
+    r = await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { allerta_regione: 'atlantide' } });
     verifica('una Regione non prevista è rifiutata', r.stato === 400, r);
     r = await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { allerta_regione: 'veneto', allerta_comune: 'Milano' } });
     verifica('un comune fuori dalla Regione è rifiutato', r.stato === 400, r);
@@ -115,6 +133,8 @@ try {
     let eventi = (await chiama(`/api/emergencies/${aperta.id}/eventi`, { token: admin })).corpo || [];
     verifica('i livelli della zona nel diario di sala', eventi.some(e => e.tipo === 'sala' && e.chi === 'ORION' && /Vene-E1/.test(e.testo) && /allerta gialla/.test(e.testo)), eventi.slice(0, 3));
 
+    // L'aggiornamento deve essere emesso dopo l'apertura: uno del minuto in cui si apre conterebbe già come in vigore.
+    const secondaOra = ora(1);
     fonte.pubblica({ ora: secondaOra, tipo: 'update', livelli: { oggi: { 'Vene-E1': { idraulico: 'arancione' } }, domani: { 'Vene-E1': { idraulico: 'rossa' } } } });
     await chiama('/api/allerta/controlla', { method: 'POST', token: admin });
     documenti = (await chiama(`/api/emergencies/${aperta.id}/documents`, { token: admin })).corpo || [];

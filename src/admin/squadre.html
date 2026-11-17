@@ -84,6 +84,10 @@
                         <label for="admin-create-squadra-nome">Descrizione (Opzionale)</label>
                         <input type="text" id="admin-create-squadra-nome" placeholder="Es. Squadra specializzata AIB..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"> 
                     </div>
+                    <div style="flex: 2;">
+                        <label for="admin-create-squadra-qualifica">Da dove viene (facoltativo)</label>
+                        <select id="admin-create-squadra-qualifica" class="scelta-qualifica" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"></select>
+                    </div>
                 </div>
 
                 <h4 style="margin: 0 0 15px 0; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Gestione Membri</h4>
@@ -131,6 +135,10 @@
                         <label for="admin-edit-squadra-nome">Descrizione (Opzionale)</label>
                         <input type="text" id="admin-edit-squadra-nome" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
                     </div>
+                    <div style="flex: 2;">
+                        <label for="admin-edit-squadra-qualifica">Da dove viene (facoltativo)</label>
+                        <select id="admin-edit-squadra-qualifica" class="scelta-qualifica" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"></select>
+                    </div>
                 </div>
 
                 <h4 style="margin: 0 0 15px 0; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Gestione Membri</h4>
@@ -173,6 +181,7 @@
 
     <script src="/vendor/js-cookie/js.cookie.min.js"></script>
     <script src="/js/apiHelper.js"></script>
+    <script src="/js/qualifiche.js"></script>
     <script src="/js/menu-laterale.js"></script>
     <script src="/websocket.js"></script>
     <script type="module" src="/js/admin-squadre.js"></script> 
