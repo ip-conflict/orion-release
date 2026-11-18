@@ -71,7 +71,7 @@
 
             <section id="archived-drone-section" class="ar-drone" hidden style="margin-bottom: 30px; background: var(--surface-color); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color);">
                 <h2 style="margin-top: 0; font-size: 1.2rem;"><i class="fas fa-helicopter" aria-hidden="true"></i> Riprese del drone</h2>
-                <video id="archived-drone-video" controls preload="none" hidden style="width: 100%; max-height: 60vh; background: #000; border-radius: 8px; margin-bottom: 12px;"></video>
+                <div id="archived-drone-lettore" hidden style="margin-bottom: 12px; border-radius: 8px; overflow: hidden; max-width: 960px;"></div>
                 <ul id="archived-drone-list" style="list-style: none; padding: 0; margin: 0;"></ul>
             </section>
 
@@ -175,6 +175,7 @@
     <script src="/vendor/js-cookie/js.cookie.min.js"></script>
     <script src="/js/apiHelper.js"></script>
     <script src="/js/menu-laterale.js"></script> 
+    <script src="/js/drone-video.js"></script>
     <script src="/js/admin-archive.js"></script> 
 </body>
 </html>

@@ -62,6 +62,10 @@ try {
     const tokEst = (await chiama('/api/accesso-temporaneo', { method: 'POST', body: { codice: est.codice } })).corpo?.token;
     await prendiVisione(BASE, tokEst);
 
+    const installazione = (await chiama('/api/sistema/drone', { token: admin })).corpo;
+    verifica('con MediaMTX configurato la pagina non propone di installarlo', installazione?.configurato === true && installazione.installabile === false, installazione);
+    verifica('e la richiesta all\'agente dice che c\'è già -> 409', (await chiama('/api/sistema/drone/installa', { method: 'POST', token: admin, body: { password: 'qualunque' } })).stato === 409);
+    verifica('installare il drone è dell\'amministratore -> 403', (await chiama('/api/sistema/drone/installa', { method: 'POST', token: vol, body: { password: pw } })).stato === 403);
     verifica('il volontario non dà chiavi -> 403', (await chiama('/api/drone/chiavi', { method: 'POST', token: vol, body: { nome: 'Il mio' } })).stato === 403);
     verifica('senza nome -> 400', (await chiama('/api/drone/chiavi', { method: 'POST', token: admin, body: { nome: '  ' } })).stato === 400);
     const nuova = await chiama('/api/drone/chiavi', { method: 'POST', token: admin, body: { nome: 'Matrice 4E – Marco' } });
@@ -90,7 +94,7 @@ try {
     verifica('oltre il massimo il secondo drone viene respinto', await finto.trasmetti(`drone/${secondo.chiave}`) === 401);
     const respinto = (await chiama('/api/drone/dirette', { token: vol })).corpo?.respinto;
     verifica('la sala sa chi è stato respinto e perché', respinto?.nome === 'Mavic – Luca' && respinto?.massimo === 1, respinto);
-    verifica('il drone già in onda che si ricollega non conta contro sé stesso', await finto.trasmetti(percorso) === 200);
+    verifica('un secondo collegamento con la chiave già in onda viene respinto', await finto.trasmetti(percorso) === 401 && finto.inOnda(percorso));
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { drone_max_dirette: '2' } });
     verifica('alzato il massimo, il secondo va in onda sulla stessa porta', await finto.trasmetti(`drone/${secondo.chiave}`) === 200);
     finto.smetti(`drone/${secondo.chiave}`);
@@ -132,8 +136,9 @@ try {
     const richiestaHls = finto.richieste.find(r => r.url === `/${percorso}/index.m3u8`);
     verifica('la playlist HLS passa da ORION', playlist.stato === 200 && String(playlist.corpo).startsWith('#EXTM3U') && !String(playlist.corpo).includes(chiave), { stato: playlist.stato });
     verifica('verso MediaMTX con le credenziali di ORION', richiestaHls?.autorizzazione === `Basic ${Buffer.from(`orion:${SEGRETO}`).toString('base64')}`, richiestaHls);
-    const pezzo = await chiama(`/api/drone/dirette/${idDrone}/hls/prova_seg1.mp4?_HLS_msn=3`, { token: vol, app: true });
+    const pezzo = await chiama(`/api/drone/dirette/${idDrone}/hls/prova_seg1.mp4?_HLS_msn=3&user=orion&pass=x&jwt=y`, { token: vol, app: true });
     verifica('anche i pezzi del video, con la loro domanda', pezzo.stato === 200 && pezzo.corpo.length === 4096 && finto.richieste.some(r => r.url === `/${percorso}/prova_seg1.mp4?_HLS_msn=3`));
+    verifica('a MediaMTX non arrivano credenziali messe nella query', !finto.richieste.some(r => /user=|pass=|jwt=/.test(r.url)));
     verifica('un nome di file storto -> 400', (await chiama(`/api/drone/dirette/${idDrone}/hls/..%2F..%2Fv3%2Fpaths%2Flist`, { token: vol, app: true })).stato === 400);
     verifica("dall'app chi è in un'altra squadra non lo vede", !(await vedeInApp(altro.token)));
     verifica('e non ne apre il video -> 403', (await chiama(`/api/drone/dirette/${idDrone}/hls/index.m3u8`, { token: altro.token, app: true })).stato === 403);
@@ -172,6 +177,24 @@ try {
     verifica('una registrazione di una chiave sconosciuta non resta', !fs.existsSync(path.join(orfano, '2026-11-17_09-00-00-000000.mp4')));
     const video = await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: vol });
     verifica('si riguarda com\'era, decifrata al volo', video.stato === 200 && Buffer.compare(video.corpo, contenuto) === 0, video.stato);
+    const tratto = async (intervallo, token = vol, app = false) => {
+        const r = await fetch(`${BASE}/api/drone/registrazioni/${riprese[0]?.id}/file`, { headers: { Authorization: `Bearer ${token}`, Range: intervallo, ...(app ? { 'X-Orion-Client': 'app' } : {}) } });
+        return { stato: r.status, intervallo: r.headers.get('content-range'), corpo: Buffer.from(await r.arrayBuffer()) };
+    };
+    const pezzo10 = await tratto('bytes=10-19');
+    verifica('un tratto della ripresa, per saltare avanti e indietro', pezzo10.stato === 206 && pezzo10.intervallo === `bytes 10-19/${contenuto.length}` && Buffer.compare(pezzo10.corpo, contenuto.subarray(10, 20)) === 0, { stato: pezzo10.stato, intervallo: pezzo10.intervallo });
+    const coda = await tratto('bytes=-5');
+    verifica('anche gli ultimi byte', coda.stato === 206 && Buffer.compare(coda.corpo, contenuto.subarray(contenuto.length - 5)) === 0, coda.stato);
+    verifica('un tratto oltre la fine -> 416', (await tratto(`bytes=${contenuto.length + 10}-`)).stato === 416);
+    const elencoSala = (await chiama('/api/drone/dirette', { token: admin })).corpo?.chiavi?.find(k => k.id === idDrone);
+    verifica('la sala vede quanti pezzi ha il volo del drone', elencoSala?.registrazioni === 1, elencoSala);
+    const pezziVolo = await chiama(`/api/drone/dirette/${idDrone}/registrazioni`, { token: vol });
+    verifica('i pezzi del volo, in ordine, per rivederlo da subito', pezziVolo.stato === 200 && pezziVolo.corpo.length === 1 && pezziVolo.corpo[0].id === riprese[0]?.id, pezziVolo.corpo);
+    verifica("dall'app chi non è della squadra del drone non lo rivede -> 403", (await chiama(`/api/drone/dirette/${idDrone}/registrazioni`, { token: vol, app: true })).stato === 403
+        && (await tratto('bytes=0-9', vol, true)).stato === 403);
+    verifica("il caposquadra sì, anche dall'app", (await chiama(`/api/drone/dirette/${idDrone}/registrazioni`, { token: altro.token, app: true })).stato === 200
+        && (await tratto('bytes=0-9', altro.token, true)).stato === 206);
+    verifica("l'esterno non rivede -> 403", (await chiama(`/api/drone/dirette/${idDrone}/registrazioni`, { token: tokEst })).stato === 403);
     verifica('l\'esterno non la riguarda -> 403', (await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: tokEst })).stato === 403);
 
     verifica('togliere la chiave stacca il pilota', (await chiama(`/api/drone/chiavi/${dirette.chiavi[0].id}`, { method: 'DELETE', token: admin })).stato === 200 && !finto.inOnda(percorso));
@@ -183,7 +206,7 @@ try {
     verifica('a emergenza chiusa il volontario non riguarda le riprese (archivio) -> 403', (await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: vol })).stato === 403);
     verifica('chi consulta l\'archivio sì', (await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: admin })).stato === 200);
     const registro = JSON.stringify((await chiama('/api/admin/audit-log?limit=50', { token: admin })).corpo || '');
-    verifica('nel registro: chiave data, in onda, raccolta, vista, chiave tolta', ['drone.chiave_creata', 'drone.in_onda', 'drone.registrazione_raccolta', 'drone.ripresa_vista', 'drone.chiave_revocata', 'drone.respinto', 'drone.chiave_modificata'].every(a => registro.includes(a)));
+    verifica('nel registro: chiave data, in onda, raccolta, vista, chiave tolta', ['drone.chiave_creata', 'drone.in_onda', 'drone.registrazione_raccolta', 'drone.ripresa_vista', 'drone.chiave_revocata', 'drone.respinto', 'drone.chiave_modificata', 'drone.doppione_respinto'].every(a => registro.includes(a)));
 } finally {
     if (aperta) await chiama('/api/emergencies/close', { method: 'POST', token: admin, body: {} });
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { drone_enabled: prima === 'true' ? 'true' : 'false', drone_max_dirette: '' } });

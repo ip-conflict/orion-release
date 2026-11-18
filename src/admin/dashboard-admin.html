@@ -281,6 +281,14 @@
                                 </label>
                             </div>
                             <p id="drone-configurazione" class="messaggio" hidden></p>
+                            <div id="drone-installa" hidden style="margin-top: 12px; display: grid; gap: 8px; max-width: 460px;">
+                                <label for="drone-installa-password" style="color: var(--text-color); font-weight: 600;">La tua password, per confermare</label>
+                                <input type="password" id="drone-installa-password" autocomplete="current-password" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);">
+                                <button type="button" id="drone-installa-btn" class="button-style">Installa il drone su questo server</button>
+                                <small style="color: var(--text-muted); font-size: 0.85rem;">Lo fa l'agente del server: MediaMTX parte accanto a ORION, che si riavvia per qualche secondo, e il firewall del server apre le due porte del drone. L'inoltro delle porte sul router resta da fare a mano.</small>
+                                <ol id="drone-installa-passi" hidden style="margin: 4px 0 0; padding-left: 20px; font-size: 0.9rem;"></ol>
+                                <p id="drone-installa-esito" class="messaggio" hidden></p>
+                            </div>
                             <div id="drone-porte-blocco" hidden style="margin-top: 15px;">
                                 <label for="drone-max-dirette" style="color: var(--text-color); font-weight: 600;">Droni in onda insieme, al massimo</label>
                                 <input type="number" id="drone-max-dirette" name="drone_max_dirette" min="1" max="20" placeholder="3" style="padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); max-width: 120px;">

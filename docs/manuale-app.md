@@ -254,12 +254,22 @@ propria squadra. Il drone è della squadra del pilota quando la sala indica il
 pilota, oppure della squadra che la sala sceglie; senza né l'uno né l'altra
 lo vedono solo sala, coordinatore e caposquadra. Gli esterni non lo vedono.
 
+Accanto ai droni che hanno già volato c'è ↺: apre il volo registrato in
+questa emergenza, con una barra unica per tutti i minuti per tornare indietro
+o ripartire dall'inizio; resta indietro di circa un minuto e mezzo rispetto
+alla diretta e, se il drone vola ancora, i minuti nuovi si aggiungono da soli.
+
 Il video non parte da solo: si tocca ▶ accanto al drone in onda e si apre a
 tutto schermo, con i comandi per metterlo in pausa e ingrandirlo. Arriva con
 qualche secondo di ritardo rispetto alla sala, passa dal server ORION come il
 resto dell'app e si ferma quando l'app va in secondo piano; tornando riparte
 dal vivo. Sulla rete mobile una diretta consuma circa 1,3 GB l'ora, perché il
-drone trasmette in alta qualità e il server non la abbassa. Se il drone smette
+drone trasmette in alta qualità e il server non la abbassa. Girando il
+telefono in orizzontale, o toccando il pulsante a tutto schermo del lettore,
+il video prende tutto lo schermo: spariscono la barra in alto, quella di Orion
+Voice e quelle di Android, che tornano con uno scorrimento dal bordo. Il
+pulsante gira il telefono in orizzontale da solo; toccato di nuovo, o con
+indietro, si torna alla schermata normale. Se il drone smette
 di trasmettere, o la sala cambia la squadra a cui è legato, la schermata lo
 dice e si può riprovare.
 

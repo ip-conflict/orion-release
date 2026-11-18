@@ -39,6 +39,69 @@ quandoPronto(() => {
     }
     const maxDroneCaricato = () => document.getElementById('drone-max-dirette')?.dataset.caricato === 'si';
 
+    async function preparaInstallazioneDrone() {
+        const nota = document.getElementById('drone-configurazione');
+        const blocco = document.getElementById('drone-installa');
+        if (!nota || !blocco) return;
+        let stato = null;
+        try { stato = await fetchApi('/api/sistema/drone'); } catch { stato = null; }
+        if (stato?.configurato) return;
+        nota.textContent = stato?.installabile
+            ? `MediaMTX non è ancora installato su questo server: lo si installa da qui.${stato.con_approvazione ? ' Parte quando lo approva chi gestisce il server.' : ''}`
+            : `MediaMTX non è installato su questo server: anche acceso, il drone non funziona. ${stato?.motivo || ''}`.trim();
+        nota.className = 'messaggio messaggio-avviso';
+        nota.hidden = false;
+        blocco.hidden = !stato?.installabile;
+    }
+
+    // ORION si riavvia a metà: le richieste che non rispondono si saltano finché l'agente non ha finito.
+    async function seguiInstallazioneDrone(messaggio) {
+        const passi = document.getElementById('drone-installa-passi');
+        const esito = document.getElementById('drone-installa-esito');
+        const pulsante = document.getElementById('drone-installa-btn');
+        esito.textContent = messaggio;
+        esito.className = 'messaggio messaggio-info';
+        esito.hidden = false;
+        passi.hidden = false;
+        for (let giro = 0; giro < 400; giro++) {
+            await new Promise(r => setTimeout(r, 3000));
+            let operazione = null;
+            try { operazione = await fetchApi('/api/sistema/operazione'); } catch { continue; }
+            if (operazione?.tipo !== 'drone') continue;
+            passi.replaceChildren(...(operazione.passi || []).map(p => {
+                const voce = document.createElement('li');
+                voce.textContent = `${p.testo}${p.stato === 'fatto' ? ' ✓' : p.stato === 'errore' ? ' ✗' : ' …'}`;
+                return voce;
+            }));
+            if (!operazione.finita) continue;
+            esito.textContent = operazione.messaggio || '';
+            esito.className = `messaggio ${operazione.esito === 'fatto' ? 'messaggio-ok' : 'messaggio-errore'}`;
+            if (operazione.esito === 'fatto') {
+                document.getElementById('drone-configurazione').hidden = true;
+                fetchApi('/api/drone/stato').then(mostraPorteDrone).catch(() => {});
+            } else {
+                pulsante.disabled = false;
+            }
+            return;
+        }
+    }
+
+    document.getElementById('drone-installa-btn')?.addEventListener('click', async (e) => {
+        const pulsante = e.currentTarget;
+        const campo = document.getElementById('drone-installa-password');
+        if (!campo.value) { notifica('Serve la tua password per confermare.', 'errore'); campo.focus(); return; }
+        if (!confirm('ORION si riavvia per qualche secondo e il firewall del server apre le due porte del drone. Procedo?')) return;
+        pulsante.disabled = true;
+        try {
+            const r = await fetchApi('/api/sistema/drone/installa', { method: 'POST', body: JSON.stringify({ password: campo.value }) });
+            campo.value = '';
+            seguiInstallazioneDrone(r.message);
+        } catch (errore) {
+            notifica(errore.message, 'errore');
+            pulsante.disabled = false;
+        }
+    });
+
     const enableSegBtn = document.getElementById('enable-segreteria');
     const constraintsDiv = document.getElementById('segreteria-constraints');
     const enableMagBtn = document.getElementById('enable-magazzino');
@@ -187,11 +250,7 @@ quandoPronto(() => {
                     if (enableDroneBtn) enableDroneBtn.checked = String(settings.drone_enabled) === 'true';
                     fetchApi('/api/drone/stato').then(d => {
                         mostraPorteDrone(d);
-                        const nota = document.getElementById('drone-configurazione');
-                        if (!nota || d?.configurato) return;
-                        nota.textContent = 'MediaMTX non è configurato su questo server: anche acceso, il drone non funziona finché non lo si installa.';
-                        nota.className = 'messaggio messaggio-avviso';
-                        nota.hidden = false;
+                        if (!d?.configurato) preparaInstallazioneDrone();
                     }).catch(() => {});
                     const tastoVoce = document.getElementById('voce-tasto');
                     if (tastoVoce && settings.voce_tasto) tastoVoce.value = settings.voce_tasto;

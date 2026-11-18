@@ -176,36 +176,60 @@ let brandingSettings = {
     }
 
     let attesaRicercaVoce = null;
-    // Si guardano qui o si scaricano: ogni apertura finisce nel registro delle operazioni.
+    // Un volo per drone, rivisto di seguito come un video solo; i pezzi da un minuto si scaricano uno per uno.
+    // Ogni apertura finisce nel registro delle operazioni.
+    let lettoreDrone = null;
     async function caricaRipreseDrone(emergencyId) {
         const sezione = document.getElementById('archived-drone-section');
         const elenco = document.getElementById('archived-drone-list');
-        const video = document.getElementById('archived-drone-video');
-        if (!sezione || !elenco) return;
+        const posto = document.getElementById('archived-drone-lettore');
+        if (!sezione || !elenco || !posto) return;
         sezione.hidden = true;
-        video.hidden = true;
-        video.removeAttribute('src');
+        lettoreDrone?.chiudi();
+        lettoreDrone = null;
+        posto.replaceChildren();
+        posto.hidden = true;
         let riprese = [];
         try { riprese = await fetchApi(`/api/drone/registrazioni?emergenza=${encodeURIComponent(emergencyId)}`); } catch { return; }
         if (!riprese.length) return;
         const ora = (d) => new Date(d).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        elenco.replaceChildren(...riprese.map(r => {
-            const li = document.createElement('li');
-            li.style.cssText = 'display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-color);';
-            const minuti = Math.max(1, Math.round((new Date(r.finita_il) - new Date(r.iniziata_il)) / 60000));
-            const testo = document.createElement('span');
+        const voli = new Map();
+        for (const r of riprese) {
+            const chiave = r.chiave_id ?? `nome:${r.nome_drone}`;
+            if (!voli.has(chiave)) voli.set(chiave, []);
+            voli.get(chiave).push(r);
+        }
+        const crea = (tag, classe, testo) => { const e = document.createElement(tag); if (classe) e.className = classe; if (testo !== undefined) e.textContent = testo; return e; };
+        elenco.replaceChildren(...[...voli.values()].map(pezzi => {
+            const li = crea('li');
+            li.style.cssText = 'padding: 10px 0; border-top: 1px solid var(--border-color);';
+            const riga = crea('div');
+            riga.style.cssText = 'display: flex; gap: 10px; align-items: center; flex-wrap: wrap;';
+            const secondi = pezzi.reduce((t, r) => t + Math.max(1, (new Date(r.finita_il) - new Date(r.iniziata_il)) / 1000), 0);
+            const mb = pezzi.reduce((t, r) => t + Number(r.dimensione || 0), 0) / 1048576;
+            const testo = crea('span', null, `${pezzi[0].nome_drone} · dalle ${ora(pezzi[0].iniziata_il)} alle ${ora(pezzi[pezzi.length - 1].finita_il)} · ${Math.max(1, Math.round(secondi / 60))} min registrati · ${Math.round(mb)} MB`);
             testo.style.flex = '1';
-            testo.textContent = `${r.nome_drone} · ${ora(r.iniziata_il)} · ${minuti} min · ${Math.round(r.dimensione / 1048576)} MB`;
-            const guarda = document.createElement('button');
+            const guarda = crea('button', 'button-style button-small', 'Rivedi');
             guarda.type = 'button';
-            guarda.className = 'button-style button-small';
-            guarda.textContent = 'Guarda';
-            guarda.addEventListener('click', () => { video.src = `/api/drone/registrazioni/${r.id}/file`; video.hidden = false; video.play().catch(() => {}); });
-            const scarica = document.createElement('a');
-            scarica.className = 'button-style button-small button-secondary';
-            scarica.href = `/api/drone/registrazioni/${r.id}/file?scarica=1`;
-            scarica.textContent = 'Scarica';
-            li.append(testo, guarda, scarica);
+            guarda.addEventListener('click', () => {
+                lettoreDrone?.chiudi();
+                lettoreDrone = DroneVideo.rivedi(pezzi, { suErrore: (m) => notifica(m, 'errore') });
+                posto.replaceChildren(lettoreDrone.nodo);
+                posto.hidden = false;
+                posto.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            riga.append(testo, guarda);
+            const dettagli = crea('details');
+            dettagli.append(crea('summary', null, `Scarica i pezzi da un minuto (${pezzi.length})`));
+            const lista = crea('div');
+            lista.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px;';
+            for (const r of pezzi) {
+                const a = crea('a', 'button-style button-small button-secondary', new Date(r.iniziata_il).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
+                a.href = `/api/drone/registrazioni/${encodeURIComponent(r.id)}/file?scarica=1`;
+                lista.append(a);
+            }
+            dettagli.append(lista);
+            li.append(riga, dettagli);
             return li;
         }));
         sezione.hidden = false;

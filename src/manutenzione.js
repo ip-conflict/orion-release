@@ -10,6 +10,7 @@ import { fetchEsterno, controllaIndirizzo } from './indirizziEsterni.js';
 import { leggiNomeBackup, nomeDaScaricare } from './nomiBackup.js';
 import { ripristinaDatabase as ripristinaDatabaseCon, verificaArchivio } from './ripristinoDb.js';
 import { MODELLI } from './voceTrascrizione.js';
+import { droneConfigurato } from './drone.js';
 
 // Qualunque altro carattere è un tentativo di uscire dalla cartella.
 const NOME_BACKUP_VALIDO = /^[A-Za-z0-9._-]+\.sql\.gz$/;
@@ -19,8 +20,8 @@ const PAROLA_CONFERMA = 'RIPRISTINA';
 
 // La versione di scripts/docker/orion-agente.sh che questa versione di ORION si aspetta: l'agente
 // sta sull'host e non si aggiorna con l'immagine.
-const AGENTE_ATTESO = 2;
-const INSTALLA_AGENTE = 'sudo install -m 755 scripts/docker/orion-agente.sh /usr/local/sbin/orion-agente';
+const AGENTE_ATTESO = 3;
+const INSTALLA_AGENTE = 'sudo scripts/docker/prepara-host.sh';
 
 export function registraRotteManutenzione(app, ctx) {
     const {
@@ -858,6 +859,39 @@ export function registraRotteManutenzione(app, ctx) {
         registraAudit(req, 'sistema.memoria', { dettagli: { da: stato.attuale_mb, a: richiesta } });
         logger.warn(`[Manutenzione] Memoria di ORION da ${stato.attuale_mb} a ${richiesta} MB, richiesta da ${req.user.username}.`);
         return mandaAllAgente(res, 'memoria', { memoria: String(richiesta) }, 'Cambio della memoria chiesto al server.');
+    });
+
+    // Il drone dalla pagina: lo installa l'agente sul server, con attiva-drone.sh e le stesse regole degli aggiornamenti.
+    async function statoInstallazioneDrone() {
+        if (droneConfigurato()) return { configurato: true, installabile: false };
+        if (!agente) return { configurato: false, installabile: false, motivo: 'ORION non gira nei container: MediaMTX si installa a mano, come spiega il manuale tecnico ("Il drone").' };
+        const stato = await statoAgente();
+        if (!stato.vivo) return { configurato: false, installabile: false, motivo: 'L\'agente sul server non risponde: avvisa chi gestisce il server.' };
+        if (!stato.sa.includes('drone')) {
+            return { configurato: false, installabile: false, motivo: `L'agente sul server è di una versione che non sa installare il drone: chi gestisce il server lo aggiorni, dalla cartella di questa versione di ORION, con ${INSTALLA_AGENTE}` };
+        }
+        if (stato.politica === 'bloccati') return { configurato: false, installabile: false, motivo: 'Chi gestisce il server ha bloccato le modifiche a questa installazione.' };
+        return { configurato: false, installabile: true, con_approvazione: stato.politica === 'chiedi' };
+    }
+
+    app.get('/api/sistema/drone', soloAdmin, async (req, res) => {
+        res.json(await statoInstallazioneDrone());
+    });
+
+    app.post('/api/sistema/drone/installa', soloAdmin, async (req, res) => {
+        const stato = await statoInstallazioneDrone();
+        if (stato.configurato) return res.status(409).json({ message: 'Il drone è già installato su questo server.' });
+        if (!stato.installabile) return res.status(409).json({ message: stato.motivo });
+        const { password } = req.body || {};
+        if (!password) return res.status(400).json({ message: 'Serve la tua password per confermare.' });
+        if (!await passwordGiusta(req, password)) return res.status(403).json({ message: 'Password errata.' });
+        const requisiti = await verificaRequisiti();
+        if (!requisiti.pronto) return res.status(409).json({ message: `Non si può installare adesso: ${requisiti.problemi.join(' ')}` });
+        registraAudit(req, 'sistema.drone', { dettagli: { installazione: true } });
+        logger.warn(`[Manutenzione] Installazione del drone chiesta da ${req.user.username}.`);
+        return mandaAllAgente(res, 'drone', {}, stato.con_approvazione
+            ? 'Installazione del drone chiesta al server: parte quando la approva chi gestisce il server.'
+            : 'Installazione del drone chiesta al server.');
     });
 
     return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico };

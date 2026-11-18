@@ -8,7 +8,7 @@ QUI=$(cd "$(dirname "$0")" && pwd)
 [ "$(id -u)" -eq 0 ] || { echo "Va lanciato con sudo." >&2; exit 1; }
 
 apt-get update
-apt-get install -y ca-certificates curl jq rsync openssl nginx certbot python3-certbot-nginx ufw
+apt-get install -y ca-certificates curl jq rsync openssl iproute2 nginx certbot python3-certbot-nginx ufw
 command -v docker > /dev/null || apt-get install -y docker.io docker-compose-v2
 # Senza buildx "docker build" usa il vecchio costruttore, deprecato. Il pacchetto si chiama in
 # modo diverso se Docker viene dal repository di Ubuntu o da quello di Docker.
@@ -42,6 +42,7 @@ grep -Eq '^\s*server_tokens\s' /etc/nginx/nginx.conf || sed -i '0,/#\s*server_to
 nginx -t && systemctl reload nginx
 
 install -m 755 "$QUI/orion-agente.sh" /usr/local/sbin/orion-agente
+install -m 755 "$QUI/attiva-drone.sh" /usr/local/sbin/orion-attiva-drone
 install -m 644 "$QUI"/systemd/orion-agente.service "$QUI"/systemd/orion-agente.timer \
     "$QUI"/systemd/orion-backup.service "$QUI"/systemd/orion-backup.timer /etc/systemd/system/
 systemctl daemon-reload

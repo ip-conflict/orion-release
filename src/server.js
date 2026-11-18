@@ -190,7 +190,9 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-    logger.debug(`${new Date().toISOString()} - ${req.method} ${req.originalUrl} - User: ${req.user?.username || 'Anonimo'}`);
+    // MediaMTX chiede l'autorizzazione con il suo segreto nella query: nei registri va solo il percorso.
+    const indirizzo = req.path === '/api/drone/autorizza' ? req.path : req.originalUrl;
+    logger.debug(`${new Date().toISOString()} - ${req.method} ${indirizzo} - User: ${req.user?.username || 'Anonimo'}`);
     next();
 });
 
@@ -200,7 +202,7 @@ app.use((req, res, next) => {
     if (req.headers['content-type']?.includes('multipart/form-data')) return next();
     const watchdog = setTimeout(() => {
         if (!res.headersSent) {
-            logger.error(`[Watchdog] Nessuna risposta per ${req.method} ${req.originalUrl} entro ${REQUEST_WATCHDOG_MS / 1000}s: invio 503.`);
+            logger.error(`[Watchdog] Nessuna risposta per ${req.method} ${req.path} entro ${REQUEST_WATCHDOG_MS / 1000}s: invio 503.`);
             res.status(503).json({ message: 'Il server non è riuscito a completare la richiesta in tempo. Riprova tra poco.' });
         }
     }, REQUEST_WATCHDOG_MS);
@@ -386,7 +388,7 @@ app.use((err, req, res, next) => {
         runDailyExpiryCheck();
         setInterval(runDailyExpiryCheck, 3600000);
         setInterval(controllaSegnalazioniInRitardo, 60000);
-        setInterval(() => raccogliRegistrazioni().catch(e => logger.error('[Drone] Raccolta non riuscita:', e)), parseInt(process.env.ORION_DRONE_RACCOLTA_MS, 10) || 60000);
+        setInterval(() => raccogliRegistrazioni().catch(e => logger.error('[Drone] Raccolta non riuscita:', e)), parseInt(process.env.ORION_DRONE_RACCOLTA_MS, 10) || 20000);
         setInterval(controllaDirette, parseInt(process.env.ORION_DRONE_CONTROLLO_MS, 10) || 10000);
         cleanupRevokedTokens();
         setInterval(cleanupRevokedTokens, 24 * 3600000);

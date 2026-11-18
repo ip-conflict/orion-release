@@ -106,11 +106,21 @@ await p.waitForSelector('#drone-btn .drone-in-onda', { state: 'detached', timeou
 // La raccolta cancella lo spezzone dopo averlo cifrato: finché c'è, l'archivio non lo mostra ancora.
 for (let i = 0; i < 120 && fs.existsSync(f); i++) await attendi(500);
 controlla('finita la diretta il pallino sparisce', await p.locator('#drone-btn .drone-in-onda').count() === 0);
+await p.waitForSelector('.dr-voce:has-text("Matrice 4E") button:text-is("Rivedi")', { timeout: 20000 }).catch(() => {});
+const rivedi = p.locator('.dr-voce').filter({ hasText: 'Matrice 4E' }).locator('button', { hasText: 'Rivedi' });
+controlla('a diretta finita il volo registrato si rivede dal pannello', await rivedi.count() === 1);
+if (await rivedi.count()) { await rivedi.click(); await assesta(p, 1500); }
+controlla('si apre con la barra di tutto il volo e "Ripeti"', await p.locator('.dr-pannello .dr-rivedi .dr-rivedi-barra').count() === 1
+    && /registrato/.test(await p.textContent('.dr-pannello .dr-vista-testa')) && await p.locator('.dr-pannello .dr-rivedi button', { hasText: 'Ripeti' }).count() === 1);
+await p.screenshot({ path: `${OUT}/dr-rivedi.png` });
 await api(admin, '/api/emergencies/close', { method: 'POST', body: {} });
 await p.goto(BASE + '/admin/archive.html'); await assesta(p, 2500);
 const opzione = p.locator(`option[data-code="${codice}"]`).first();
 await opzione.locator('xpath=..').selectOption(await opzione.getAttribute('value')); await assesta(opzione, 2500);
 controlla('nell\'archivio la ripresa del drone', await p.isVisible('#archived-drone-section') && /Matrice 4E/.test(await p.textContent('#archived-drone-list')));
+await p.locator('#archived-drone-list button', { hasText: 'Rivedi' }).first().click(); await assesta(p, 1000);
+controlla('nell\'archivio il volo si rivede con lo stesso lettore, e i pezzi si scaricano', await p.locator('#archived-drone-lettore .dr-rivedi-barra').count() === 1
+    && /Scarica i pezzi da un minuto \(1\)/.test(await p.textContent('#archived-drone-list')));
 await p.screenshot({ path: `${OUT}/dr-archivio.png` });
 controlla('il video che non si apre lo dice una volta sola, in italiano', (await p.locator('text=Il video non si apre').count()) <= 1);
 await finto.chiudi();

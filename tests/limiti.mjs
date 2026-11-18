@@ -30,6 +30,7 @@ app.use((req, res, next) => {
 app.use('/api/', apiLimiter);
 app.get('/api/qualcosa', (req, res) => res.json({ ok: true }));
 app.post('/api/location', (req, res) => res.json({ ok: true }));
+app.get('/api/drone/dirette/:id/hls/:file', (req, res) => res.json({ ok: true }));
 
 const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -78,6 +79,13 @@ try {
     const posizioni = await raffica(LIMITE + 10, { utente: 3, metodo: 'POST' }, '/api/location');
     verifica('più posizioni del limite, di fila, passano tutte', posizioni.every(s => s === 200), `${posizioni.filter(s => s !== 200).length} rifiutate`);
     verifica('e il limite della persona e\' intatto', (await chiedi('/api/qualcosa', { utente: 3 })) === 200);
+    const pezzi = await raffica(LIMITE + 10, { utente: 4 }, '/api/drone/dirette/5/hls/prova_part3.mp4');
+    verifica('i pezzi del video del drone, più del limite, passano tutti', pezzi.every(s => s === 200), `${pezzi.filter(s => s !== 200).length} rifiutati`);
+    verifica('e chi guarda il drone lavora ancora con il resto', (await chiedi('/api/qualcosa', { utente: 4 })) === 200);
+    verifica('un percorso del drone che non è un pezzo del video conta', await (async () => {
+        await raffica(LIMITE, { utente: 5 }, '/api/drone/dirette/5/hls/a/b');
+        return (await chiedi('/api/qualcosa', { utente: 5 })) === 429;
+    })());
 
     console.log('\n[5] Il login si conta per rete, anche IPv6, e solo quando sbaglia');
     const accedi = (ip, password) => fetch(`${base}/login`, { method: 'POST', headers: { 'X-Forwarded-For': ip, 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });

@@ -8,6 +8,8 @@
 set -euo pipefail
 
 QUI=$(cd "$(dirname "$0")" && pwd)
+# L'agente lo lancia con i file presi dall'immagine in servizio, della stessa versione dell'istanza.
+SORGENTE="${ORION_DRONE_SORGENTE:-$QUI}"
 BASE="${ORION_BASE:-/srv/orion}"
 errore() { echo "ERRORE: $*" >&2; exit 1; }
 
@@ -59,9 +61,8 @@ for altra in "$BASE"/*/.env; do
     grep -qsx "ORION_DRONE_PORTA_WEBRTC=$WEBRTC" "$altra" && errore "La porta $WEBRTC è già del drone di $(basename "$(dirname "$altra")"): scegline un'altra."
 done
 
-# Il compose e la configurazione di MediaMTX arrivano da questa copia del programma.
-install -m 644 "$QUI/compose.yaml" "$DIR/compose.yaml"
-install -m 644 "$QUI/mediamtx.yml" "$DIR/mediamtx.yml"
+install -m 644 "$SORGENTE/compose.yaml" "$DIR/compose.yaml"
+install -m 644 "$SORGENTE/mediamtx.yml" "$DIR/mediamtx.yml"
 mkdir -p "$DIR/drone/registrazioni"
 chown "$UID_ISTANZA:$UID_ISTANZA" "$DIR/drone" "$DIR/drone/registrazioni"
 chmod 700 "$DIR/drone" "$DIR/drone/registrazioni"

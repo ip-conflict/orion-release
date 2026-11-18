@@ -87,7 +87,7 @@
         const inOnda = (dati?.chiavi || []).filter(k => k.in_onda);
         if (dati) {
             ultimiDati = dati;
-            for (const id of [...visioni.keys()]) if (!inOnda.some(k => k.id === id)) smetti(id);
+            for (const v of [...visioni.values()]) if (!v.registrato && !inOnda.some(k => k.id === v.id)) smetti(v.id);
         }
         b.querySelector('.drone-in-onda')?.remove();
         if (inOnda.length) b.append(el('span', { class: 'drone-in-onda', title: `${inOnda.length} in onda` }));
@@ -120,6 +120,20 @@
         DroneVideo.guarda(k.id, v.video, { suFine: () => { smetti(k.id); setTimeout(aggiorna, 1500); } })
             .then(sessione => { if (v.chiusa) sessione.chiudi(); else v.sessione = sessione; })
             .catch(e => { if (v.chiusa) return; nonDaSoli.add(k.id); smetti(k.id); notifica(e.message, 'errore'); });
+        colloca(v);
+    }
+
+    // Il volo registrato si guarda come una diretta: nel pannello o in una finestra, e resta aperto anche a drone spento.
+    async function rivedi(k, dove = 'pannello') {
+        const id = `rivedi-${k.id}`;
+        if (visioni.has(id)) { sposta(visioni.get(id), dove); return; }
+        const elenco = () => fetchApi(`/api/drone/dirette/${encodeURIComponent(k.id)}/registrazioni`);
+        let pezzi;
+        try { pezzi = await elenco(); } catch (e) { notifica(e.message, 'errore'); return; }
+        if (!pezzi.length) { notifica(`Di ${k.nome} non c'è ancora niente da rivedere: i pezzi arrivano un minuto e mezzo dopo.`, 'info'); return; }
+        const lettore = DroneVideo.rivedi(pezzi, { aggiorna: elenco, suErrore: (m) => notifica(m, 'errore') });
+        const v = { id, nome: `${k.nome} · registrato`, dove, registrato: true, video: lettore.nodo, lettore: lettore.video, sessione: { chiudi: lettore.chiudi }, chiusa: false };
+        visioni.set(id, v);
         colloca(v);
     }
 
@@ -158,7 +172,7 @@
     function riquadro(v) {
         if (!v.riquadro) {
             v.comandi = el('span', { class: 'dr-comandi' });
-            v.testa = el('div', { class: 'dr-vista-testa' }, el('span', { class: 'dr-punto', 'aria-hidden': 'true', title: 'In onda' }), el('strong', { testo: v.nome }), v.comandi);
+            v.testa = el('div', { class: 'dr-vista-testa' }, v.registrato ? null : el('span', { class: 'dr-punto', 'aria-hidden': 'true', title: 'In onda' }), el('strong', { testo: v.nome }), v.comandi);
             v.riquadro = el('div', { class: 'dr-vista', 'data-chiave': v.id }, v.testa, v.video);
             trascinabile(v);
         }
@@ -167,7 +181,7 @@
         v.comandi.replaceChildren(...[
             v.dove === 'pannello' ? tasto('fa-up-right-from-square', 'Staccala in una finestra', () => sposta(v, 'finestra'))
                 : tasto('fa-table-cells-large', 'Rimettila nel pannello', () => sposta(v, 'pannello')),
-            document.pictureInPictureEnabled ? tasto('fa-clone', 'Sopra tutte le finestre, anche fuori dal browser', () => v.video.requestPictureInPicture().catch(() => {})) : null,
+            document.pictureInPictureEnabled ? tasto('fa-clone', 'Sopra tutte le finestre, anche fuori dal browser', () => (v.lettore || v.video).requestPictureInPicture?.().catch(() => {})) : null,
             tasto('fa-expand', 'Schermo intero', () => v.video.requestFullscreen?.().catch(() => {})),
             tasto('fa-xmark', 'Smetti di guardarla', () => smetti(v.id, { scelta: true }))
         ].filter(Boolean));
@@ -236,6 +250,8 @@
                 k.in_onda && !guardata ? el('button', { type: 'button', class: 'button-style button-small', testo: 'Guarda', title: 'Nel pannello, accanto alle altre', suClick: () => guarda(k) }) : null,
                 k.in_onda && !guardata ? el('button', { type: 'button', class: 'button-style button-secondary button-small', title: 'In una finestra da spostare sopra la mappa', 'aria-label': `Guarda ${k.nome} in una finestra`, suClick: () => guarda(k, 'finestra') },
                     el('i', { class: 'fas fa-up-right-from-square', 'aria-hidden': 'true' })) : null,
+                k.registrazioni > 0 && !visioni.has(`rivedi-${k.id}`) ? el('button', { type: 'button', class: 'button-style button-secondary button-small', testo: 'Rivedi',
+                    title: 'Il volo registrato in questa emergenza, dall\'inizio, con la barra per tornare indietro', suClick: () => rivedi(k) }) : null,
                 stato?.puo_creare && !k.revocata_il ? el('button', { type: 'button', class: 'button-style button-secondary button-small', testo: 'Squadra',
                     title: "Chi lo vede dall'app oltre alla sala e ai caposquadra: la squadra del pilota, o una squadra scelta",
                     suClick: () => { inModifica = inModifica === k.id ? null : k.id; disegna(ultimiDati); } }) : null,

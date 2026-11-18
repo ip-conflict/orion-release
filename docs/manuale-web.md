@@ -320,6 +320,14 @@ diretta si chiude da sola. Ogni diretta guardata è un video in più sulla rete
 della sala, circa 3 Mbit/s l'una. Lo schermo a parete apre la diretta in un
 riquadro in basso a destra. Gli esterni non vedono le riprese.
 
+**Installarlo.** Se MediaMTX non c'è ancora sul server, nel riquadro del
+drone in Impostazioni, Moduli compare **Installa il drone su questo server**:
+si conferma con la propria password e ci pensa il server, che si riavvia per
+qualche secondo e mostra i passi. Se chi gestisce il server ha chiesto di
+approvare le modifiche, l'installazione parte quando la approva; durante
+un'emergenza aperta non si fa. Alla fine la pagina dice quali porte inoltrare
+dal router al server.
+
 **Quanti droni insieme.** In Impostazioni, Moduli, Drone si sceglie quanti
 droni possono essere in onda nello stesso momento (di serie 3): la pagina
 dice la banda in ingresso da prevedere e le due porte che vanno aperte verso
@@ -327,8 +335,15 @@ il server, le stesse per tutti i droni. Un drone in più oltre il massimo
 non va in onda: il pilota vede la connessione fallire e il pannello della
 sala dice chi è stato respinto. Basta alzare il numero e il pilota riprova.
 
-**Le registrazioni.** Ogni diretta viene registrata con l'emergenza e si
-riguarda dall'archivio (capitolo 12).
+**Rivedere il volo.** Ogni diretta viene registrata a pezzi da un minuto, e
+si rivede già mentre l'emergenza è aperta: accanto al drone **Rivedi** apre il
+volo registrato nel pannello, come le dirette (anche in una finestra a parte),
+con una barra per tutto il volo e l'ora vera del momento che si guarda. Si
+torna indietro trascinando la barra, **Ripeti** riparte dall'inizio, e
+arrivati in fondo il video prosegue da solo con i minuti che intanto sono
+arrivati, se il drone vola ancora. Rispetto alla diretta il registrato resta
+indietro di circa un minuto e mezzo. A emergenza chiusa il volo si rivede
+dall'archivio (capitolo 12).
 
 ### Orion Voice
 
@@ -873,9 +888,11 @@ Prefettura; ogni scaricamento resta nel registro delle operazioni.
 "Elimina per sempre" toglie l'emergenza per fare spazio: nello storico resta
 scritto chi l'ha fatto, e se ne vanno anche i messaggi vocali.
 
-Se il drone ha trasmesso, **Riprese del drone** elenca le registrazioni con
-il nome del drone, l'ora, la durata e il peso: "Guarda" le apre nella pagina,
-"Scarica" le salva. Ogni visione finisce nel registro delle operazioni.
+Se il drone ha trasmesso, **Riprese del drone** ha una riga per drone, con
+l'ora d'inizio e di fine del volo, i minuti registrati e il peso: "Rivedi" lo
+apre nella pagina con la barra per tutto il volo, e sotto i pezzi da un minuto
+si scaricano uno per uno. Visioni e scaricamenti finiscono nel registro delle
+operazioni.
 
 Se l'emergenza ha messaggi vocali, **Comunicazioni vocali** li elenca con
 canale, autore, durata e conferme, e ognuno si ascolta o si scarica; anche le

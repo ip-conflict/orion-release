@@ -1,5 +1,5 @@
 #!/bin/bash
-# Agente delle istanze ORION in container: esegue aggiornamenti, ritorni e cambi di memoria chiesti
+# Agente delle istanze ORION in container: esegue aggiornamenti, ritorni, cambi di memoria e l'installazione del drone chiesti
 # dalla pagina Sistema e fa i backup notturni. Gira come root sull'host (timer di systemd ogni minuto).
 #   orion-agente giro | backup [istanza] | pulisci | stato | approva <istanza> | rifiuta <istanza> | aggiorna <istanza> <versione>
 #   orion-agente memoria [<istanza> <MB>] | disco prepara <dispositivo> | disco copia | disco stato
@@ -20,7 +20,7 @@ DISCO_ETICHETTA=ORION-COPIE
 DISCO_PUNTO=/mnt/orion-copie
 DISCO_GIORNI="${ORION_DISCO_GIORNI:-90}"
 # La pagina Sistema la confronta con quella che si aspetta, per dire quando l'agente va reinstallato.
-AGENTE_VERSIONE=2
+AGENTE_VERSIONE=3
 MEMORIA_MINIMA_MB=768
 MEMORIA_APP_PREDEFINITA_MB=1024
 MEMORIA_DB_PREDEFINITA_MB=512
@@ -142,7 +142,7 @@ battito() {
     jq -n --arg t "$(adesso)" --arg p "$(politica)" --arg v "$(leggi_env ORION_VERSIONE)" --argjson agente "$AGENTE_VERSIONE" \
         --argjson db "$(memoria_db_di "$DIR")" --argjson attuale "$(memoria_app_di "$DIR")" \
         --argjson minimo "$MEMORIA_MINIMA_MB" --argjson massimo "$(massimo_pagina_mb)" \
-        '{visto_il: $t, politica: $p, versione: $v, agente: $agente, sa: ["aggiornamento", "ritorno", "memoria"],
+        '{visto_il: $t, politica: $p, versione: $v, agente: $agente, sa: ["aggiornamento", "ritorno", "memoria", "drone"],
           memoria: {database_mb: $db, attuale_mb: $attuale, minimo_mb: $minimo, massimo_mb: $massimo}}' | scrivi_stato agente.json
 }
 
@@ -333,6 +333,54 @@ esegui_memoria() {
     fallito "Con $nuova MB ORION non è partito: è tornato a $prima_mb MB."
 }
 
+# Lo stesso attiva-drone.sh di chi installa a mano; compose e configurazione di MediaMTX vengono
+# dall'immagine in servizio, così sono della versione dell'istanza e non di quella di prepara-host.sh.
+esegui_drone() {
+    local comando=/usr/local/sbin/orion-attiva-drone sorgente rif rtmp webrtc
+    passo "Preparazione di MediaMTX"
+    if [ ! -x "$comando" ]; then
+        fallito "Sul server manca orion-attiva-drone: chi gestisce il server rilanci prepara-host.sh. Non è cambiato niente."
+        return
+    fi
+    # Da un container nuovo dell'immagine in servizio, senza rete: il compose lo esegue root, e il
+    # container che risponde in rete è quello che un attacco raggiungerebbe per primo.
+    sorgente=$(mktemp -d)
+    rif=$(leggi_env ORION_IMMAGINE_RIF)
+    if [ -z "$rif" ]; then
+        rm -rf "$sorgente"
+        fallito "Nel .env dell'istanza manca ORION_IMMAGINE_RIF: chi gestisce il server installi il drone con attiva-drone.sh. Non è cambiato niente."
+        return
+    fi
+    if ! docker run --rm --network none --entrypoint cat "$rif" /app/scripts/docker/compose.yaml > "$sorgente/compose.yaml" 2>> "$LOG" \
+        || ! docker run --rm --network none --entrypoint cat "$rif" /app/scripts/docker/mediamtx.yml > "$sorgente/mediamtx.yml" 2>> "$LOG" \
+        || ! grep -q '^  drone:' "$sorgente/compose.yaml"; then
+        rm -rf "$sorgente"
+        fallito "Questa versione di ORION non ha il drone: aggiornala prima. Non è cambiato niente."
+        return
+    fi
+    fine_passo fatto
+
+    passo "Porte, segreto e avvio di MediaMTX; ORION si riavvia"
+    cp "$DIR/compose.yaml" "$DIR/compose.yaml.prima-del-drone"
+    if ORION_BASE="$BASE" ORION_DRONE_SORGENTE="$sorgente" "$comando" "$ISTANZA" >> "$LOG" 2>&1 && attendi_salute; then
+        rm -rf "$sorgente" "$DIR/compose.yaml.prima-del-drone"
+        fine_passo fatto
+        battito
+        rtmp=$(leggi_env ORION_DRONE_PORTA_RTMP); webrtc=$(leggi_env ORION_DRONE_PORTA_WEBRTC)
+        fatto "Drone installato. Se il server sta dietro un router, inoltra al server le porte $rtmp/TCP e $webrtc/UDP. Ricarica la pagina e accendi il modulo."
+        return
+    fi
+    rm -rf "$sorgente"
+    fine_passo errore
+    passo "Ritorno a ORION senza drone"
+    mv -f "$DIR/compose.yaml.prima-del-drone" "$DIR/compose.yaml"
+    sed -i '/^COMPOSE_PROFILES=drone$/d' "$DIR/.env"
+    dc rm -sf drone >> "$LOG" 2>&1
+    if dc up -d >> "$LOG" 2>&1 && attendi_salute; then fine_passo fatto; else fine_passo errore; fi
+    battito
+    fallito "L'installazione del drone non è riuscita, ORION è tornato com'era: i dettagli sono nel registro dell'agente sul server ($LOG)."
+}
+
 # La richiesta si legge dentro il container: un collegamento simbolico messo dall'applicazione
 # punterebbe a un file del container, non dell'host.
 leggi_richiesta() { dc exec -T app cat /agente/richieste/richiesta 2> /dev/null; }
@@ -347,7 +395,7 @@ giro_istanza() {
     local id tipo versione memoria decisa
     id=$(campo id); tipo=$(campo tipo); versione=$(campo versione); memoria=$(campo memoria)
     if ! [[ $id =~ ^[0-9a-f]{16}$ ]] \
-        || ! { [[ $tipo =~ ^(aggiornamento|ritorno)$ && $versione =~ $VERSIONE_RE ]] || [[ $tipo == memoria && $memoria =~ ^[1-9][0-9]{2,6}$ ]]; }; then
+        || ! { [[ $tipo =~ ^(aggiornamento|ritorno)$ && $versione =~ $VERSIONE_RE ]] || [[ $tipo == memoria && $memoria =~ ^[1-9][0-9]{2,6}$ ]] || [[ $tipo == drone ]]; }; then
         togli_richiesta
         log "Richiesta non valida, scartata."
         return 0
@@ -383,6 +431,11 @@ giro_istanza() {
     if [ "$tipo" = memoria ]; then
         log "Richiesta di portare la memoria a $memoria MB."
         esegui_memoria "$memoria" pagina
+        return 0
+    fi
+    if [ "$tipo" = drone ]; then
+        log "Richiesta di installare il drone."
+        esegui_drone
         return 0
     fi
     log "Richiesta $tipo verso $versione."

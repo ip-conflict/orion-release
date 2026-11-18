@@ -1,7 +1,7 @@
 #!/bin/bash
 # Crea un'istanza di ORION in container: cartelle, segreti, database, programma e, se c'è nginx,
 # il sito con il certificato. Vedi "ORION in container" nel manuale tecnico.
-#   sudo [ORION_CHIAVE_DA=chiave-dati.key] scripts/docker/nuova-istanza.sh <nome> <dominio> [versione] [--senza-nginx]
+#   sudo [ORION_CHIAVE_DA=chiave-dati.key] scripts/docker/nuova-istanza.sh <nome> <dominio> [versione] [--senza-nginx] [--drone]
 # Senza versione si installa l'ultima pubblicata.
 
 set -euo pipefail
@@ -14,15 +14,16 @@ PRIMA_PORTA=3101
 
 errore() { echo "ERRORE: $*" >&2; exit 1; }
 
-NOME=${1:-}; DOMINIO=${2:-}; VERSIONE=; NGINX=si
+NOME=${1:-}; DOMINIO=${2:-}; VERSIONE=; NGINX=si; DRONE=no
 shift $(( $# < 2 ? $# : 2 ))
 for argomento in "$@"; do
     case $argomento in
         --senza-nginx) NGINX=no ;;
+        --drone) DRONE=si ;;
         *) VERSIONE=$argomento ;;
     esac
 done
-[[ $NOME =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || errore "Uso: $0 <nome> <dominio> [versione] [--senza-nginx]; il nome è fatto di minuscole, cifre e trattini."
+[[ $NOME =~ ^[a-z0-9][a-z0-9-]{1,30}$ ]] || errore "Uso: $0 <nome> <dominio> [versione] [--senza-nginx] [--drone]; il nome è fatto di minuscole, cifre e trattini."
 [[ $DOMINIO =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || errore "Dominio non valido: $DOMINIO"
 [ "$(id -u)" -eq 0 ] || errore "Va lanciato con sudo."
 command -v docker > /dev/null && docker compose version > /dev/null 2>&1 || errore "Servono docker e il plugin compose (vedi prepara-host.sh)."
@@ -167,6 +168,11 @@ EOF
         certbot --nginx -d "$DOMINIO" --non-interactive --agree-tos --redirect ${EMAIL:---register-unsafely-without-email} \
             || echo "ATTENZIONE: certificato non ottenuto; riprova con: certbot --nginx -d $DOMINIO"
     fi
+fi
+
+if [ "$DRONE" = si ]; then
+    echo
+    ORION_BASE="$BASE" "$QUI/attiva-drone.sh" "$NOME" || echo "ATTENZIONE: il drone non si è attivato; riprova con: sudo $QUI/attiva-drone.sh $NOME"
 fi
 
 echo

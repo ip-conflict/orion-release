@@ -74,7 +74,7 @@ cartella sua sotto `/srv/orion/<nome>`, un utente di sistema suo (un numero
 da 20001 in su) e una porta sua che risponde solo sulla macchina stessa.
 Davanti a tutte c'è lo stesso Nginx, con un sito e un certificato per
 dominio. Accanto alle istanze gira l'agente (`/usr/local/sbin/orion-agente`,
-da `scripts/docker/orion-agente.sh`), che esegue gli aggiornamenti e i cambi di
+da `scripts/docker/orion-agente.sh`), che esegue gli aggiornamenti, l'installazione del drone e i cambi di
 memoria chiesti dalla pagina Sistema e fa i backup notturni.
 
 ### Cosa serve
@@ -132,9 +132,10 @@ git clone https://github.com/ip-conflict/orion-release.git && cd orion-release
 sudo scripts/docker/prepara-host.sh
 ```
 
-Lo script installa Docker con il suo plugin compose, jq, rsync, Nginx,
-Certbot e il firewall (solo SSH e Nginx), copia l'agente in
-`/usr/local/sbin/orion-agente` e accende i suoi due timer di systemd:
+Lo script installa Docker con il suo plugin compose, jq, rsync, iproute2,
+Nginx, Certbot e il firewall (solo SSH e Nginx), copia l'agente in
+`/usr/local/sbin/orion-agente` e `attiva-drone.sh` in
+`/usr/local/sbin/orion-attiva-drone`, e accende i suoi due timer di systemd:
 `orion-agente.timer` ogni minuto, `orion-backup.timer` alle 3:30. Mette
 anche in Nginx un sito predefinito che non risponde: chi arriva con
 l'indirizzo IP, o con un nome che non è di un'istanza, non finisce dentro
@@ -2121,7 +2122,8 @@ un'emergenza o una simulazione aperta) crea una chiave casuale di 32
 caratteri, la restituisce una volta sola con l'indirizzo completo e il QR, e
 nel database (`chiavi_drone`, migrazione `drone`) tiene l'impronta SHA-256
 per riconoscerla e la chiave cifrata per costruire l'indirizzo della
-diretta. MediaMTX accetta chi trasmette solo in RTMP o SRT, con una chiave
+diretta. MediaMTX accetta chi trasmette solo in RTMP o SRT, una volta sola per chiave
+(`overridePublisher: no`, e ORION rifiuta una chiave già in onda), con una chiave
 non revocata dell'emergenza in corso: chiusa l'emergenza, le sue chiavi non
 valgono più e chi stava trasmettendo viene staccato
 (`chiudiDiretteEmergenza()`, che usa l'API di MediaMTX); `DELETE
@@ -2149,7 +2151,9 @@ LL-HLS (`hls: yes` in `mediamtx.yml`, porta 8888 solo nella rete dei
 container, `ORION_DRONE_HLS`) e ORION lo gira all'app da `GET
 /api/drone/dirette/:id/hls/:file`, con le credenziali di MediaMTX come per il
 WHEP. Così passa dalla 443 con la sessione dell'app, senza porte né UDP in
-più, al prezzo di due o tre secondi di ritardo. Il nome del file è controllato
+più, al prezzo di due o tre secondi di ritardo. I pezzi del video non contano
+nel limite di richieste per persona (`rateLimiters.js`), e a MediaMTX arrivano
+solo i parametri di LL-HLS della query. Il nome del file è controllato
 (niente barre né `..`) e la decisione su chi guarda si tiene dieci secondi,
 perché i pezzi arrivano ogni secondo. `GET /api/app/drone` dà all'app i droni
 che quella persona può vedere, con lo stato in onda, la squadra e il pilota,
@@ -2169,22 +2173,48 @@ richieste, quindi token e `X-Orion-Client` arrivano anche ai pezzi del
 video. Lo schermo a parete apre da solo il primo drone in
 onda in un riquadro.
 
-**Le registrazioni.** MediaMTX registra ogni diretta in spezzoni MP4 da
-quindici minuti in `drone/registrazioni/drone/<chiave>/`. Ogni minuto
-`raccogliRegistrazioni()` prende gli spezzoni in cui MediaMTX non scrive più
-da 90 secondi, li cifra in flusso (AES-256-GCM, come gli altri file) in
+**Le registrazioni.** MediaMTX registra ogni diretta in spezzoni MP4 da un
+minuto (`recordSegmentDuration`) in `drone/registrazioni/drone/<chiave>/`.
+Ogni 20 secondi (`ORION_DRONE_RACCOLTA_MS`) `raccogliRegistrazioni()` prende
+gli spezzoni in cui MediaMTX non scrive più da 20 secondi
+(`ORION_DRONE_RIPOSO_MS`): un minuto di volo si rivede circa un minuto e mezzo
+dopo. Li cifra in flusso (AES-256-GCM, come gli altri file) in
 `protected_uploads/drone/<emergenza>/`, li registra in `registrazioni_drone`
 e cancella l'originale; senza la chiave dei dati li lascia dove sono e
 riprova. Uno spezzone di una chiave che ORION non conosce più si cancella.
-Le riprese si vedono dall'archivio (`GET /api/drone/registrazioni`,
-`…/:id/file`) con le stesse regole dell'emergenza: durante l'emergenza gli
-interni, dopo chi ha `emergenze.archivio`; il file si decifra al volo mentre
-parte, quindi un file alterato si interrompe a metà invece di non partire.
-Ogni visione e ogni scaricamento vanno nel registro delle operazioni, come la
-chiave data, la diretta iniziata e la ripresa raccolta. Le riprese entrano
-nei backup e si cancellano con l'emergenza.
+Le riprese si vedono già durante l'emergenza: `GET
+/api/drone/dirette/:id/registrazioni` dà gli spezzoni del volo di un drone
+dell'emergenza in corso, anche a chiave tolta, e il pannello Drone e l'app
+li fanno scorrere di seguito come un video solo (`DroneVideo.rivedi` in
+`drone-video.js`, la playlist di Media3 nell'app), con una barra per tutto il
+volo e l'ora vera; in fondo chiedono se ne sono arrivati altri. Dopo, si
+rivedono dall'archivio (`GET /api/drone/registrazioni`, raggruppate per
+drone) con lo stesso lettore. Valgono le regole dell'emergenza: durante
+l'emergenza gli interni, dopo chi ha `emergenze.archivio`; dall'app, anche
+per le registrazioni, la regola di chi vede quale drone. `…/:id/file`
+decifra al volo mentre manda, quindi un file alterato si interrompe a metà
+invece di non partire, e accetta le richieste `Range`, che il lettore usa per
+saltare avanti e indietro: il file è cifrato in un flusso solo, quindi si
+decifra dall'inizio e si scarta quello che viene prima, un costo da poco per
+un minuto di video. Ogni scaricamento va nel registro delle operazioni, e
+anche la visione, una volta ogni mezz'ora per persona e drone, perché
+rivedere un volo sono decine di richieste. Le riprese entrano nei backup e si
+cancellano con l'emergenza.
 
-**Installazione.** Sull'host, dopo aver creato l'istanza:
+**Installazione.** Il drone si installa in tre modi, che fanno la stessa cosa
+con lo stesso script. Alla creazione dell'istanza, con `--drone` in fondo a
+`nuova-istanza.sh`. Dalla pagina, in Impostazioni, Moduli, Drone: se MediaMTX
+manca, l'amministratore conferma con la sua password e la richiesta va
+all'agente (`POST /api/sistema/drone/installa`, tipo `drone`), con le stesse
+regole degli aggiornamenti (automatici, con approvazione di chi gestisce il
+server, bloccati) e mai a emergenza aperta, perché ORION si riavvia. L'agente
+(versione 3) prende `compose.yaml` e `mediamtx.yml` dall'immagine in
+servizio, così sono della versione dell'istanza, e lancia
+`orion-attiva-drone`; se non riesce rimette il `compose.yaml` di prima, toglie
+`COMPOSE_PROFILES=drone` e ferma MediaMTX. La pagina mostra i passi e, alla
+fine, le porte da inoltrare sul router, che restano a mano. Un agente più
+vecchio non lo sa fare: la pagina chiede di rilanciare `prepara-host.sh`.
+Oppure a mano, sull'host, dopo aver creato l'istanza:
 
 ```
 sudo scripts/docker/attiva-drone.sh <nome> [porta-rtmp] [porta-webrtc]

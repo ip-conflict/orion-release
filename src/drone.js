@@ -4,7 +4,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { Readable } from 'stream';
+import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 import express from 'express';
 import logger from './logger.js';
@@ -29,7 +29,7 @@ const impostazione = () => ({
     porta: parseInt(process.env.ORION_DRONE_RTMP_PORTA, 10) || 1935,
     portaWebrtc: parseInt(process.env.ORION_DRONE_WEBRTC_PORTA, 10) || 8189,
     registrazioni: process.env.ORION_DRONE_REGISTRAZIONI || '/drone-registrazioni',
-    riposoMs: parseInt(process.env.ORION_DRONE_RIPOSO_MS, 10) || 90000
+    riposoMs: parseInt(process.env.ORION_DRONE_RIPOSO_MS, 10) || 20000
 });
 export const droneConfigurato = () => impostazione().segreto.length >= 16;
 
@@ -60,6 +60,7 @@ const dallApp = (req) => req.get('x-orion-client') === 'app';
 // La squadra del drone è quella del pilota, se c'è un pilota (e lo segue se cambia squadra), altrimenti quella scelta.
 const CHIAVI_EMERGENZA = `
     SELECT k.id, k.nome, k.creata_il, k.revocata_il, k.ultima_diretta_il, k.impronta,
+           (SELECT count(*)::int FROM registrazioni_drone r WHERE r.chiave_id = k.id) AS registrazioni,
            p.id AS pilota_id, p.username AS pilota_username, NULLIF(trim(concat_ws(' ', p.nome, p.cognome)), '') AS pilota_nome,
            s.id AS squadra_id, s.nome_radio AS squadra_nome_radio, s.nome AS squadra_nome
       FROM chiavi_drone k
@@ -183,7 +184,7 @@ export async function raccogliRegistrazioni() {
                 registraAudit(null, 'drone.registrazione_raccolta', { tipo: 'emergenza', id: chiave.emergency_id, dettagli: { registrazione: rows[0].id, drone: chiave.nome, byte: info.size } });
                 raccolte++;
             } catch (e) {
-                logger.error(`[Drone] Registrazione ${origine} non raccolta:`, e);
+                logger.error(`[Drone] Registrazione ${nome} della chiave ${chiave?.id ?? 'sconosciuta'} non raccolta:`, e);
             }
         }
     }
@@ -218,9 +219,15 @@ export function registraRotteDronePubbliche(app) {
                 logger.warn(`[Drone] Trasmissione rifiutata da ${ip || '?'}: chiave sconosciuta, revocata o di un'altra emergenza.`);
                 return res.status(401).end();
             }
+            const inCorso = await diretteInCorso().catch(() => new Map());
+            if (inCorso.has(impronta(m[1]))) {
+                logger.warn(`[Drone] ${rows[0].nome}: un secondo collegamento da ${ip || '?'} con la chiave già in onda, respinto.`);
+                registraAudit({ ip }, 'drone.doppione_respinto', { tipo: 'emergenza', id: activeEmergency.id, dettagli: { drone: rows[0].nome, chiave: rows[0].id } });
+                return res.status(401).end();
+            }
             const massimo = await maxDirette();
             // Se MediaMTX non dice chi è in onda si lascia passare: il limite protegge la banda, non l'accesso.
-            const altre = await diretteInCorso().then(d => [...d.keys()].filter(i => i !== impronta(m[1])).length).catch(() => 0);
+            const altre = inCorso.size;
             if (altre >= massimo) {
                 logger.warn(`[Drone] ${rows[0].nome} respinto: già ${altre} droni in onda, il massimo è ${massimo}.`);
                 ultimoRespinto = { emergenza: activeEmergency.id, nome: rows[0].nome, il: new Date().toISOString(), massimo };
@@ -237,6 +244,37 @@ export function registraRotteDronePubbliche(app) {
             res.status(500).end();
         }
     });
+}
+
+// Il file è cifrato in un flusso solo: per servire un tratto si decifra dall'inizio e si scarta il resto.
+// Basta per pezzi da un minuto, e permette al lettore di saltare avanti e indietro.
+function trattoChiesto(intestazione, dimensione) {
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(intestazione || '').trim());
+    if (!m || !Number.isFinite(dimensione) || dimensione <= 0) return undefined;
+    let da, a;
+    if (m[1] === '') { da = Math.max(0, dimensione - Number(m[2])); a = dimensione - 1; } else { da = Number(m[1]); a = m[2] === '' ? dimensione - 1 : Math.min(Number(m[2]), dimensione - 1); }
+    if (!(da <= a) || da >= dimensione) return null;
+    return { da, a };
+}
+function ritaglio(da, a) {
+    let posizione = 0;
+    return new Transform({
+        transform(pezzo, _, fatto) {
+            const inizio = posizione, fine = posizione + pezzo.length;
+            posizione = fine;
+            if (fine <= da || inizio > a) return fatto();
+            fatto(null, pezzo.subarray(Math.max(0, da - inizio), Math.min(pezzo.length, a - inizio + 1)));
+        }
+    });
+}
+// Rivedere un volo sono decine di richieste di pezzi: nel registro una voce per persona e drone ogni mezz'ora.
+const ultimaVista = new Map();
+function visteDiRecente(utente, chiave) {
+    const voce = `${utente}:${chiave}`, ora = Date.now();
+    const recente = ora - (ultimaVista.get(voce) || 0) < 30 * 60000;
+    if (!recente) ultimaVista.set(voce, ora);
+    if (ultimaVista.size > 10000) ultimaVista.clear();
+    return recente;
 }
 
 export function registraRotteDrone(app) {
@@ -404,7 +442,7 @@ export function registraRotteDrone(app) {
             let inCorso = new Map(), mediamtx = true;
             try { inCorso = await diretteInCorso(); } catch (e) { mediamtx = false; logger.warn(`[Drone] MediaMTX non risponde: ${e.message}`); }
             const dirette = rows.map(r => ({ ...conSquadraEPilota(r), onda: inCorso.get(r.impronta) })).filter(k => vedeDallApp(chi, k))
-                .map(k => ({ id: k.id, nome: k.nome, in_onda: !!k.onda, in_onda_da: k.onda?.da || null, ultima_diretta_il: k.ultima_diretta_il, squadra: k.squadra, pilota: k.pilota }));
+                .map(k => ({ id: k.id, nome: k.nome, in_onda: !!k.onda, in_onda_da: k.onda?.da || null, ultima_diretta_il: k.ultima_diretta_il, registrazioni: k.registrazioni, squadra: k.squadra, pilota: k.pilota }));
             res.json({ attivo: true, mediamtx, dirette });
         } catch (e) {
             logger.error('Errore GET /api/app/drone:', e);
@@ -423,7 +461,10 @@ export function registraRotteDrone(app) {
         try {
             const k = await chiavePerGuardare(req, res, id);
             if (!k) return;
-            const query = new URL(req.originalUrl, 'http://orion').search;
+            // Passano solo le domande di LL-HLS: MediaMTX legge dalla query anche credenziali e token.
+            const domanda = new URLSearchParams();
+            for (const [k, v] of new URL(req.originalUrl, 'http://orion').searchParams) if (/^_HLS_(msn|part|skip)$/.test(k) && /^[A-Za-z0-9]{1,12}$/.test(v)) domanda.append(k, v);
+            const query = domanda.size ? `?${domanda}` : '';
             const r = await fetch(`${impostazione().hls}/drone/${k.segreto}/${req.params.file}${query}`, { headers: { Authorization: basic() }, signal: ferma.signal });
             if (r.status === 404) return res.status(404).json({ message: `${k.nome} non sta trasmettendo.` });
             if (!r.ok || !r.body) return res.status(502).json({ message: `MediaMTX ha risposto ${r.status}.` });
@@ -454,13 +495,41 @@ export function registraRotteDrone(app) {
     app.patch('/api/drone/sessioni/:sessione', express.text({ type: 'application/trickle-ice-sdpfrag', limit: '16kb' }), inoltra('PATCH'));
     app.delete('/api/drone/sessioni/:sessione', inoltra('DELETE'));
 
+    // I pezzi del volo di un drone dell'emergenza in corso, anche a chiave tolta: dall'app con la regola di chi lo vede.
+    async function droneDaRivedere(req, res, emergenza, chiaveId) {
+        const riga = (await pool.query(`${CHIAVI_EMERGENZA} AND k.id = $2`, [emergenza, chiaveId])).rows[0];
+        if (!riga) { res.status(404).json({ message: 'Questo drone non c\'è in questa emergenza.' }); return false; }
+        if (dallApp(req) && !vedeDallApp(await chiVedeDallApp(req), conSquadraEPilota(riga))) {
+            res.status(403).json({ message: 'Questo drone lo vedono la sua squadra, la sala e i caposquadra.' });
+            return false;
+        }
+        return true;
+    }
+
+    app.get('/api/drone/dirette/:id/registrazioni', async (req, res) => {
+        if (!(await prontoPerLaSala(req, res))) return;
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id)) return res.status(400).json({ message: 'Drone non valido.' });
+        if (!activeEmergency) return res.status(404).json({ message: 'Non c\'è un\'emergenza aperta.' });
+        try {
+            if (!(await droneDaRivedere(req, res, activeEmergency.id, id))) return;
+            const { rows } = await pool.query(
+                `SELECT id, iniziata_il, finita_il, dimensione::float8 AS dimensione FROM registrazioni_drone
+                  WHERE chiave_id = $1 AND emergency_id = $2 ORDER BY iniziata_il`, [id, activeEmergency.id]);
+            res.json(rows);
+        } catch (e) {
+            logger.error('Errore GET /api/drone/dirette/:id/registrazioni:', e);
+            res.status(500).json({ message: 'Errore nel leggere le riprese.' });
+        }
+    });
+
     app.get('/api/drone/registrazioni', async (req, res) => {
         const emergenza = parseInt(req.query.emergenza, 10);
         if (!Number.isInteger(emergenza)) return res.status(400).json({ message: 'Indica l\'emergenza.' });
         if (esterno(req) || !puoVedereEmergenza(req, emergenza)) return res.status(403).json({ message: 'Non puoi vedere le riprese di questa emergenza.' });
         try {
             const { rows } = await pool.query(
-                `SELECT id, nome_drone, iniziata_il, finita_il, dimensione::float8 AS dimensione FROM registrazioni_drone WHERE emergency_id = $1 ORDER BY iniziata_il`, [emergenza]);
+                `SELECT id, chiave_id, nome_drone, iniziata_il, finita_il, dimensione::float8 AS dimensione FROM registrazioni_drone WHERE emergency_id = $1 ORDER BY chiave_id, iniziata_il`, [emergenza]);
             res.json(rows);
         } catch (e) {
             logger.error('Errore GET /api/drone/registrazioni:', e);
@@ -472,21 +541,35 @@ export function registraRotteDrone(app) {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id)) return res.status(400).json({ message: 'Ripresa non valida.' });
         try {
-            const r = (await pool.query('SELECT emergency_id, nome_drone, iniziata_il, file FROM registrazioni_drone WHERE id = $1', [id])).rows[0];
+            const r = (await pool.query('SELECT emergency_id, chiave_id, nome_drone, iniziata_il, file, dimensione::float8 AS dimensione FROM registrazioni_drone WHERE id = $1', [id])).rows[0];
             if (!r) return res.status(404).json({ message: 'Ripresa non trovata.' });
             if (esterno(req) || !puoVedereEmergenza(req, r.emergency_id)) return res.status(403).json({ message: 'Non puoi vedere le riprese di questa emergenza.' });
+            if (dallApp(req) && !(await droneDaRivedere(req, res, r.emergency_id, r.chiave_id))) return;
             const percorso = path.join(CARTELLA, r.file);
             if (!percorso.startsWith(CARTELLA + path.sep)) return res.status(400).json({ message: 'Ripresa non valida.' });
             // Troppo grande da decifrare tutto prima: un file alterato si interrompe a metà invece di non partire.
             const flusso = await apriFile(percorso);
             const nome = `drone-${String(r.nome_drone).replace(/[^A-Za-z0-9_-]+/g, '_')}-${new Date(r.iniziata_il).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.mp4`;
             res.set({
-                'Content-Type': 'video/mp4', 'X-Content-Type-Options': 'nosniff',
+                'Content-Type': 'video/mp4', 'X-Content-Type-Options': 'nosniff', 'Accept-Ranges': 'bytes',
                 'Content-Security-Policy': "default-src 'none'; sandbox",
                 'Content-Disposition': `${req.query.scarica ? 'attachment' : 'inline'}; filename="${nome}"`
             });
-            registraAudit(req, 'drone.ripresa_vista', { tipo: 'emergenza', id: r.emergency_id, dettagli: { registrazione: id, scaricata: !!req.query.scarica } });
-            await pipeline(flusso, res);
+            if (req.query.scarica || !visteDiRecente(req.user.id, r.chiave_id)) {
+                registraAudit(req, 'drone.ripresa_vista', { tipo: 'emergenza', id: r.emergency_id, dettagli: { registrazione: id, drone: r.nome_drone, scaricata: !!req.query.scarica } });
+            }
+            const tratto = trattoChiesto(req.get('range'), r.dimensione);
+            if (tratto === null) {
+                flusso.destroy();
+                return res.status(416).set('Content-Range', `bytes */${r.dimensione}`).end();
+            }
+            if (tratto) {
+                res.status(206).set({ 'Content-Range': `bytes ${tratto.da}-${tratto.a}/${r.dimensione}`, 'Content-Length': String(tratto.a - tratto.da + 1) });
+                await pipeline(flusso, ritaglio(tratto.da, tratto.a), res);
+            } else {
+                res.set('Content-Length', String(r.dimensione));
+                await pipeline(flusso, res);
+            }
         } catch (e) {
             if (e.code === 'ENOENT') return res.status(404).json({ message: 'Il file della ripresa non c\'è più.' });
             if (!res.headersSent) res.status(500).json({ message: 'La ripresa non si legge.' });

@@ -13,7 +13,9 @@ const userKeyGenerator = chiaveRichiesta;
 const ePosizione = (req) => req.method === 'POST' && `${req.baseUrl || ''}${req.path}` === '/api/location';
 // Una mappa a tutto schermo chiede decine di tasselli a ogni spostamento.
 const eTassello = (req) => req.method === 'GET' && /^\/api\/mappa\/cartografia\/\d+\/\d+\/\d+$/.test(`${req.baseUrl || ''}${req.path}`);
-const nonContare = (req) => ePosizione(req) || eTassello(req);
+// Il video del drone in HLS sono più richieste al secondo per chi guarda: passa dall'accesso e dal controllo di chi vede.
+const ePezzoDrone = (req) => req.method === 'GET' && /^\/api\/drone\/dirette\/\d+\/hls\/[A-Za-z0-9_.-]+$/.test(`${req.baseUrl || ''}${req.path}`);
+const nonContare = (req) => ePosizione(req) || eTassello(req) || ePezzoDrone(req);
 
 // Un tetto contro un client impazzito, non contro chi lavora: in emergenza il centro
 // operativo ricarica le segnalazioni a ogni evento.

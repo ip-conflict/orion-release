@@ -1728,6 +1728,57 @@
         "esterno": "negato",
         "amministratore": "404"
       }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/drone",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/sistema/drone/installa",
+      "corpo": {
+        "password": "x"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "409"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/drone/dirette/999999/registrazioni",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "404",
+        "volontario_squadra": "404",
+        "coc": "404",
+        "funzione": "404",
+        "coordinatore": "404",
+        "segreteria": "404",
+        "magazziniere": "404",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
     }
   ]
 }

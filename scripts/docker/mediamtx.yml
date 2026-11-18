@@ -38,12 +38,15 @@ webrtcIPsFromInterfaces: no
 webrtcAdditionalHosts: []
 
 pathDefaults:
+  # Chi ha la chiave non butta fuori il drone in onda per trasmettere al suo posto (di serie MediaMTX lo lascia fare).
+  overridePublisher: no
   # Le registrazioni le raccoglie ORION, che le cifra e le lega all'emergenza: qui non scadono da sole.
   record: yes
   recordPath: /registrazioni/%path/%Y-%m-%d_%H-%M-%S-%f
   recordFormat: fmp4
   recordPartDuration: 1s
-  recordSegmentDuration: 15m
+  # Pezzi da un minuto: ORION li raccoglie appena chiusi, e la sala rivede un volo quasi subito.
+  recordSegmentDuration: 1m
   recordDeleteAfter: 0s
 
 paths:
