@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = process.env.ORION_BASE || '/srv/orion';
 const ISTANZA = process.env.PROVA_ISTANZA || 'alfa';
@@ -61,7 +61,7 @@ async function operazioneFinita(token) {
 
 console.log(`\nContainer: istanza ${ISTANZA}`);
 
-const password = `Turno!${Date.now().toString().slice(-6)}Lampione1`;
+const password = PASSWORD_PROVA;
 const codice = fs.readFileSync(path.join(DIR, 'dati', 'PRIMO-ACCESSO.txt'), 'utf8').match(/[A-Z0-9]{4}(-[A-Z0-9]{4}){3}/)?.[0];
 let r = await chiama('/api/primo-accesso', { method: 'POST', body: { codice, nome: 'Prova', cognome: 'Container', password } });
 verifica('il primo amministratore si crea con il codice scritto nella cartella dei dati', r.stato === 201 && r.corpo?.username === 'containerp', r);

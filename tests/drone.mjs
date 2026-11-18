@@ -6,7 +6,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { avviaMediaMtxFinto } from './mediamtx-finto.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -53,7 +53,7 @@ try {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: 'Vale', cognome: `Drone${suffisso}`, role: 'volontario' } })).corpo;
     persone.push(n.id);
     const q = new URL(n.magicLink).searchParams;
-    const pw = `Faro!${suffisso}Lanterna9`;
+    const pw = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
     const vol = (await chiama('/login', { method: 'POST', body: { username: n.username, password: pw } })).corpo.token;
     await prendiVisione(BASE, vol);

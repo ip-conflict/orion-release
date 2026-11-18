@@ -4,7 +4,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/zone-squadre.mjs
 
 import 'dotenv/config';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { distanzaDalBordo, zoneAppenaEntrate } from '../src/zoneSquadre.js';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -65,7 +65,7 @@ const assegnazioni = [];
 try {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: 'Zona', cognome: `Prova${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Argine!${suffisso}Ponte7`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const volontario = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
     await prendiVisione(BASE, volontario);

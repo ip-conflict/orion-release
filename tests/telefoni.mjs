@@ -4,7 +4,7 @@
 
 import 'dotenv/config';
 import crypto from 'crypto';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const ADMIN = process.env.ORION_ADMIN_USER || 'admin';
@@ -39,7 +39,7 @@ console.log('\nTelefono come secondo fattore');
 const admin = await accediConFetch(BASE, ADMIN, process.env.ORION_ADMIN_PASSWORD);
 const tokenAdmin = admin.token;
 const suffisso = Date.now().toString().slice(-6);
-const password = `Telefono!${suffisso}Aa1`;
+const password = PASSWORD_PROVA;
 const creati = [];
 
 async function iscrivi(nome, role = 'volontario') {

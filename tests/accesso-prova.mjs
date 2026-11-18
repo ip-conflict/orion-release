@@ -10,6 +10,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+// Le regole del server rifiutano una password con dentro nome, cognome o nome utente, e leggono le cifre come
+// lettere (4 = a, 1 = i): fatte con il nome e cifre a caso, una volta su qualche centinaio non passavano.
+// Queste non somigliano a nessun nome delle prove; la seconda serve a chi cambia la password.
+export const PASSWORD_PROVA = 'Lampada-Ombrello!58';
+export const PASSWORD_PROVA_NUOVA = 'Ombrello-Lampada!85';
+
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const aspetta = (ms) => new Promise(r => setTimeout(r, ms));
 export const passoAttuale = () => Math.floor(Date.now() / 30000);

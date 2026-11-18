@@ -1,6 +1,7 @@
 // Magazzino con i clic: consegna con verbale, chi ha cosa, conferma dal volontario, rientro, etichette, corner case.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/magazzino.mjs (di solito da tests/clic-aree.mjs)
 import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+import { PASSWORD_PROVA } from '../accesso-prova.mjs';
 const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
@@ -12,7 +13,7 @@ await api(admin, '/api/branding/settings', { method: 'PUT', body: { magazzino_en
 const configPrima = (await api(admin, '/api/magazzino/config')).corpo;
 console.log('config:', (await api(admin, '/api/magazzino/config', { method: 'PUT', body: { ...configPrima, conferma_dpi: true } })).stato);
 const n = (await api(admin, '/api/users', { method: 'POST', body: { nome: 'Marta', cognome: `Magaz${suf}`, role: 'volontario' } })).corpo;
-const q = new URL(n.magicLink).searchParams; const pw = `Mag!${suf}Faro9`;
+const q = new URL(n.magicLink).searchParams; const pw = PASSWORD_PROVA;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 const elmetto = (await api(admin, '/api/magazzino/beni', { method: 'POST', body: { tipo: 'dpi', gestione: 'singolo', denominazione: `Elmetto ${suf}`, taglia: 'M' } })).corpo;
 const sacchi = (await api(admin, '/api/magazzino/beni', { method: 'POST', body: { tipo: 'attrezzatura', gestione: 'quantita', denominazione: `Sacchi ${suf}`, unita_misura: 'sacchi', quantita_totale: 50 } })).corpo;

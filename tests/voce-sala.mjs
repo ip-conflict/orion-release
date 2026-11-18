@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { RADICE_DATI } from '../src/percorsi.js';
 import { leggiOggOpus } from '../src/voceOgg.js';
 
@@ -48,7 +48,7 @@ const persone = {};
 for (const nome of ['Carla', 'Davide', 'Mario']) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Sala${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Turno!${suffisso}Lampione1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
     await prendiVisione(BASE, token);

@@ -2,7 +2,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/segnalazioni-nuove.mjs
 // Apre un'emergenza di prova (chiude quella aperta, se c'è) e la chiude per esportarla; crea ed elimina le persone.
 
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 let falliti = 0;
@@ -31,7 +31,7 @@ let aperta = null;
 async function persona(nome, role) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Nuove${suffisso}`, role } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Nuove!${suffisso}Lanterna1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
     await prendiVisione(BASE, token);

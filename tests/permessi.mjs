@@ -9,7 +9,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/permessi.mjs
 
 import 'dotenv/config';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 let falliti = 0;
@@ -33,7 +33,7 @@ async function nuovo(nome, ruoli = ['volontario']) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: `${nome}${suffisso}`, cognome: 'Permessi', ruoli } })).corpo;
     daTogliere.push(n.id);
     const q = new URL(n.magicLink).searchParams;
-    const password = `${nome}!${suffisso}Aa1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     return { id: n.id, username: n.username, password, token: ruoli.includes('esterno') ? null : (await accediConFetch(BASE, n.username, password)).token };
 }

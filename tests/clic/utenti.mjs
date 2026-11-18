@@ -1,6 +1,7 @@
 // Utenti e Sistema con i clic: iscrizione, primo accesso, ruoli, sospensione, eliminazione; backup, integrità, sigillo.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/utenti.mjs (di solito da tests/clic-aree.mjs)
 import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+import { PASSWORD_PROVA } from '../accesso-prova.mjs';
 const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
@@ -26,7 +27,7 @@ const n = await ctxN.newPage();
 await n.goto(BASE + new URL(link, BASE).pathname + new URL(link, BASE).search); await assesta(n, 2000);
 const campiPw = n.locator('input[type=password]');
 controlla('il link del primo accesso chiede la password nuova', await campiPw.count() >= 1, n.url());
-const pw = `Faro!${suf}Lanterna9`;
+const pw = PASSWORD_PROVA;
 for (const c of await campiPw.all()) await c.fill(pw);
 await n.locator('button[type=submit]').first().click(); await assesta(n, 2500);
 const accesso = await fetch(BASE + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: pw }) });

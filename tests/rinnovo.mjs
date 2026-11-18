@@ -6,7 +6,7 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
@@ -26,7 +26,7 @@ const chiama = async (percorso, { method = 'GET', body, token } = {}) => {
 console.log("\nToken per l'impronta");
 const admin = (await accediConFetch(BASE, process.env.ORION_ADMIN_USER || 'admin', process.env.ORION_ADMIN_PASSWORD)).token;
 const suffisso = Date.now().toString().slice(-6);
-const password = `Impronta!${suffisso}Faro`;
+const password = PASSWORD_PROVA;
 let persona = null;
 try {
     persona = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: 'Rino', cognome: `Rinnovo${suffisso}`, role: 'volontario' } })).corpo;

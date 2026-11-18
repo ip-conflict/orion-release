@@ -10,7 +10,7 @@
 
 import 'dotenv/config';
 import WebSocket from 'ws';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { creaAccount, creaGoogleServices, servi } from './google-finto.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -54,7 +54,7 @@ try {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: `Fcm${suffisso}`, cognome: 'Prova', role: 'volontario' } })).corpo;
     persona = n.id;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Fcm!${suffisso}Aa1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const sessione = (await accediConFetch(BASE, n.username, password)).token;
     const avvisi = (await chiama('/api/app/avvisi', { method: 'POST', token: sessione, body: { dispositivo: 'Telefono Firebase' } })).corpo?.avvisi;

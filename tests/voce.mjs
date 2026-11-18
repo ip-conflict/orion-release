@@ -11,7 +11,7 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import pg from 'pg';
 import WebSocket from 'ws';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { leggiOggOpus } from '../src/voceOgg.js';
 
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
@@ -99,7 +99,7 @@ try {
     for (const nome of ['Anna', 'Bruno', 'Carla']) {
         const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Voce${suffisso}`, role: 'volontario' } })).corpo;
         const q = new URL(n.magicLink).searchParams;
-        const password = `Turno!${suffisso}Lampione1`;
+        const password = PASSWORD_PROVA;
         await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
         const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
         await prendiVisione(BASE, token);

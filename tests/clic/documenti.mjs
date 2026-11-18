@@ -2,6 +2,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/documenti.mjs (di solito da tests/clic-aree.mjs)
 import fs from 'fs';
 import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+import { PASSWORD_PROVA } from '../accesso-prova.mjs';
 const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
@@ -14,7 +15,7 @@ fs.writeFileSync(`${cartella}/piano.pdf`, pdf('versione 1'));
 fs.writeFileSync(`${cartella}/piano-v2.pdf`, pdf('versione 2'));
 fs.writeFileSync(`${cartella}/script.html`, '<script>alert(1)</script>');
 const n = (await api(admin, '/api/users', { method: 'POST', body: { nome: 'Dora', cognome: `Doc${suf}`, role: 'volontario' } })).corpo;
-const q = new URL(n.magicLink).searchParams; const pw = `Doc!${suf}Faro9`;
+const q = new URL(n.magicLink).searchParams; const pw = PASSWORD_PROVA;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 
 await p.goto(BASE + '/documenti.html'); await assesta(p, 2500);

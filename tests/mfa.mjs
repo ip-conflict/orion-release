@@ -9,7 +9,7 @@
 import 'dotenv/config';
 import pg from 'pg';
 import crypto from 'crypto';
-import { accediConFetch, codiceNuovo, codiceTotp, dimenticaSegreto, passoAttuale, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, codiceNuovo, codiceTotp, dimenticaSegreto, passoAttuale, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const ADMIN = process.env.ORION_ADMIN_USER || 'admin';
@@ -38,7 +38,7 @@ const tokenAdmin = admin.token;
 const suffisso = Date.now().toString().slice(-6);
 const nuovo = await chiama('/api/users', { method: 'POST', token: tokenAdmin, body: { nome: `Mfa${suffisso}`, cognome: `Prova${suffisso}`, role: 'volontario' } });
 const parametri = new URL(nuovo.corpo.magicLink).searchParams;
-const password = `Verifica!${suffisso}Aa1`;
+const password = PASSWORD_PROVA;
 await chiama('/api/auth/reset-password', { method: 'POST', body: { token: parametri.get('token'), id: Number(parametri.get('id')), newPassword: password } });
 const username = nuovo.corpo.username;
 const id = nuovo.corpo.id;

@@ -1,6 +1,7 @@
 // Chiamata dei volontari con i clic: la sala chiama, il volontario risponde dal centro operativo, arriva, entra in squadra.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/chiamata.mjs (di solito da tests/clic-aree.mjs)
 import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+import { PASSWORD_PROVA } from '../accesso-prova.mjs';
 const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
@@ -13,7 +14,7 @@ if ((await api(admin, '/api/emergencies/status')).corpo?.active) await api(admin
 const persone = [];
 for (const nome of ['Ugo', 'Ada']) {
     const n = (await api(admin, '/api/users', { method: 'POST', body: { nome, cognome: `Chiam${suf}`, role: 'volontario' } })).corpo;
-    const q = new URL(n.magicLink).searchParams; const pw = `Ch!${suf}Faro9`;
+    const q = new URL(n.magicLink).searchParams; const pw = PASSWORD_PROVA;
     await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
     persone.push({ ...n, pw });
 }

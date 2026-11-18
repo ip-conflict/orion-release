@@ -6,7 +6,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import { chromium } from 'playwright';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 import { accediNelContesto, assesta, seguiRichieste } from './clic/aiuto.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -25,7 +25,7 @@ const persone = [], squadre = [];
 async function persona(nome) {
     const n = (await api('/api/users', { method: 'POST', body: { nome, cognome: `Clic${suf}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Clic!${suf}Faro9`;
+    const password = PASSWORD_PROVA;
     await api('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     persone.push(n.id);
     return { ...n, token: (await accediConFetch(BASE, n.username, password)).token };

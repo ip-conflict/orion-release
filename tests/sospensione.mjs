@@ -3,7 +3,7 @@
 // Crea ed elimina un volontario; aspetta il controllo periodico dei collegamenti, un minuto o ORION_CONTROLLO_COLLEGAMENTI_MS del server.
 
 import WebSocket from 'ws';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const attesa = ms => new Promise(r => setTimeout(r, ms));
@@ -42,7 +42,7 @@ console.log('\nSospensione');
 const accessoAdmin = await accediConFetch(BASE, process.env.ORION_ADMIN_USER || 'admin', process.env.ORION_ADMIN_PASSWORD);
 const admin = accessoAdmin.token;
 const suffisso = Date.now().toString().slice(-5);
-const password = `Sospeso!${suffisso}Lanterna1`;
+const password = PASSWORD_PROVA;
 let volontario = null;
 
 async function accediVolontario() {

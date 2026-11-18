@@ -9,7 +9,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/informativa.mjs
 
 import 'dotenv/config';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 
@@ -43,7 +43,7 @@ try {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: `Privacy${suffisso}`, cognome: 'Collaudo', role: 'volontario' } })).corpo;
     persona = n.id;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Privacy!${suffisso}Aa1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo?.token;
     verifica("l'accesso riesce: l'accettazione viene dopo", !!token);

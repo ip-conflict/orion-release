@@ -1,6 +1,7 @@
 // Calendario con i clic: attività con convocazione, risposta del volontario, presenze, assenza, corner case.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/calendario.mjs (di solito da tests/clic-aree.mjs)
 import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+import { PASSWORD_PROVA } from '../accesso-prova.mjs';
 const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
@@ -9,7 +10,7 @@ p.on('dialog', d => d.accept());
 const suf = Date.now().toString().slice(-5);
 await api(admin, '/api/branding/settings', { method: 'PUT', body: { attivita_enabled: 'true' } });
 const n = (await api(admin, '/api/users', { method: 'POST', body: { nome: 'Carla', cognome: `Cal${suf}`, role: 'volontario' } })).corpo;
-const q = new URL(n.magicLink).searchParams; const pw = `Cal!${suf}Faro9`;
+const q = new URL(n.magicLink).searchParams; const pw = PASSWORD_PROVA;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 const locale = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 

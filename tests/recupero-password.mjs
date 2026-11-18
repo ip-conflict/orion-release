@@ -4,7 +4,7 @@
 
 import 'dotenv/config';
 import pg from 'pg';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA, PASSWORD_PROVA_NUOVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const pool = new pg.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE });
@@ -42,18 +42,18 @@ try {
     await chiama('/api/auth/forgot-password', { method: 'POST', body: { identificativo: nuovo.username } });
     verifica("con l'attivazione ancora valida il link non cambia", (await linkDopo(nuovo.id, attivazione)) === attivazione);
     const q = new URL(nuovo.magicLink).searchParams;
-    const attivato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: `Recupero!${suffisso}Faro` } });
+    const attivato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: PASSWORD_PROVA } });
     verifica('e il link di attivazione funziona ancora', attivato.stato === 200, attivato.corpo);
 
-    const nessuno = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: 'a'.repeat(64), id: 99999999, newPassword: `Recupero!${suffisso}Faro` } });
-    const sbagliato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: 'b'.repeat(64), id: nuovo.id, newPassword: `Recupero!${suffisso}Faro` } });
+    const nessuno = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: 'a'.repeat(64), id: 99999999, newPassword: PASSWORD_PROVA } });
+    const sbagliato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: 'b'.repeat(64), id: nuovo.id, newPassword: PASSWORD_PROVA } });
     verifica('il ripristino dà lo stesso messaggio per un id che non esiste e per un link sbagliato',
         nessuno.stato === 400 && sbagliato.stato === 400 && nessuno.corpo?.message === sbagliato.corpo?.message, [nessuno.corpo?.message, sbagliato.corpo?.message]);
 
-    const sessione = (await chiama('/login', { method: 'POST', body: { username: nuovo.username, password: `Recupero!${suffisso}Faro` } })).corpo?.token;
+    const sessione = (await chiama('/login', { method: 'POST', body: { username: nuovo.username, password: PASSWORD_PROVA } })).corpo?.token;
     await prendiVisione(BASE, sessione);
     const cambia = (attuale) => chiama('/api/users/change-password', { method: 'POST', token: sessione,
-        body: { currentPassword: attuale, newPassword: `Cambiata!${suffisso}Lince`, confirmPassword: `Cambiata!${suffisso}Lince` } });
+        body: { currentPassword: attuale, newPassword: PASSWORD_PROVA_NUOVA, confirmPassword: PASSWORD_PROVA_NUOVA } });
     const esiti = [];
     for (let i = 0; i < 6; i++) esiti.push((await cambia(`Sbagliata!${i}Password`)).stato);
     verifica('dopo cinque password attuali sbagliate il cambio password si ferma come l\'accesso', esiti.slice(0, 4).every(s => s === 401) && esiti.at(-1) === 429, esiti);

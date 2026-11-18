@@ -3,7 +3,7 @@
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/voce-app-prepara.mjs > prova.json
 //   ORION_URL=... ORION_ADMIN_PASSWORD=... node tests/voce-app-prepara.mjs pulisci < prova.json
 import fs from 'fs';
-import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
+import { accediConFetch, prendiVisione, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const chiama = async (percorso, { method = 'GET', body, token } = {}) => {
@@ -31,7 +31,7 @@ const persone = [];
 for (const nome of ['Dario', 'Elena']) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `App${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Turno!${suffisso}Lampione1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     const token = (await chiama('/login', { method: 'POST', body: { username: n.username, password } })).corpo.token;
     await prendiVisione(BASE, token);

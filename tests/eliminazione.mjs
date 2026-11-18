@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +50,7 @@ await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { se
 async function volontario(nome, cf) {
     const n = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Elimina${suffisso}`, role: 'volontario' } })).corpo;
     const q = new URL(n.magicLink).searchParams;
-    const password = `Elimina!${suffisso}Aa1`;
+    const password = PASSWORD_PROVA;
     await chiama('/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: password } });
     await chiama(`/api/admin/users/${n.id}/anagrafica`, { method: 'PUT', token: admin, body: { codice_fiscale: cf, telefono: '3331234567' } });
     const foto = new FormData();

@@ -4,7 +4,7 @@
 // Cambia le impostazioni della posta e le rimette; crea ed elimina un volontario.
 
 import { avviaPostaFinta } from './posta-finta.mjs';
-import { accediConFetch } from './accesso-prova.mjs';
+import { accediConFetch, PASSWORD_PROVA, PASSWORD_PROVA_NUOVA } from './accesso-prova.mjs';
 
 const BASE = (process.env.ORION_URL || 'http://localhost:3000').replace(/\/$/, '');
 const PORTA = Number(process.env.ORION_POSTA_PORTA || 2527);
@@ -54,7 +54,7 @@ try {
     creato = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome: 'Paola', cognome: `Posta${suffisso}`, email: `paola.posta${suffisso}@prova.example`, role: 'volontario' } })).corpo;
     const attivazione = linkNelMessaggio(await nuovoMessaggio(visti));
     verifica("l'email di attivazione arriva con il link della persona", attivazione?.[2] === String(creato?.id), attivazione?.[0]);
-    const attivato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: attivazione?.[1], id: Number(attivazione?.[2]), newPassword: `Posta!${suffisso}Lanterna` } });
+    const attivato = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: attivazione?.[1], id: Number(attivazione?.[2]), newPassword: PASSWORD_PROVA } });
     verifica('e il link attiva l\'account', attivato.stato === 200, attivato.corpo);
 
     visti = posta.messaggi().length;
@@ -66,7 +66,7 @@ try {
     await chiama(`/api/admin/users/${creato.id}/reset-password`, { method: 'POST', token: admin, body: {} });
     const azzeramento = linkNelMessaggio(await nuovoMessaggio(visti));
     verifica("l'email dell'azzeramento chiesto dall'amministratore arriva", azzeramento?.[2] === String(creato.id), azzeramento?.[0]);
-    const nuovaPassword = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: azzeramento?.[1], id: Number(azzeramento?.[2]), newPassword: `Posta!${suffisso}Bussola` } });
+    const nuovaPassword = await chiama('/api/auth/reset-password', { method: 'POST', body: { token: azzeramento?.[1], id: Number(azzeramento?.[2]), newPassword: PASSWORD_PROVA_NUOVA } });
     verifica('e il suo link funziona', nuovaPassword.stato === 200, nuovaPassword.corpo);
 
     // Il server di posta finto impiega un secondo a confermare: il tempo di risposta non deve dire chi esiste.
