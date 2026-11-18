@@ -5,6 +5,7 @@ import { registraAudit } from './audit.js';
 import { authenticateToken, checkAdminRole, chiudiSessioni, haRuolo, nomeUtente, nonEsterni, puoVedereEmergenza, ruoliDi } from './autenticazione.js';
 import { haPermesso, richiedePermesso } from './permessi.js';
 import { eseguiBackupDatabase } from './backup.js';
+import { copiaSuDrive } from './drive.js';
 import { protectedDocsDir, uploadDocumentMulter, verifyDocumentUpload } from './caricamenti.js';
 import { ACTIVE_REPORT_STATUSES_BACKEND } from './costanti.js';
 import { pool } from './db.js';
@@ -287,7 +288,10 @@ function completaChiusura(chiusa, req, interrotta) {
             return eseguiBackupDatabase(`${simulazione ? 'simulazione' : 'emergenza'}-${chiusa.code}`.replace(/[^A-Za-z0-9_-]/g, '_'));
         })
         .then(percorso => {
-            if (percorso) registraAudit(req, 'backup.eseguito', { tipo: 'emergenza', id: chiusa.id, dettagli: { motivo: 'chiusura emergenza', file: path.basename(percorso) } });
+            if (!percorso) return;
+            registraAudit(req, 'backup.eseguito', { tipo: 'emergenza', id: chiusa.id, dettagli: { motivo: 'chiusura emergenza', file: path.basename(percorso) } });
+            // Su Drive si tengono per sempre solo quelli delle emergenze vere; una simulazione vale come copia del giorno.
+            copiaSuDrive(percorso, simulazione ? 'giornaliero' : 'emergenza');
         })
         .catch(e => logger.error('[Chiusura] Resoconto o backup non riusciti:', e));
 }

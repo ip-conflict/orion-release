@@ -17,7 +17,7 @@ dotenv.config({ quiet: true });
 
 const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CARTELLA_PROVE = path.join(RADICE, 'tests');
-const NON_SUITE = new Set(['accesso-prova', 'batteria', 'bollettino-finto', 'container', 'google-finto', 'mediamtx-finto', 'posta-finta', 'voce-app-prepara']);
+const NON_SUITE = new Set(['accesso-prova', 'batteria', 'bollettino-finto', 'container', 'drive-finto', 'google-finto', 'mediamtx-finto', 'posta-finta', 'voce-app-prepara']);
 const CON_EMERGENZA = new Set(['voce', 'voce-sala', 'voce-trascrizione', 'websocket-app']);
 const TEMPO_MASSIMO_MS = 7 * 60 * 1000;
 // Insieme fanno due terzi del tempo e aspettano davvero (pagine nel browser, codici e sessioni che scadono):
@@ -62,6 +62,10 @@ const ambiente = {
     ORION_ALLERTA_URL: process.env.ORION_ALLERTA_URL || 'http://127.0.0.1:3099/latest_all.zip',
     ORION_GOOGLE_TOKEN_URL: process.env.ORION_GOOGLE_TOKEN_URL || 'http://127.0.0.1:3098/token',
     ORION_FCM_URL: process.env.ORION_FCM_URL || 'http://127.0.0.1:3098',
+    ORION_DRIVE_AUTH_URL: 'http://127.0.0.1:3095/o/oauth2/v2/auth',
+    ORION_DRIVE_TOKEN_URL: 'http://127.0.0.1:3095/token',
+    ORION_DRIVE_REVOKE_URL: 'http://127.0.0.1:3095/revoke',
+    ORION_DRIVE_URL: 'http://127.0.0.1:3095',
     ORION_WHISPER: process.env.ORION_WHISPER || path.join(CARTELLA_PROVE, 'whisper-finto.sh'),
     // MediaMTX finto, avviato da drone.mjs: segreto, indirizzi e cartella delle registrazioni sono le stesse due parti.
     ORION_DRONE_SEGRETO: process.env.ORION_DRONE_SEGRETO || 'segreto-di-prova-del-drone',
@@ -77,6 +81,11 @@ const ambiente = {
     ORION_AGGIORNAMENTI_RETE_LOCALE: 'true',
     // La prova dell'integrità riscrive lo storico e lo chiede esplicitamente: qui il database è di prova per forza.
     ORION_TEST_DISTRUTTIVO: '1'
+};
+// I controlli orari che queste prove guardano girano ogni pochi secondi solo per loro: nelle altre manderebbero avvisi veri.
+const AMBIENTE_DELLA_PROVA = {
+    'avvisi-backup': { ORION_CONTROLLO_BACKUP_MS: '2000', ORION_SPAZIO_MINIMO_MB: '999999999', ORION_AGENTE_DIR: path.join(USCITA, 'agente-avvisi') },
+    drive: { ORION_DRIVE_CONTROLLO_MS: '3000' }
 };
 
 async function salute() {
@@ -103,10 +112,10 @@ async function fermaServer() {
 }
 
 // I limiti di frequenza stanno in memoria: un server nuovo per ogni prova li azzera.
-async function avviaServer() {
+async function avviaServer(prova = null) {
     await fermaServer();
     const log = fs.openSync(LOG_SERVER, 'a');
-    server = spawn(process.execPath, ['src/server.js'], { cwd: RADICE, env: ambiente, stdio: ['ignore', log, log] });
+    server = spawn(process.execPath, ['src/server.js'], { cwd: RADICE, env: { ...ambiente, ...AMBIENTE_DELLA_PROVA[prova] }, stdio: ['ignore', log, log] });
     fs.closeSync(log);
     for (let i = 0; i < 120; i++) {
         if (await salute()) return;
@@ -209,7 +218,7 @@ function lanciaSuite(nome) {
     return new Promise((risolvi) => {
         const file = path.join(USCITA, `${nome}.log`);
         const uscita = fs.createWriteStream(file);
-        const figlio = spawn(process.execPath, [path.join(CARTELLA_PROVE, `${nome}.mjs`)], { cwd: RADICE, env: ambiente });
+        const figlio = spawn(process.execPath, [path.join(CARTELLA_PROVE, `${nome}.mjs`)], { cwd: RADICE, env: { ...ambiente, ...AMBIENTE_DELLA_PROVA[nome] } });
         let testo = '';
         const raccogli = (d) => { testo += d; uscita.write(d); };
         figlio.stdout.on('data', raccogli);
@@ -247,7 +256,7 @@ try {
         let nota = '';
         let risultato;
         try {
-            await avviaServer();
+            await avviaServer(nome);
             nota = await sistemaEmergenza(CON_EMERGENZA.has(nome));
             risultato = await lanciaSuite(nome);
         } catch (e) {

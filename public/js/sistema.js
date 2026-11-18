@@ -606,6 +606,8 @@ document.addEventListener('DOMContentLoaded', () => {
         caricaIntegrita();
         caricaCifratura();
         caricaFirebase();
+        caricaDrive();
+        caricaAvvisi();
         caricaVoce();
         caricaMemoria();
     })();
@@ -799,6 +801,114 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(caricaFirebase, 3000);
         } catch (e) {
             esitoFirebase(e.message, 'ko');
+        }
+    });
+
+    async function caricaAvvisi() {
+        try {
+            const { problemi } = await fetchApi('/api/sistema/avvisi');
+            $('elenco-avvisi').replaceChildren(...problemi.map(p => {
+                const riga = document.createElement('div');
+                riga.className = 'integrita-problema';
+                const titolo = document.createElement('strong');
+                titolo.textContent = `${p.titolo}. `;
+                riga.append(titolo, p.testo);
+                return riga;
+            }));
+            $('pannello-avvisi').hidden = problemi.length === 0;
+        } catch { /* la pagina funziona lo stesso */ }
+    }
+
+    function esitoDrive(testo, tipo = '') {
+        $('esito-drive').textContent = testo;
+        $('esito-drive').className = `nota${tipo ? ` ${tipo}` : ''}`;
+    }
+
+    const TIPI_COPIA = { emergenza: 'emergenza', giornaliero: 'del giorno', settimanale: 'archivio dei file' };
+    let sondaDrive = null;
+    async function caricaDrive() {
+        const box = $('stato-drive');
+        try {
+            const d = await fetchApi('/api/sistema/drive');
+            $('ritorno-drive').textContent = d.ritorno;
+            if (d.client_id && !$('drive-client-id').value) $('drive-client-id').value = d.client_id;
+            $('drive-client-segreto').placeholder = d.segreto_impostato ? 'salvato: scrivilo solo per cambiarlo' : '';
+            $('drive-giornalieri').value = d.giornalieri;
+            $('drive-settimanali').value = d.settimanali;
+            box.replaceChildren(voceStato('Google Drive', d.collegato ? `collegato${d.account ? ` a ${d.account}` : ''}` : 'non collegato'));
+            if (d.collegato) {
+                box.append(voceStato('Ultima copia', d.ultima_copia_il ? `${quandoLeggibile(d.ultima_copia_il)} (${daQuanto(d.ultima_copia_il)})` : 'nessuna ancora'));
+                if (d.usato_orion !== null) box.append(voceStato('Spazio usato da ORION', dimensioneLeggibile(d.usato_orion)));
+                if (d.spazio?.limite) box.append(voceStato('Spazio del Drive', `${dimensioneLeggibile(d.spazio.usato)} usati su ${dimensioneLeggibile(d.spazio.limite)}`, d.spazio.usato > d.spazio.limite * 0.9 ? 'attenzione' : null));
+                if (d.in_corso) box.append(voceStato('In corso', `copia ${TIPI_COPIA[d.in_corso.tipo] || d.in_corso.tipo}`));
+                if (d.in_attesa) box.append(voceStato('Da ricopiare', `${d.in_attesa} backup di emergenze: si riprova ogni ora`, 'attenzione'));
+                if (d.esito === 'errore') box.append(voceStato('Ultimo errore', `${quandoLeggibile(d.errore_il)}: ${d.errore}`, 'allarme'));
+                if (d.copiati.length) {
+                    box.append(voceStato('Ultime copie', d.copiati.slice(0, 3).map(c => `${quandoLeggibile(c.il)} ${TIPI_COPIA[c.tipo] || c.tipo}`).join(' · ')));
+                }
+            }
+            $('btn-collega-drive').textContent = d.collegato ? 'Ricollega' : 'Collega';
+            $('btn-copia-drive').hidden = !d.collegato;
+            $('btn-scollega-drive').hidden = !d.collegato;
+            $('guida-drive').open = !d.collegato && !d.client_id;
+            clearTimeout(sondaDrive);
+            if (d.in_corso) sondaDrive = setTimeout(caricaDrive, 5000);
+        } catch (e) {
+            box.replaceChildren(voceStato('Google Drive', e.message, 'attenzione'));
+        }
+    }
+
+    const ritornoDaGoogle = new URLSearchParams(location.search);
+    if (ritornoDaGoogle.has('drive')) {
+        if (ritornoDaGoogle.get('drive') === 'collegato') esitoDrive('Google Drive collegato: la prima copia parte entro un\'ora, o subito con "Copia adesso".', 'ok');
+        else esitoDrive(ritornoDaGoogle.get('motivo') || 'Il collegamento non è riuscito.', 'ko');
+        history.replaceState(null, '', `${location.pathname}#pannello-drive`);
+    }
+
+    async function salvaDrive() {
+        const corpo = { giornalieri: $('drive-giornalieri').value, settimanali: $('drive-settimanali').value };
+        if ($('drive-client-id').value.trim()) corpo.client_id = $('drive-client-id').value.trim();
+        if ($('drive-client-segreto').value) corpo.client_secret = $('drive-client-segreto').value;
+        const r = await fetchApi('/api/sistema/drive/client', { method: 'PUT', body: JSON.stringify(corpo) });
+        $('drive-client-segreto').value = '';
+        return r;
+    }
+
+    $('btn-salva-drive').addEventListener('click', async () => {
+        try {
+            esitoDrive((await salvaDrive()).message, 'ok');
+            await caricaDrive();
+        } catch (e) {
+            esitoDrive(e.message, 'ko');
+        }
+    });
+
+    $('btn-collega-drive').addEventListener('click', async () => {
+        try {
+            await salvaDrive();
+            const { url } = await fetchApi('/api/sistema/drive/collega', { method: 'POST' });
+            location.href = url;
+        } catch (e) {
+            esitoDrive(e.message, 'ko');
+        }
+    });
+
+    $('btn-copia-drive').addEventListener('click', async () => {
+        try {
+            esitoDrive((await fetchApi('/api/sistema/drive/copia', { method: 'POST' })).message, 'ok');
+            setTimeout(caricaDrive, 1500);
+        } catch (e) {
+            esitoDrive(e.message, 'ko');
+        }
+    });
+
+    $('btn-scollega-drive').addEventListener('click', async () => {
+        if (!confirm('Scollegare Google Drive? Le copie già fatte restano su Drive; ORION smette di farne di nuove.')) return;
+        try {
+            esitoDrive((await fetchApi('/api/sistema/drive', { method: 'DELETE' })).message, 'ok');
+            await caricaDrive();
+        } catch (e) {
+            esitoDrive(e.message, 'ko');
         }
     });
 

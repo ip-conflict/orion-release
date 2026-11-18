@@ -57,7 +57,9 @@
     "test:clic-sala": "node tests/clic-sala.mjs",
     "test:clic-aree": "node tests/clic-aree.mjs",
     "test:qualifiche": "node tests/qualifiche.mjs",
-    "test:drone": "node tests/drone.mjs"
+    "test:drone": "node tests/drone.mjs",
+    "test:drive": "node tests/drive.mjs",
+    "test:avvisi-backup": "node tests/avvisi-backup.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.3.1",

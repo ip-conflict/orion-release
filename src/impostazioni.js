@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CHIAVI_FIREBASE } from './firebase.js';
+import { CHIAVI_DRIVE } from './drive.js';
 import { ModelloNonValido, validaModelloTesserino } from './modelloTesserino.js';
 import { DRONE_MAX_DIRETTE_LIMITE } from './drone.js';
 import { controlla as controllaAllerta, controllaImpostazioniAllerta } from './allerta.js';
@@ -185,7 +186,7 @@ export function registraRotteImpostazioni(app) {
             // La password della posta non torna al browser.
             settings.smtp_pass_impostata = !!settings.smtp_pass;
             delete settings.smtp_pass;
-            for (const k of CHIAVI_FIREBASE) delete settings[k];
+            for (const k of [...CHIAVI_FIREBASE, ...CHIAVI_DRIVE, 'avvisi_sistema']) delete settings[k];
             res.status(200).json(settings);
         } catch (error) {
             logger.error("Errore durante il recupero delle impostazioni complete di branding:", error);
@@ -195,7 +196,7 @@ export function registraRotteImpostazioni(app) {
 
     // Lo stato degli aggiornamenti porta l'indirizzo del pacchetto: lo scrive solo la pagina Sistema.
     const CHIAVI_INTERNE = new Set(['aggiornamenti_config', 'aggiornamenti_stato', 'cifratura_impronta', 'cifratura_recupero_salvata',
-        'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il', ...CHIAVI_FIREBASE]);
+        'smtp_pass_impostata', 'privacy_versione', 'privacy_pubblicata_il', 'avvisi_sistema', ...CHIAVI_FIREBASE, ...CHIAVI_DRIVE]);
 
     const LOGO_DI_SERIE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'logo.png');
     const impronta = async (file) => crypto.createHash('sha256').update(await fs.promises.readFile(file)).digest('hex');

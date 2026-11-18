@@ -43,6 +43,7 @@ import { controllaSegnalazioniInRitardo, registraRotteAvvisiSala } from './avvis
 import { controllaDirette, raccogliRegistrazioni, registraRotteDrone, registraRotteDronePubbliche } from './drone.js';
 import { registraRotteAvvisi, registraRotteAvvisiTelefono } from './avvisi.js';
 import { registraRotteFirebase, registraRotteFirebaseTelefono } from './firebase.js';
+import { controlloDrive, registraRitornoDrive, registraRotteDrive } from './drive.js';
 import { registraRotteGestionePermessi } from './gestionePermessi.js';
 import { richiedePermesso } from './permessi.js';
 import { registraRotteFunzioni } from './funzioni.js';
@@ -216,6 +217,7 @@ registraRotteDronePubbliche(app);
 registraRottePrimoAccesso(app);
 registraRotteInformativaPubblica(app);
 registraRotteTelefoniPubbliche(app, { notifiche, cartellaApk: CARTELLA_APK });
+registraRitornoDrive(app, { registraAudit });
 
 // Il limite per persona viene dopo: una sala dietro lo stesso indirizzo non deve
 // dividersi un limite solo.
@@ -323,6 +325,7 @@ const manutenzione = registraRotteManutenzione(app, {
     impostaManutenzione,
     caricaArchivio: uploadArchivioBackup
 });
+registraRotteDrive(app, { soloAdmin: checkAdminRole, registraAudit, fermo: () => !!manutenzioneInCorso });
 
 const pagina = (cartella, nome) => (req, res) => res.sendFile(path.join(cartella, nome));
 const nonEsternoPagina = (req, res, next) => (ruoliDi(req.user).includes('esterno')
@@ -401,6 +404,9 @@ app.use((err, req, res, next) => {
         avviaAllerta();
         manutenzione.controlloAutomatico();
         setInterval(manutenzione.controlloAutomatico, 3600000);
+        setInterval(manutenzione.controlloBackup, parseInt(process.env.ORION_CONTROLLO_BACKUP_MS, 10) || 3600000);
+        setInterval(() => controlloDrive({ fermo: () => !!manutenzioneInCorso }).catch(e => logger.error('[Drive] Controllo non riuscito:', e)),
+            parseInt(process.env.ORION_DRIVE_CONTROLLO_MS, 10) || 3600000);
         server.listen(port, () => {
             logger.info(`Server in esecuzione su porta ${port}`);
             logger.info(`Accesso web app: http://localhost:${port} o https://${domainName}`);

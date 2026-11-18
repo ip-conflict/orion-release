@@ -1766,6 +1766,89 @@
     },
     {
       "metodo": "GET",
+      "percorso": "/api/sistema/avvisi",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/sistema/drive",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PUT",
+      "percorso": "/api/sistema/drive/client",
+      "corpo": {
+        "client_id": "x"
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "400"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/sistema/drive/collega",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "409"
+      }
+    },
+    {
+      "metodo": "POST",
+      "percorso": "/api/sistema/drive/copia",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "negato",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "409"
+      }
+    },
+    {
+      "metodo": "GET",
       "percorso": "/api/drone/dirette/999999/registrazioni",
       "attese": {
         "anonimo": "negato",

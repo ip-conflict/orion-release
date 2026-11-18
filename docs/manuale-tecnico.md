@@ -657,6 +657,97 @@ Sistema con "Carica un backup da un file"; fuori da ORION, dump e archivi si
 decifrano con `scripts/decifra-backup.mjs` e la chiave di recupero stampata,
 che per questo va tenuta lontana dai dischi.
 
+### Gli avvisi quando i backup non vanno
+
+Ogni ora `controlloBackup` in `src/manutenzione.js` guarda cinque cose e, per
+ognuna che non va, avvisa gli amministratori attivi con una notifica
+nell'app (tipo `backup_problema`, categoria personale) e una email:
+
+| Controllo | Quando avvisa |
+|---|---|
+| Ultimo backup del database, il più recente fra `backup/auto` e `backup/notte` | Più vecchio di 48 ore, o nessuno |
+| Disco esterno, dove l'agente l'ha preparato (`agente/stato/disco.json`) | Non collegato all'ultimo giro, copia non riuscita, o ultima copia più vecchia di 7 giorni |
+| Spazio libero nella cartella dei dati (`fs.statfs`) | Meno del 10% o meno di 2 GB (`ORION_SPAZIO_MINIMO_MB`) |
+| Chiave di recupero (`cifratura_recupero_salvata`) | Non conservata 7 giorni dopo la creazione della chiave dei dati |
+| Copia su Google Drive, se collegato | Ultima copia non riuscita, accesso scaduto o revocato, spazio di Drive finito |
+
+Per ogni problema parte un avviso al giorno finché resta. Lo stato sta
+nell'impostazione interna `avvisi_sistema` (`{ tipo: { dal, avvisato_il } }`),
+che non si scrive e non si legge dalle impostazioni generali; quando un
+problema sparisce si cancella, così se torna si riavvisa. La pagina Sistema
+mostra gli stessi problemi in cima (`GET /api/sistema/avvisi`, solo
+amministratori). L'intervallo del controllo si cambia con
+`ORION_CONTROLLO_BACKUP_MS`, che serve solo alle prove.
+
+### La copia su Google Drive
+
+Facoltativa, in `src/drive.js`. Le credenziali che ORION ha già non servono:
+la password per le app della posta non vale per Drive, e l'account di
+servizio di Firebase non ha spazio nel Drive di un account gratuito. Serve un
+client OAuth di tipo "Applicazione web" nel progetto Google Cloud
+dell'associazione, con l'API di Drive attiva e l'indirizzo di ritorno
+`https://<dominio>/api/sistema/drive/ritorno`. ORION chiede solo
+`https://www.googleapis.com/auth/drive.file`, che lascia vedere e cambiare i
+soli file creati da ORION; Google lo considera un permesso non sensibile. La
+schermata di consenso va pubblicata: in prova Google fa scadere il token di
+rinnovo dopo sette giorni.
+
+"Collega" (`POST /api/sistema/drive/collega`) prepara il consenso con
+`access_type=offline`, `prompt=consent`, PKCE (S256) e uno `state` casuale,
+valido dieci minuti e a uso singolo, legato all'amministratore che l'ha
+chiesto. Google torna su `GET /api/sistema/drive/ritorno`, che è pubblica: il
+cookie della sessione è `SameSite=Strict` e su un ritorno da un'altra origine
+il browser non lo manda, quindi chi ha chiesto il collegamento si riconosce
+dallo `state`, e un ritorno senza uno `state` valido non collega niente.
+Segreto del client e token di rinnovo stanno in `branding_settings`
+(`drive_config`, con lo stato delle copie in `drive_stato`) cifrati con
+`cifraTesto`; le due chiavi sono interne, non tornano mai al browser e non si
+scrivono dalle impostazioni generali. "Scollega" revoca il token presso Google
+e lo dimentica; cambiando l'ID del client il token vecchio si dimentica da
+solo.
+
+Le copie partono quando nascono i backup. Alla chiusura di un'emergenza,
+appena `eseguiBackupDatabase` ha scritto il backup con il resoconto, quel file
+va su Drive come copia d'emergenza, che non si cancella mai; quello di una
+simulazione vale come copia del giorno. Il controllo orario (`controlloDrive`,
+intervallo `ORION_DRIVE_CONTROLLO_MS`) ritenta le copie d'emergenza rimaste
+indietro, copia il backup più recente di `backup/notte` o `backup/auto` se
+dall'ultima copia del giorno sono passate venti ore e il backup è più nuovo, e
+una volta alla settimana carica un archivio di `uploads`, `protected_uploads`
+(senza le riprese del drone) e `loghi`, fatto con `tar` e cifrato mentre si
+carica, senza file temporanei. Su Drive va solo materiale cifrato: un backup
+in chiaro non si copia, e senza la chiave dei dati la copia aspetta. Le copie
+passano da una coda sola, e non partono durante una manutenzione.
+
+Il caricamento è quello a riprese di Drive (`uploadType=resumable`), a pezzi
+di 8 MB: se la connessione cade o Google risponde 5xx, si chiede a Google fin
+dove è arrivato e si riparte da lì, fino a cinque volte con attese crescenti.
+L'archivio dei file, di cui la grandezza non si sa prima, si manda con il
+totale sconosciuto fino all'ultimo pezzo. I file stanno nella cartella
+"ORION <nome dell'associazione>", che si ricrea se qualcuno la cancella, e
+portano in `appProperties` il tipo (`giornaliero`, `settimanale`, `emergenza`)
+e l'istanza. Dopo ogni copia si tengono le ultime 14 giornaliere e gli ultimi
+8 archivi settimanali (modificabili dalla pagina), contando e cancellando solo
+i file con quelle proprietà: i file messi a mano nella cartella e le copie
+d'emergenza restano.
+
+| Rotta | Chi | Cosa fa |
+|---|---|---|
+| `GET /api/sistema/drive` | amministratore | Stato: client, account, ultime copie, ultimo errore, spazio, indirizzo di ritorno |
+| `PUT /api/sistema/drive/client` | amministratore | `client_id`, `client_secret`, `giornalieri`, `settimanali` |
+| `POST /api/sistema/drive/collega` | amministratore | L'indirizzo del consenso di Google |
+| `GET /api/sistema/drive/ritorno` | chiunque, con lo `state` giusto | Scambia il codice con il token di rinnovo e torna alla pagina Sistema |
+| `POST /api/sistema/drive/copia` | amministratore | Copia subito l'ultimo backup |
+| `DELETE /api/sistema/drive` | amministratore | Revoca e dimentica il collegamento |
+
+Gli indirizzi di Google si cambiano solo per le prove: `ORION_DRIVE_AUTH_URL`,
+`ORION_DRIVE_TOKEN_URL`, `ORION_DRIVE_REVOKE_URL` e `ORION_DRIVE_URL`, che
+`tests/drive.mjs` punta a un Google finto (`tests/drive-finto.mjs`) con
+consenso, PKCE, rinnovo, revoca, caricamento a riprese con la connessione che
+cade a metà e spazio finito. Il ripristino da Drive passa dal browser: si
+scarica il file dalla cartella su Drive e lo si carica nella pagina Sistema;
+su un server nuovo serve prima la chiave di recupero.
+
 ### Il ripristino
 
 Il ripristino si fa dalla pagina Sistema ed è una transazione sola: se
@@ -2400,11 +2491,12 @@ invia. Il microfono dell'auricolare Bluetooth passa da `setCommunicationDevice`
 presentano come tastiera si imparano dalle impostazioni di Orion Voice: l'app
 tiene il codice del tasto e, se viene da un dispositivo esterno, anche il suo
 descrittore, così lo stesso tasto premuto sul telefono non fa parlare; il
-volume si accetta solo da un dispositivo esterno. Con l'app davanti li prende
-`onKeyDown` e `onKeyUp` delle attività; a telefono bloccato o con l'app chiusa
-serve `ServizioTastiVoce`, un servizio di accessibilità facoltativo che chiede
-solo i tasti (`flagRequestFilterKeyEvents`, niente contenuto delle finestre)
-e lascia passare tutti quelli che non sono il pulsante.
+volume si accetta solo da un dispositivo esterno. Li prendono `onKeyDown` e
+`onKeyUp` delle attività, quindi solo con l'app o la schermata PARLA davanti.
+Prenderli a telefono bloccato o con l'app chiusa vorrebbe un servizio di
+accessibilità, e Play Protect blocca l'installazione dal browser delle app che
+ne dichiarano uno ("può chiedere accesso a dati sensibili"): per questo l'app
+non lo ha. I tasti multimediali arrivano comunque dalla `MediaSession`.
 
 L'interfaccia è in `ui/voce`: `BarraVoce` in fondo a tutte le schermate,
 `SchermataVoce` con la cronologia, `TastoParla` con i gesti (tenere premuto,

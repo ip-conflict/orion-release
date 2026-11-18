@@ -237,11 +237,11 @@ questo compare **Riprendi qui**.
 prima al telefono dalle impostazioni Bluetooth di Android. Poi, nelle
 impostazioni di Orion Voice, si tocca **Impara** e si preme il pulsante: da lì
 in avanti, tenendolo premuto si parla come con PARLA. Il volume e i tasti del
-telefono non si possono scegliere, perché si premono per sbaglio in tasca. Con
-l'app aperta funziona subito; per usarlo anche a telefono bloccato o con ORION
-chiusa si attiva "Orion Voice, pulsante PTT" fra i servizi di accessibilità di
-Android (il tasto per arrivarci è nelle stesse impostazioni): legge soltanto i
-tasti e lascia passare tutti quelli che non sono il pulsante.
+telefono non si possono scegliere, perché si premono per sbaglio in tasca. Il
+pulsante funziona con ORION aperta o con la schermata PARLA sopra il blocco;
+con il telefono bloccato e ORION chiusa no. Se il pulsante manda il tasto
+play/pausa, come quello degli auricolari, conviene accendere invece "Tasto
+dell'auricolare": quello funziona anche a telefono bloccato.
 
 ### Il drone
 

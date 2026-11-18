@@ -362,8 +362,9 @@
 .campi-firebase { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
 .campi-firebase .campo span { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
 .campi-firebase .campo input { width: 100%; box-sizing: border-box; font-size: 0.85rem; color: var(--text-color); }
-#esito-firebase.ok { color: var(--success-text, #15803d); font-weight: 600; }
-#esito-firebase.ko { color: var(--danger-text); font-weight: 600; }
+#esito-firebase.ok, #esito-drive.ok { color: var(--success-text, #15803d); font-weight: 600; }
+#esito-firebase.ko, #esito-drive.ko { color: var(--danger-text); font-weight: 600; }
+#ritorno-drive { word-break: break-all; user-select: all; }
 
 #versioni-precedenti { margin-top: 18px; }
 .elenco-versioni { list-style: none; margin: 10px 0 0; padding: 0; }

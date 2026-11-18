@@ -32,6 +32,7 @@ const CATEGORIA_DEL_TIPO = {
     segreteria_riepilogo: 'segreteria',
     magazzino_riepilogo: 'magazzino',
     aggiornamento_disponibile: 'personale',
+    backup_problema: 'personale',
     prova: 'personale'
 };
 

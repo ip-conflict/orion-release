@@ -11,6 +11,7 @@ import { leggiNomeBackup, nomeDaScaricare } from './nomiBackup.js';
 import { ripristinaDatabase as ripristinaDatabaseCon, verificaArchivio } from './ripristinoDb.js';
 import { MODELLI } from './voceTrascrizione.js';
 import { droneConfigurato } from './drone.js';
+import { problemaDrive } from './drive.js';
 
 // Qualunque altro carattere è un tentativo di uscire dalla cartella.
 const NOME_BACKUP_VALIDO = /^[A-Za-z0-9._-]+\.sql\.gz$/;
@@ -692,14 +693,19 @@ export function registraRotteManutenzione(app, ctx) {
     async function avvisaAmministratori(nuova) {
         const stato = await leggiImpostazione('aggiornamenti_stato', {});
         if (stato.avvisata === nuova) return;
+        const quanti = await scriviAgliAmministratori({
+            tipo: 'aggiornamento_disponibile', chiave: `aggiornamento:${nuova}`, titolo: `ORION ${nuova} disponibile`,
+            testo: `Installata la ${versioneInstallata}. Si aggiorna dalla pagina Sistema, a emergenza chiusa.`
+        });
+        await scriviImpostazione('aggiornamenti_stato', { ...stato, avvisata: nuova });
+        logger.info(`[Manutenzione] Avvisati ${quanti} amministratori della versione ${nuova}.`);
+    }
+
+    async function scriviAgliAmministratori({ tipo, chiave, titolo, testo }) {
         const { rows } = await pool.query(
             `SELECT DISTINCT u.id, u.email FROM users u JOIN utenti_ruoli ur ON ur.user_id = u.id
              WHERE COALESCE(u.is_active, true) = true AND ur.ruolo = 'admin'`);
-        const titolo = `ORION ${nuova} disponibile`;
-        const testo = `Installata la ${versioneInstallata}. Si aggiorna dalla pagina Sistema, a emergenza chiusa.`;
-        if (typeof notificaA === 'function') {
-            await notificaA(rows.map(r => r.id), { tipo: 'aggiornamento_disponibile', titolo, testo, chiave: `aggiornamento:${nuova}` });
-        }
+        if (typeof notificaA === 'function') await notificaA(rows.map(r => r.id), { tipo, titolo, testo, chiave });
         if (typeof inviaEmail === 'function') {
             for (const { email } of rows) {
                 if (!email) continue;
@@ -708,9 +714,91 @@ export function registraRotteManutenzione(app, ctx) {
                 if (!esito?.success) break;
             }
         }
-        await scriviImpostazione('aggiornamenti_stato', { ...stato, avvisata: nuova });
-        logger.info(`[Manutenzione] Avvisati ${rows.length} amministratori della versione ${nuova}.`);
+        return rows.length;
     }
+
+    const ORE_BACKUP_VECCHIO = 48;
+    const GIORNI_DISCO_FERMO = 7;
+    const GIORNI_PER_SALVARE_IL_RECUPERO = 7;
+    const SPAZIO_MINIMO = (Number(process.env.ORION_SPAZIO_MINIMO_MB) || 2048) * 1048576;
+    const giorno = (ms) => new Date(ms).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' });
+
+    async function problemiDeiBackup() {
+        const problemi = [];
+        const elenco = await elencoBackup();
+        const ultimo = elenco.length ? Date.parse(elenco[0].quando) : 0;
+        if (Date.now() - ultimo > ORE_BACKUP_VECCHIO * 3600000) {
+            problemi.push({
+                tipo: 'backup_vecchio', titolo: 'Backup del database fermi',
+                testo: ultimo
+                    ? `L'ultimo backup del database è del ${giorno(ultimo)}: da più di ${ORE_BACKUP_VECCHIO} ore non se ne fanno. Controlla la sezione Backup della pagina Sistema e i registri del server.`
+                    : 'Sul server non c\'è nessun backup del database. Fanne uno dalla sezione Backup della pagina Sistema e controlla i registri del server.'
+            });
+        }
+        const disco = agente ? await leggiJson(agente.disco) : null;
+        if (disco?.configurato) {
+            const ultima = Date.parse(disco.ultima || 0) || 0;
+            if (disco.esito === 'assente') {
+                problemi.push({ tipo: 'disco', titolo: 'Disco delle copie non collegato', testo: `Il disco esterno per le copie non era collegato al server stanotte${ultima ? `: l'ultima copia è del ${giorno(ultima)}` : ''}. Ricollegalo.` });
+            } else if (disco.esito !== 'fatta') {
+                problemi.push({ tipo: 'disco', titolo: 'Copia sul disco esterno non riuscita', testo: 'La copia notturna sul disco esterno non è riuscita: chi gestisce il server guardi il registro dell\'agente (orion-agente stato).' });
+            } else if (Date.now() - ultima > GIORNI_DISCO_FERMO * 86400000) {
+                problemi.push({ tipo: 'disco', titolo: 'Copie sul disco esterno ferme', testo: `L'ultima copia sul disco esterno è del ${giorno(ultima)}: chi gestisce il server controlli l'agente.` });
+            }
+        }
+        try {
+            const fsInfo = await fs.promises.statfs(cartellaDati);
+            const libero = fsInfo.bavail * fsInfo.bsize;
+            const totale = fsInfo.blocks * fsInfo.bsize;
+            if (libero < SPAZIO_MINIMO || libero < totale * 0.1) {
+                problemi.push({ tipo: 'spazio', titolo: 'Spazio sul server quasi finito', testo: `Sul server restano ${(libero / 1073741824).toFixed(1)} GB liberi su ${(totale / 1073741824).toFixed(0)}: senza spazio i backup non si fanno. Libera spazio o allarga il disco.` });
+            }
+        } catch (e) {
+            logger.warn('[Manutenzione] Spazio libero non letto:', { error: e.message });
+        }
+        const recupero = await pool.query(`SELECT setting_value, updated_at FROM branding_settings WHERE setting_key = 'cifratura_recupero_salvata'`);
+        const r = recupero.rows[0];
+        if (r?.setting_value === 'false' && Date.now() - new Date(r.updated_at || 0).getTime() > GIORNI_PER_SALVARE_IL_RECUPERO * 86400000) {
+            problemi.push({ tipo: 'recupero', titolo: 'Chiave di recupero non salvata', testo: 'Nessuno ha ancora scaricato e conservato la chiave di recupero: senza, se il server si rompe i backup cifrati non si riaprono. Scaricala dalla pagina Sistema e tienila lontano dal server.' });
+        }
+        const drive = await problemaDrive().catch(() => null);
+        if (drive) problemi.push({ tipo: 'drive', titolo: 'Copia su Google Drive non riuscita', testo: drive.testo });
+        return problemi;
+    }
+
+    // Un avviso al giorno per problema finché dura; quando si risolve lo si dimentica, e se torna si riavvisa.
+    async function controlloBackup() {
+        try {
+            const problemi = await problemiDeiBackup();
+            const avvisati = await leggiImpostazione('avvisi_sistema', {});
+            const adesso = Date.now();
+            const nuovi = {};
+            for (const p of problemi) {
+                const prima = avvisati[p.tipo];
+                if (prima && adesso - Date.parse(prima.avvisato_il) < 23.5 * 3600000) {
+                    nuovi[p.tipo] = prima;
+                    continue;
+                }
+                await scriviAgliAmministratori({ tipo: 'backup_problema', chiave: `backup:${p.tipo}:${new Date(adesso).toISOString().slice(0, 10)}`, titolo: p.titolo, testo: p.testo });
+                logger.warn(`[Manutenzione] Avvisati gli amministratori: ${p.titolo}.`);
+                nuovi[p.tipo] = { dal: prima?.dal || new Date(adesso).toISOString(), avvisato_il: new Date(adesso).toISOString() };
+            }
+            await scriviImpostazione('avvisi_sistema', nuovi);
+            return problemi;
+        } catch (e) {
+            logger.warn('[Manutenzione] Controllo dei backup non riuscito:', { error: e.message });
+            return [];
+        }
+    }
+
+    app.get('/api/sistema/avvisi', soloAdmin, async (req, res) => {
+        try {
+            res.json({ problemi: await problemiDeiBackup() });
+        } catch (e) {
+            logger.error('Errore GET /api/sistema/avvisi:', e);
+            res.status(500).json({ message: 'Errore nel controllare i backup.' });
+        }
+    });
 
     async function passwordGiusta(req, password) {
         const utente = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
@@ -894,5 +982,5 @@ export function registraRotteManutenzione(app, ctx) {
             : 'Installazione del drone chiesta al server.');
     });
 
-    return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico };
+    return { elencoBackup, verificaArchivio, statoOperazione: () => operazione, controlloAutomatico, controlloBackup };
 }

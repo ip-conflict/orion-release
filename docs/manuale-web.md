@@ -1016,7 +1016,16 @@ raster (preparato con QGIS): con quella la mappa funziona anche senza internet.
 
 ![Il sistema](immagini/web/90-sistema.png)
 
-In alto lo stato: ultimo backup, backup disponibili, spazio, copia dei file
+Se qualcosa nei backup non va, in cima c'è il riquadro **Da sistemare**: backup
+del database fermi da più di due giorni, disco esterno non collegato o con
+l'ultima copia più vecchia di una settimana, spazio sul server sotto il 10% o
+sotto i 2 GB, chiave di recupero non ancora conservata a una settimana
+dall'installazione, copia su Google Drive non riuscita. Gli stessi problemi
+arrivano agli amministratori anche senza aprire la pagina: una notifica
+nell'app e una email, una volta al giorno finché il problema resta. Risolto il
+problema, l'avviso smette; se torna, riparte.
+
+Sotto lo stato: ultimo backup, backup disponibili, spazio, copia dei file
 e, se il server ha il disco esterno, l'ultima copia lì (gialla dopo una
 settimana, rossa dopo due). Poi la versione e gli aggiornamenti: "Controlla
 adesso" dice se c'è una versione nuova e la installa. L'aggiornamento lo fa il
@@ -1060,6 +1069,35 @@ l'ultimo segnale; **Manda una prova al mio telefono** e **Spegni Firebase**
 fanno quello che dicono. Spento Firebase, i telefoni tornano da soli al
 collegamento di sempre.
 
+**Copia su Google Drive.** Facoltativa, per chi non ha il disco esterno o
+vuole una copia in più fuori dal server. Una volta sola, seguendo la guida del
+riquadro (circa un quarto d'ora), si crea nel progetto Google Cloud
+dell'associazione, anche quello di Firebase, un client OAuth di tipo
+"Applicazione web" con l'indirizzo di ritorno che il riquadro mostra; si
+copiano qui l'ID e il segreto del client, si salva e si preme **Collega**:
+Google chiede di entrare con l'account dell'associazione e di dare il permesso.
+La schermata di consenso del progetto va pubblicata ("In produzione"): lasciata
+in prova, Google toglie l'accesso dopo sette giorni. ORION chiede solo il
+permesso di vedere i file che crea lui, non il resto del Drive.
+
+Da lì ORION copia nella cartella "ORION" seguita dal nome dell'associazione il
+backup di ogni emergenza appena chiusa, uno al giorno fra quelli notturni e,
+una volta alla settimana, un archivio dei documenti e delle foto caricati. Su
+Drive va solo materiale già cifrato: per riaprirlo serve la chiave di recupero,
+che su Drive non va mai. Tiene le ultime 14 copie del giorno e gli ultimi 8
+archivi settimanali (i due numeri si cambiano nel riquadro) e cancella solo le
+sue copie più vecchie; quelle delle emergenze restano tutte. Il riquadro dice
+l'account collegato, l'ultima copia, lo spazio usato e l'ultimo errore.
+**Copia adesso** copia subito l'ultimo backup; **Scollega** toglie l'accesso a
+ORION presso Google, e le copie già fatte restano su Drive. Se Drive non
+risponde il backup sul server si fa lo stesso, e la copia si ritenta al giro
+dopo.
+
+Per ripristinare da Drive, anche su un server nuovo: si scarica il backup dalla
+cartella su Drive con il browser, lo si carica qui con "Carica un backup da un
+file" e lo si ripristina; su un server nuovo prima si inserisce la chiave di
+recupero nel riquadro della cifratura.
+
 ![I backup](immagini/web/93-sistema-backup.png)
 
 **Backup.** Il server ne fa uno ogni notte e ORION uno a ogni chiusura
@@ -1095,3 +1133,5 @@ avanti basta aggiornare di nuovo. Con un'emergenza aperta non si può.
 | Una squadra non compare sulla mappa | Il telefono non ha la posizione "sempre" o la persona non è in squadra |
 | Le email non partono | "Manda una prova" nelle impostazioni della posta dice il motivo |
 | Firebase non si attiva | Il messaggio dice quale file non va: i due file devono essere dello stesso progetto, e nel progetto deve esserci l'app `it.orion.app` |
+| Google Drive dice "accesso scaduto o revocato" | Ricollegare dalla pagina Sistema; se succede ogni settimana, la schermata di consenso del progetto Google è rimasta "in prova" |
+| Google Drive non torna dal consenso | L'indirizzo di ritorno nel client OAuth deve essere identico a quello che mostra il riquadro |

@@ -48,6 +48,12 @@
                 </div>
             </section>
 
+            <section id="pannello-avvisi" class="pannello" hidden>
+                <h2>Da sistemare</h2>
+                <div id="elenco-avvisi" aria-live="polite"></div>
+                <p class="nota">Finché il problema resta, gli amministratori ricevono un avviso al giorno, nell'app e per posta.</p>
+            </section>
+
             <!-- Stato -->
             <section class="pannello">
                 <h2>Stato</h2>
@@ -261,6 +267,54 @@
                     <button type="button" id="btn-prova-firebase" class="button-style button-secondary" hidden>Manda una prova al mio telefono</button>
                     <button type="button" id="btn-spegni-firebase" class="button-style button-secondary" hidden>Spegni Firebase</button>
                     <span id="esito-firebase" class="nota" role="status"></span>
+                </div>
+            </section>
+
+            <section class="pannello" id="pannello-drive">
+                <h2>Copia su Google Drive</h2>
+                <p class="spiegazione">
+                    Facoltativa: una copia dei backup fuori dal server, nel Google Drive dell'associazione.
+                    ORION copia il backup di ogni emergenza appena chiusa, quello della notte una volta al giorno
+                    e, una volta alla settimana, un archivio dei file caricati. Su Drive va solo materiale già
+                    cifrato con la chiave dei dati: senza la chiave di recupero nessuno lo apre, nemmeno Google.
+                    ORION vede solo i file che crea lui e cancella solo le sue copie più vecchie; quelle delle
+                    emergenze restano tutte.
+                </p>
+                <div id="stato-drive" class="griglia-stato" aria-live="polite"></div>
+                <details id="guida-drive" class="guida-pannello">
+                    <summary>Come si prepara il collegamento (una volta, circa 15 minuti)</summary>
+                    <ol>
+                        <li>Con l'account Google dell'associazione apri <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> e crea un progetto (o usa quello di Firebase).</li>
+                        <li>In <em>API e servizi &gt; Libreria</em> attiva <strong>Google Drive API</strong>.</li>
+                        <li>In <em>Schermata consenso OAuth</em> scegli <em>Esterno</em>, metti nome e posta dell'associazione, aggiungi l'ambito <code>.../auth/drive.file</code> e pubblica l'app ("In produzione"): in prova Google toglie l'accesso dopo sette giorni.</li>
+                        <li>In <em>Credenziali</em> crea un <em>ID client OAuth</em> di tipo <em>Applicazione web</em> con questo URI di reindirizzamento autorizzato: <code id="ritorno-drive"></code></li>
+                        <li>Copia qui sotto l'ID e il segreto del client, salva, poi premi <em>Collega</em> ed entra con l'account dell'associazione.</li>
+                    </ol>
+                </details>
+                <div class="campi-firebase">
+                    <label class="campo" for="drive-client-id">
+                        <span>ID del client OAuth</span>
+                        <input type="text" id="drive-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com">
+                    </label>
+                    <label class="campo" for="drive-client-segreto">
+                        <span>Segreto del client</span>
+                        <input type="password" id="drive-client-segreto" autocomplete="off">
+                    </label>
+                    <label class="campo" for="drive-giornalieri">
+                        <span>Copie giornaliere da tenere</span>
+                        <input type="number" id="drive-giornalieri" min="1" max="60">
+                    </label>
+                    <label class="campo" for="drive-settimanali">
+                        <span>Archivi settimanali da tenere</span>
+                        <input type="number" id="drive-settimanali" min="1" max="52">
+                    </label>
+                </div>
+                <div class="gruppo-azioni">
+                    <button type="button" id="btn-salva-drive" class="button-style button-secondary">Salva</button>
+                    <button type="button" id="btn-collega-drive" class="button-style">Collega</button>
+                    <button type="button" id="btn-copia-drive" class="button-style button-secondary" hidden>Copia adesso</button>
+                    <button type="button" id="btn-scollega-drive" class="button-style button-secondary" hidden>Scollega</button>
+                    <span id="esito-drive" class="nota" role="status"></span>
                 </div>
             </section>
 
