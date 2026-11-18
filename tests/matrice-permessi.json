@@ -1677,6 +1677,57 @@
         "esterno": "negato",
         "amministratore": "ok"
       }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/app/drone",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "ok",
+        "volontario_squadra": "ok",
+        "coc": "ok",
+        "funzione": "ok",
+        "coordinatore": "ok",
+        "segreteria": "ok",
+        "magazziniere": "ok",
+        "esterno": "ok",
+        "amministratore": "ok"
+      }
+    },
+    {
+      "metodo": "PATCH",
+      "percorso": "/api/drone/chiavi/999999",
+      "corpo": {
+        "squadra_id": null
+      },
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "negato",
+        "volontario_squadra": "negato",
+        "coc": "negato",
+        "funzione": "negato",
+        "coordinatore": "404",
+        "segreteria": "negato",
+        "magazziniere": "negato",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
+    },
+    {
+      "metodo": "GET",
+      "percorso": "/api/drone/dirette/999999/hls/index.m3u8",
+      "attese": {
+        "anonimo": "negato",
+        "volontario": "404",
+        "volontario_squadra": "404",
+        "coc": "404",
+        "funzione": "404",
+        "coordinatore": "404",
+        "segreteria": "404",
+        "magazziniere": "404",
+        "esterno": "negato",
+        "amministratore": "404"
+      }
     }
   ]
 }

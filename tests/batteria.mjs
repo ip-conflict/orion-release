@@ -1,6 +1,7 @@
 // Tutte le prove del server in un colpo, su un'istanza di collaudo che la batteria avvia e riavvia da sé.
 //   npm run test:tutto                     (tutte)
 //   npm run test:tutto -- voce allerta     (solo quelle nominate)
+//   npm run test:tutto -- --rapida         (senza le quattro lente: i giri con i clic, mfa e sospensione)
 // Vuole le variabili del server (DB_*, JWT_SECRET, COOKIE_SECRET, PORT, ORION_DATI_DIR), anche da .env,
 // e ORION_ADMIN_PASSWORD. Gli esiti vanno in ORION_BATTERIA_DIR, o in una cartella temporanea nuova.
 
@@ -19,6 +20,11 @@ const CARTELLA_PROVE = path.join(RADICE, 'tests');
 const NON_SUITE = new Set(['accesso-prova', 'batteria', 'bollettino-finto', 'container', 'google-finto', 'mediamtx-finto', 'posta-finta', 'voce-app-prepara']);
 const CON_EMERGENZA = new Set(['voce', 'voce-sala', 'voce-trascrizione', 'websocket-app']);
 const TEMPO_MASSIMO_MS = 7 * 60 * 1000;
+// Insieme fanno due terzi del tempo e aspettano davvero (pagine nel browser, codici e sessioni che scadono):
+// a ogni modifica si saltano, prima di pubblicare un'immagine girano sempre.
+const LENTE = new Set(['clic-aree', 'clic-sala', 'mfa', 'sospensione']);
+// I giri con i clic aprono il browser su tutte le aree, e sulle macchine di GitHub ci mettono più di 7 minuti.
+const TEMPO_MASSIMO_LUNGHE_MS = { 'clic-aree': 20 * 60 * 1000, 'clic-sala': 12 * 60 * 1000 };
 const aspetta = (ms) => new Promise(r => setTimeout(r, ms));
 
 function fermati(messaggio) {
@@ -37,10 +43,11 @@ const ADMIN = process.env.ORION_ADMIN_USER || 'admin';
 const PASSWORD = process.env.ORION_ADMIN_PASSWORD;
 
 const tutte = fs.readdirSync(CARTELLA_PROVE).filter(f => f.endsWith('.mjs')).map(f => f.slice(0, -4)).filter(n => !NON_SUITE.has(n)).sort();
-const chieste = process.argv.slice(2);
+const rapida = process.argv.includes('--rapida');
+const chieste = process.argv.slice(2).filter(a => a !== '--rapida');
 const sconosciute = chieste.filter(n => !tutte.includes(n));
 if (sconosciute.length) fermati(`Prove sconosciute: ${sconosciute.join(', ')}. Ci sono: ${tutte.join(', ')}.`);
-const suite = chieste.length ? chieste : tutte;
+const suite = (chieste.length ? chieste : tutte).filter(n => !rapida || !LENTE.has(n));
 
 const USCITA = process.env.ORION_BATTERIA_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'orion-batteria-'));
 fs.mkdirSync(USCITA, { recursive: true });
@@ -60,9 +67,12 @@ const ambiente = {
     ORION_DRONE_SEGRETO: process.env.ORION_DRONE_SEGRETO || 'segreto-di-prova-del-drone',
     ORION_DRONE_API: process.env.ORION_DRONE_API || 'http://127.0.0.1:3096',
     ORION_DRONE_WEBRTC: process.env.ORION_DRONE_WEBRTC || 'http://127.0.0.1:3096',
+    ORION_DRONE_HLS: process.env.ORION_DRONE_HLS || 'http://127.0.0.1:3096',
     ORION_DRONE_REGISTRAZIONI: process.env.ORION_DRONE_REGISTRAZIONI || path.join(USCITA, 'drone-registrazioni'),
     ORION_DRONE_RIPOSO_MS: '1500',
     ORION_DRONE_RACCOLTA_MS: '2000',
+    ORION_DRONE_CONTROLLO_MS: '2000',
+    ORION_CONTROLLO_COLLEGAMENTI_MS: '3000',
     // smoke.mjs prova il controllo degli aggiornamenti contro 127.0.0.1: senza, andrebbe davvero su GitHub.
     ORION_AGGIORNAMENTI_RETE_LOCALE: 'true',
     // La prova dell'integrità riscrive lo storico e lo chiede esplicitamente: qui il database è di prova per forza.
@@ -204,7 +214,7 @@ function lanciaSuite(nome) {
         const raccogli = (d) => { testo += d; uscita.write(d); };
         figlio.stdout.on('data', raccogli);
         figlio.stderr.on('data', raccogli);
-        const timer = setTimeout(() => { testo += '\n[batteria] tempo scaduto\n'; figlio.kill('SIGKILL'); }, TEMPO_MASSIMO_MS);
+        const timer = setTimeout(() => { testo += '\n[batteria] tempo scaduto\n'; figlio.kill('SIGKILL'); }, TEMPO_MASSIMO_LUNGHE_MS[nome] ?? TEMPO_MASSIMO_MS);
         figlio.on('close', (codice) => {
             clearTimeout(timer);
             uscita.end();
@@ -219,7 +229,7 @@ process.on('SIGINT', async () => {
 });
 
 if (await salute()) fermati(`Sulla porta ${PORTA} risponde già un server: fermalo, la batteria avvia e riavvia il suo.`);
-console.log(`Batteria: ${suite.length} prove su ${BASE}. Esiti in ${USCITA}\n`);
+console.log(`Batteria${rapida ? ' rapida, senza ' + [...LENTE].join(', ') : ''}: ${suite.length} prove su ${BASE}. Esiti in ${USCITA}\n`);
 
 const esiti = [];
 const motivi = new Map();

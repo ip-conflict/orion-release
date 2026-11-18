@@ -17,7 +17,14 @@ pprof: no
 playback: no
 
 rtsp: no
-hls: no
+# HLS per l'app: passa da ORION sulla 443 (rotta /api/drone/dirette/:id/hls), la porta resta nella rete dei container.
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
 srt: no
 rtmp: yes
 rtmpAddress: :1935

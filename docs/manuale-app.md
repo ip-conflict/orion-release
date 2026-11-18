@@ -243,6 +243,26 @@ chiusa si attiva "Orion Voice, pulsante PTT" fra i servizi di accessibilità di
 Android (il tasto per arrivarci è nelle stesse impostazioni): legge soltanto i
 tasti e lascia passare tutti quelli che non sono il pulsante.
 
+### Il drone
+
+Se l'associazione usa il drone, durante un'emergenza nella schermata
+principale c'è **Drone**. La voce compare a chi è in una squadra, alla sala e
+a chi apre le emergenze. L'elenco mostra i droni che si possono guardare, con
+la squadra e il pilota a cui sono legati, e quali sono in onda: la sala, il
+coordinatore e i caposquadra li vedono tutti, gli altri solo quello della
+propria squadra. Il drone è della squadra del pilota quando la sala indica il
+pilota, oppure della squadra che la sala sceglie; senza né l'uno né l'altra
+lo vedono solo sala, coordinatore e caposquadra. Gli esterni non lo vedono.
+
+Il video non parte da solo: si tocca ▶ accanto al drone in onda e si apre a
+tutto schermo, con i comandi per metterlo in pausa e ingrandirlo. Arriva con
+qualche secondo di ritardo rispetto alla sala, passa dal server ORION come il
+resto dell'app e si ferma quando l'app va in secondo piano; tornando riparte
+dal vivo. Sulla rete mobile una diretta consuma circa 1,3 GB l'ora, perché il
+drone trasmette in alta qualità e il server non la abbassa. Se il drone smette
+di trasmettere, o la sala cambia la squadra a cui è legato, la schermata lo
+dice e si può riprovare.
+
 ## 4. La chiamata della sala
 
 ![La chiamata](immagini/app/06-chiamata.png)

@@ -43,6 +43,22 @@ export async function codiceNuovo(base, username, segreto) {
     return codiceTotp(segreto, passo);
 }
 
+// Ogni accesso con la verifica aspetta un codice nuovo, fino a 30 secondi: la sessione si tiene e si riusa
+// finché il server la accetta, anche fra una prova e l'altra della batteria.
+const fileSessione = (base, username) => fileSegreto(base, username).replace(/\.json$/, '.sessione.json');
+export function salvaSessione(base, username, dati) { scrivi(fileSessione(base, username), dati); }
+export function dimenticaSessione(base, username) { fs.rmSync(fileSessione(base, username), { force: true }); }
+export async function sessioneValida(base, username, controlla) {
+    const salvata = leggi(fileSessione(base, username));
+    if (!salvata?.corpo?.token) return null;
+    try {
+        if (await controlla(salvata)) return salvata;
+    } catch { /* il server non la riconosce più */ }
+    dimenticaSessione(base, username);
+    return null;
+}
+const accettata = async (r) => r.status === 200 && !(await r.json().catch(() => ({}))).sessione_terminata;
+
 export function segretoSalvato(base, username) {
     return leggi(fileSegreto(base, username))?.segreto || null;
 }
@@ -69,9 +85,12 @@ export async function accediConFetch(base, username, password) {
         const r = await fetch(base + percorso, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         return { stato: r.status, corpo: await r.json().catch(() => null) };
     };
+    const salvata = await sessioneValida(base, username, async (s) => accettata(await fetch(`${base}/api/users/me`, { headers: { Authorization: `Bearer ${s.corpo.token}` } })));
+    if (salvata) return salvata.corpo;
     const r = await accediConVerifica(chiama, base, username, password);
     if (r.stato !== 200) throw new Error(`Accesso di ${username} non riuscito: HTTP ${r.stato} ${r.corpo?.message || ''}`);
     await prendiVisione(base, r.corpo.token);
+    salvaSessione(base, username, { corpo: r.corpo });
     return r.corpo;
 }
 

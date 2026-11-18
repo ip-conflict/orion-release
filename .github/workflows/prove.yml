@@ -1,0 +1,143 @@
+# Le prove del server a ogni modifica, e prima di pubblicare un'immagine (lo chiama immagine.yml).
+# La prova dei container è lenta e vuole Docker da root: parte solo a mano, con la casella "container".
+name: Prove
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      container:
+        description: Lancia anche la prova delle istanze in container
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# La batteria dura venti minuti: un giro superato da un push più nuovo si ferma.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-trixie
+        env:
+          POSTGRES_USER: orion_prove
+          POSTGRES_PASSWORD: orion_prove
+          POSTGRES_DB: orion_prove
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U orion_prove" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_USER: orion_prove
+      DB_PASSWORD: orion_prove
+      DB_DATABASE: orion_prove
+      DOMAIN_NAME: localhost
+      PORT: '3010'
+      TZ: Europe/Rome
+      NODE_ENV: production
+      ORION_ADMIN_USER: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Il backup usa pg_dump, che rifiuta un server più nuovo di sé: serve il client 17, come nell'immagine.
+      - name: Client di PostgreSQL 17
+        run: |
+          sudo apt-get install -y --no-install-recommends postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      # Con NODE_ENV=production npm ci salterebbe Playwright, che serve alle prove di sala.
+      - run: npm ci --include=dev
+
+      - name: Chromium per le prove di sala
+        run: npx playwright install --with-deps chromium
+
+      # Segreti nuovi a ogni giro: nessuno vale fuori da questa macchina.
+      - name: Segreti di prova
+        run: |
+          for nome in JWT_SECRET COOKIE_SECRET; do
+            valore="$(openssl rand -hex 32)"
+            echo "::add-mask::$valore"
+            echo "$nome=$valore" >> "$GITHUB_ENV"
+          done
+          password="Collaudo-$(openssl rand -hex 4)-Lanterna!"
+          echo "::add-mask::$password"
+          echo "ORION_ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/dati"
+          echo "ORION_DATI_DIR=$RUNNER_TEMP/dati" >> "$GITHUB_ENV"
+          echo "ORION_BATTERIA_DIR=$RUNNER_TEMP/batteria" >> "$GITHUB_ENV"
+
+      - name: Dipendenze con vulnerabilità alte o critiche
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Prove senza server
+        run: npm test
+
+      # A ogni modifica la batteria rapida; prima dell'immagine (release o lancio a mano) quella intera.
+      - name: Batteria con il server
+        env:
+          EVENTO: ${{ github.event_name }}
+        run: |
+          if [ "$EVENTO" = push ] || [ "$EVENTO" = pull_request ]; then npm run test:tutto -- --rapida; else npm run test:tutto; fi
+
+      - name: Esiti della batteria
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batteria
+          path: ${{ runner.temp }}/batteria
+          if-no-files-found: ignore
+
+  immagine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: L'immagine si costruisce
+        run: docker build -t localhost/orion:prova .
+
+  container:
+    if: github.event_name == 'workflow_dispatch' && inputs.container
+    needs: server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Immagini di prova
+        run: sudo env "PATH=$PATH" tests/container-immagini.sh | tee -a "$GITHUB_ENV"
+
+      - name: Due istanze
+        env:
+          ORION_BASE: /srv/orion-prova
+          ORION_IMMAGINE: localhost/orion
+        run: |
+          for istanza in alfa beta; do
+            sudo env ORION_BASE="$ORION_BASE" ORION_IMMAGINE="$ORION_IMMAGINE" ORION_AGENTE="$PWD/scripts/docker/orion-agente.sh" \
+              scripts/docker/nuova-istanza.sh "$istanza" "$istanza.prova.example" "$PROVA_PARTENZA" --senza-nginx
+          done
+
+      - name: Prova dei container
+        run: |
+          sudo env "PATH=$PATH" ORION_BASE=/srv/orion-prova ORION_AGENTE="$PWD/scripts/docker/orion-agente.sh" \
+            PROVA_ISTANZA=alfa PROVA_ALTRA=beta PROVA_NUOVA="$PROVA_NUOVA" PROVA_ROTTA="$PROVA_ROTTA" \
+            node tests/container.mjs

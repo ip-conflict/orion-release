@@ -298,6 +298,14 @@ si vede solo in quel momento, vale per l'emergenza in corso e smette di valere
 alla chiusura. "Togli" la annulla subito e ferma la diretta. Il video del
 drone va impostato in H.264.
 
+**Chi lo vede dall'app.** Insieme al nome si può indicare il pilota, scelto
+fra i membri delle squadre, oppure, se non c'è, una squadra; tutti e due sono
+facoltativi e si cambiano dopo con **Squadra** accanto al drone. Dall'app il
+drone lo vedono sempre la sala, il coordinatore e i caposquadra; con il pilota
+anche la sua squadra (e se il pilota cambia squadra, il drone lo segue), con la
+squadra scelta i suoi membri. Nel centro operativo, sul web, lo vedono come
+prima tutti gli interni.
+
 **Guardare.** Quando un drone va in onda il pannello lo mostra da solo. Con
 più droni, "Guarda" aggiunge una diretta accanto alle altre: il pannello si
 allarga e le mette in griglia. Il pulsante con la freccia apre una diretta in

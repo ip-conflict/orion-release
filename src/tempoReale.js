@@ -289,7 +289,9 @@ export function aggiungiPercorsoUpgrade(percorso, gestore) {
 }
 
 export function avviaTempoReale(server) {
-    setInterval(() => controllaCollegamenti().catch(e => logger.error('WS: controllo dei collegamenti non riuscito:', e)), 60 * 1000).unref();
+    // Le prove lo accorciano con ORION_CONTROLLO_COLLEGAMENTI_MS, per non aspettare un minuto la chiusura dopo l'uscita.
+    const ogni = parseInt(process.env.ORION_CONTROLLO_COLLEGAMENTI_MS, 10) || 60 * 1000;
+    setInterval(() => controllaCollegamenti().catch(e => logger.error('WS: controllo dei collegamenti non riuscito:', e)), ogni).unref();
     server.on('upgrade', async (request, socket, head) => {
         let percorso = '/';
         try { percorso = new URL(request.url, 'http://orion').pathname; } catch { /* resta la radice */ }

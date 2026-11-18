@@ -1,6 +1,6 @@
 // Una sospensione chiude tutte le vie d'ingresso della persona, e nessuno sospende se stesso.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... node tests/sospensione.mjs
-// Crea ed elimina un volontario; dura più di un minuto, perché aspetta il controllo periodico dei collegamenti.
+// Crea ed elimina un volontario; aspetta il controllo periodico dei collegamenti, un minuto o ORION_CONTROLLO_COLLEGAMENTI_MS del server.
 
 import WebSocket from 'ws';
 import { accediConFetch, prendiVisione } from './accesso-prova.mjs';
@@ -94,8 +94,10 @@ try {
     await dopoUscita.pronto;
     dopoUscita.da = Date.now();
     verifica("l'uscita risponde", (await chiama('/logout', { method: 'POST', token: tokenNuovo })).stato === 200);
-    const chiusoDopoUscita = await chiusoEntro(dopoUscita, 70000);
-    verifica("dopo l'uscita il collegamento si chiude entro settanta secondi", chiusoDopoUscita?.codice === 4001, chiusoDopoUscita);
+    // Lo chiude il controllo periodico del server: un minuto, o quello di ORION_CONTROLLO_COLLEGAMENTI_MS se lo si è accorciato.
+    const controllo = parseInt(process.env.ORION_CONTROLLO_COLLEGAMENTI_MS, 10) || 60000;
+    const chiusoDopoUscita = await chiusoEntro(dopoUscita, controllo + 10000);
+    verifica("dopo l'uscita il collegamento si chiude al controllo successivo", chiusoDopoUscita?.codice === 4001, chiusoDopoUscita);
 } finally {
     if (volontario) await chiama(`/api/users/${volontario.id}`, { method: 'DELETE', token: admin, body: { beni: [] } });
 }

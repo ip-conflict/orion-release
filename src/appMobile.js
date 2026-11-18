@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { haPermesso } from './permessi.js';
+import { droneConfigurato } from './drone.js';
 
 // Si incrementa solo per cambi che rompono l'app.
 export const VERSIONE_CONTRATTO = 1;
@@ -187,6 +188,7 @@ export function registraRotteApp(app, ctx) {
         } else {
             elenco.push('io', 'documenti');
             if (inSquadra) elenco.push('emergenza');
+            if (moduli.drone && emergenzaAttiva() && (inSquadra || apre || inCoc)) elenco.push('drone');
             if (moduli.voce && emergenzaAttiva() && (inSquadra || haPermesso(req, 'emergenze.apertura'))) elenco.push('voce');
             if (moduli.attivita) elenco.push('calendario');
             if (moduli.magazzino && haPermesso(req, 'magazzino.consegne')) elenco.push('magazzino.consegna');
@@ -211,7 +213,7 @@ export function registraRotteApp(app, ctx) {
 
     app.get('/api/app/contesto', async (req, res) => {
         try {
-            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica, funzioniAcceso, attivitaAcceso, voceAccesa] = await Promise.all([
+            const [magazzinoAcceso, configSegreteria, nomeAssociazione, squadra, nonLette, qrTesserini, anagrafica, funzioniAcceso, attivitaAcceso, voceAccesa, droneAcceso] = await Promise.all([
                 impostazione('magazzino_enabled'),
                 impostazione('segreteria_config'),
                 impostazione('association_name'),
@@ -226,7 +228,8 @@ export function registraRotteApp(app, ctx) {
                 pool.query('SELECT temporaneo, ente FROM users WHERE id = $1', [req.user.id]),
                 impostazione('funzioni_enabled'),
                 impostazione('attivita_enabled'),
-                impostazione('voce_enabled')
+                impostazione('voce_enabled'),
+                impostazione('drone_enabled')
             ]);
 
             const moduli = {
@@ -235,7 +238,8 @@ export function registraRotteApp(app, ctx) {
 
                 tesserini_qr: String(qrTesserini) !== 'false',
                 attivita: String(attivitaAcceso ?? 'true') !== 'false',
-                voce: String(voceAccesa) === 'true'
+                voce: String(voceAccesa) === 'true',
+                drone: String(droneAcceso) === 'true' && droneConfigurato()
             };
             const configMagazzino = moduli.magazzino ? await leggiConfigMagazzino() : null;
             const emergenza = emergenzaAttiva();

@@ -17,10 +17,10 @@ const verifica = (descr, ok, dettaglio = '') => {
     console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${descr}${ok ? '' : ` -> ${typeof dettaglio === 'string' ? dettaglio : JSON.stringify(dettaglio)}`}`);
     if (!ok) falliti++;
 };
-const chiama = async (percorso, { method = 'GET', body, token, tipo = 'application/json' } = {}) => {
+const chiama = async (percorso, { method = 'GET', body, token, tipo = 'application/json', app = false } = {}) => {
     const r = await fetch(BASE + percorso, {
         method, body: body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
-        headers: { ...(body !== undefined ? { 'Content-Type': tipo } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+        headers: { ...(body !== undefined ? { 'Content-Type': tipo } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(app ? { 'X-Orion-Client': 'app' } : {}) }
     });
     const ct = r.headers.get('content-type') || '';
     const corpo = ct.includes('json') ? await r.json().catch(() => null) : Buffer.from(await r.arrayBuffer());
@@ -37,6 +37,7 @@ const finto = await avviaMediaMtxFinto({ orion: BASE, segreto: SEGRETO });
 const admin = (await accediConFetch(BASE, process.env.ORION_ADMIN_USER || 'admin', process.env.ORION_ADMIN_PASSWORD)).token;
 const suffisso = Date.now().toString().slice(-5);
 const persone = [];
+const squadreProva = [];
 let aperta = null;
 const prima = (await chiama('/api/branding/settings', { token: admin })).corpo?.drone_enabled;
 try {
@@ -100,6 +101,52 @@ try {
     const richiestaWhep = finto.richieste.find(r => r.url === `/${percorso}/whep`);
     verifica('il volontario guarda: ORION gira la richiesta a MediaMTX e risponde con la sua sessione', whep.stato === 201 && whep.location?.startsWith('/api/drone/sessioni/') && String(whep.corpo).startsWith('v=0'), { stato: whep.stato, location: whep.location });
     verifica('verso MediaMTX va con le credenziali di ORION, il browser non le vede', richiestaWhep?.autorizzazione === `Basic ${Buffer.from(`orion:${SEGRETO}`).toString('base64')}`, richiestaWhep);
+
+    // Dall'app: la sala e i caposquadra vedono ogni drone, gli altri solo quello della loro squadra.
+    const idDrone = dirette.chiavi[0].id;
+    const nuovaPersona = async (nome) => {
+        const x = (await chiama('/api/users', { method: 'POST', token: admin, body: { nome, cognome: `Drone${suffisso}`, role: 'volontario' } })).corpo;
+        persone.push(x.id);
+        const qx = new URL(x.magicLink).searchParams;
+        await chiama('/api/auth/reset-password', { method: 'POST', body: { token: qx.get('token'), id: Number(qx.get('id')), newPassword: pw } });
+        const t = (await chiama('/login', { method: 'POST', body: { username: x.username, password: pw } })).corpo.token;
+        await prendiVisione(BASE, t);
+        return { ...x, token: t };
+    };
+    const altro = await nuovaPersona('Bruno');
+    const usati = new Set(((await chiama('/api/squadre', { token: admin })).corpo || []).map(s => s.nome_radio));
+    const [radioA, radioB] = ['Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa', 'Quebec', 'Romeo', 'Sierra', 'Tango'].filter(r => !usati.has(r));
+    const squadraA = (await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: radioA, membri: [{ username: n.username }] } })).corpo?.squadraId;
+    const squadraB = (await chiama('/api/squadre', { method: 'POST', token: admin, body: { nome_radio: radioB, membri: [{ username: altro.username }] } })).corpo?.squadraId;
+    squadreProva.push(squadraA, squadraB);
+    const vedeInApp = async (token) => ((await chiama('/api/app/drone', { token, app: true })).corpo?.dirette || []).find(d => d.id === idDrone);
+    verifica("senza pilota né squadra, dall'app il volontario non vede il drone", !(await vedeInApp(vol)));
+    verifica('l\'app ha la capacità drone a emergenza aperta', ((await chiama('/api/app/contesto', { token: vol, app: true })).corpo?.capacita || []).includes('drone'));
+    verifica('pilota e squadra li sceglie chi apre le emergenze -> 403', (await chiama(`/api/drone/chiavi/${idDrone}`, { method: 'PATCH', token: vol, body: { squadra_id: squadraA } })).stato === 403);
+    verifica('un pilota che non c\'è -> 400', (await chiama(`/api/drone/chiavi/${idDrone}`, { method: 'PATCH', token: admin, body: { pilota_id: 99999999 } })).stato === 400);
+    verifica('la sala lega il drone alla squadra A', (await chiama(`/api/drone/chiavi/${idDrone}`, { method: 'PATCH', token: admin, body: { squadra_id: squadraA } })).stato === 200);
+    const visto = await vedeInApp(vol);
+    verifica('chi è nella squadra A lo vede in onda, con la squadra', visto?.in_onda === true && visto.squadra?.nome_radio === radioA, visto);
+    verifica("l'elenco dell'app non contiene la chiave", !JSON.stringify(visto || {}).includes(chiave));
+    const playlist = await chiama(`/api/drone/dirette/${idDrone}/hls/index.m3u8`, { token: vol, app: true });
+    const richiestaHls = finto.richieste.find(r => r.url === `/${percorso}/index.m3u8`);
+    verifica('la playlist HLS passa da ORION', playlist.stato === 200 && String(playlist.corpo).startsWith('#EXTM3U') && !String(playlist.corpo).includes(chiave), { stato: playlist.stato });
+    verifica('verso MediaMTX con le credenziali di ORION', richiestaHls?.autorizzazione === `Basic ${Buffer.from(`orion:${SEGRETO}`).toString('base64')}`, richiestaHls);
+    const pezzo = await chiama(`/api/drone/dirette/${idDrone}/hls/prova_seg1.mp4?_HLS_msn=3`, { token: vol, app: true });
+    verifica('anche i pezzi del video, con la loro domanda', pezzo.stato === 200 && pezzo.corpo.length === 4096 && finto.richieste.some(r => r.url === `/${percorso}/prova_seg1.mp4?_HLS_msn=3`));
+    verifica('un nome di file storto -> 400', (await chiama(`/api/drone/dirette/${idDrone}/hls/..%2F..%2Fv3%2Fpaths%2Flist`, { token: vol, app: true })).stato === 400);
+    verifica("dall'app chi è in un'altra squadra non lo vede", !(await vedeInApp(altro.token)));
+    verifica('e non ne apre il video -> 403', (await chiama(`/api/drone/dirette/${idDrone}/hls/index.m3u8`, { token: altro.token, app: true })).stato === 403);
+    verifica('dal web resta come prima: ogni interno', (await chiama(`/api/drone/dirette/${idDrone}/hls/index.m3u8`, { token: altro.token })).stato === 200);
+    await chiama(`/api/squadre/${squadraB}/caposquadra`, { method: 'PUT', token: admin, body: { username: altro.username } });
+    verifica('il caposquadra di un\'altra squadra lo vede', !!(await vedeInApp(altro.token)));
+    verifica('la sala lo vede sempre', !!(await vedeInApp(admin)));
+    await chiama(`/api/drone/chiavi/${idDrone}`, { method: 'PATCH', token: admin, body: { pilota_id: altro.id, squadra_id: squadraA } });
+    const colPilota = (await chiama('/api/drone/dirette', { token: admin })).corpo?.chiavi?.find(k => k.id === idDrone);
+    verifica('con il pilota conta la squadra del pilota, non quella scelta', colPilota?.pilota?.id === altro.id && colPilota?.squadra?.nome_radio === radioB, colPilota);
+    verifica('e la squadra A non lo vede più', !(await vedeInApp(vol)));
+    verifica("l'esterno dall'app non ha droni", ((await chiama('/api/app/drone', { token: tokEst, app: true })).corpo?.dirette || []).length === 0);
+    verifica("e non ne apre il video -> 403", (await chiama(`/api/drone/dirette/${idDrone}/hls/index.m3u8`, { token: tokEst, app: true })).stato === 403);
     const lettura = await fetch(`${BASE}/api/drone/autorizza?s=${encodeURIComponent(SEGRETO)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'read', path: percorso, protocol: 'webrtc', user: 'curioso', password: 'x' }) });
     verifica('guardare direttamente da MediaMTX senza ORION -> 401', lettura.status === 401);
     verifica('un\'offerta che non è SDP -> 400', (await chiama(`/api/drone/dirette/${dirette.chiavi[0].id}/whep`, { method: 'POST', token: vol, body: 'ciao', tipo: 'application/sdp' })).stato === 400);
@@ -136,10 +183,11 @@ try {
     verifica('a emergenza chiusa il volontario non riguarda le riprese (archivio) -> 403', (await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: vol })).stato === 403);
     verifica('chi consulta l\'archivio sì', (await chiama(`/api/drone/registrazioni/${riprese[0]?.id}/file`, { token: admin })).stato === 200);
     const registro = JSON.stringify((await chiama('/api/admin/audit-log?limit=50', { token: admin })).corpo || '');
-    verifica('nel registro: chiave data, in onda, raccolta, vista, chiave tolta', ['drone.chiave_creata', 'drone.in_onda', 'drone.registrazione_raccolta', 'drone.ripresa_vista', 'drone.chiave_revocata', 'drone.respinto'].every(a => registro.includes(a)));
+    verifica('nel registro: chiave data, in onda, raccolta, vista, chiave tolta', ['drone.chiave_creata', 'drone.in_onda', 'drone.registrazione_raccolta', 'drone.ripresa_vista', 'drone.chiave_revocata', 'drone.respinto', 'drone.chiave_modificata'].every(a => registro.includes(a)));
 } finally {
     if (aperta) await chiama('/api/emergencies/close', { method: 'POST', token: admin, body: {} });
     await chiama('/api/branding/settings', { method: 'PUT', token: admin, body: { drone_enabled: prima === 'true' ? 'true' : 'false', drone_max_dirette: '' } });
+    for (const s of squadreProva) if (s) await chiama(`/api/squadre/${s}`, { method: 'DELETE', token: admin });
     for (const p of persone) await chiama(`/api/users/${p}`, { method: 'DELETE', token: admin, body: { beni: [] } });
     await finto.chiudi();
 }

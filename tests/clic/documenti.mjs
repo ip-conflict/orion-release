@@ -1,8 +1,8 @@
 // Documenti con i clic: carica, "Sempre con me", nuova versione, visibilità per ruolo, file non ammesso.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/documenti.mjs (di solito da tests/clic-aree.mjs)
 import fs from 'fs';
-import { CARTELLA_FOTO, browser, contesto, entra, api, BASE } from './aiuto.mjs';
-const OUT = CARTELLA_FOTO; const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
 const { pagina: p, token: admin } = await entra(await contesto(b), 'admin', process.env.ORION_ADMIN_PASSWORD);
@@ -17,47 +17,47 @@ const n = (await api(admin, '/api/users', { method: 'POST', body: { nome: 'Dora'
 const q = new URL(n.magicLink).searchParams; const pw = `Doc!${suf}Faro9`;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 
-await p.goto(BASE + '/documenti.html'); await attendi(2500);
-await p.click('#btn-carica'); await attendi(600);
+await p.goto(BASE + '/documenti.html'); await assesta(p, 2500);
+await p.click('#btn-carica'); await assesta(p, 600);
 await p.fill('#doc-titolo', `Piano comunale ${suf}`);
 await p.setInputFiles('#doc-file', `${cartella}/piano.pdf`);
 await p.fill('#doc-descrizione', 'Il piano approvato dal consiglio');
 await p.check('#doc-sempre');
 await p.check('#doc-emergenza');
 await p.screenshot({ path: `${OUT}/doc-carica.png` });
-await p.click('#salva-documento'); await attendi(2000);
+await p.click('#salva-documento'); await assesta(p, 2000);
 const riga = p.locator('.riga-documento').filter({ hasText: `Piano comunale ${suf}` });
 controlla('il documento caricato compare nell\'elenco', await riga.count() === 1);
-await riga.locator('button').click(); await attendi(1200);
-await p.click('#btn-versione'); await attendi(400);
+await riga.locator('button').click(); await assesta(riga, 1200);
+await p.click('#btn-versione'); await assesta(p, 400);
 await p.setInputFiles('#versione-file', `${cartella}/piano-v2.pdf`);
 await p.fill('#versione-nota', 'Aggiornate le aree di attesa');
-await p.locator('#form-versione button[type=submit]').click(); await attendi(2000);
+await p.locator('#form-versione button[type=submit]').click(); await assesta(p, 2000);
 controlla('la nuova versione si aggiunge, la vecchia resta nello storico', /Aggiornate le aree di attesa/.test(await p.textContent('#versioni-dettaglio')) && (await p.locator('#versioni-dettaglio li').count()) >= 2,
     await p.textContent('#versioni-dettaglio'));
 await p.screenshot({ path: `${OUT}/doc-versioni.png` });
 await p.keyboard.press('Escape');
 
-await p.click('#btn-carica'); await attendi(600);
+await p.click('#btn-carica'); await assesta(p, 600);
 await p.fill('#doc-titolo', `Solo segreteria ${suf}`);
 await p.setInputFiles('#doc-file', `${cartella}/piano.pdf`);
-await p.check('input[name="visibilita"][value="ruoli"]'); await attendi(300);
+await p.check('input[name="visibilita"][value="ruoli"]'); await assesta(p, 300);
 await p.locator('#scelta-ruoli input[type=checkbox]').filter({ has: p.locator('xpath=.') }).first();
 const segreteria = p.locator('#scelta-ruoli label').filter({ hasText: /Segreteria/ }).locator('input');
 await segreteria.check();
-await p.click('#salva-documento'); await attendi(2000);
+await p.click('#salva-documento'); await assesta(p, 2000);
 controlla('il documento riservato compare per chi tiene l\'archivio', await p.locator('.riga-documento').filter({ hasText: `Solo segreteria ${suf}` }).count() === 1);
 
-await p.click('#btn-carica'); await attendi(600);
+await p.click('#btn-carica'); await assesta(p, 600);
 await p.fill('#doc-titolo', `Pagina web ${suf}`);
 await p.setInputFiles('#doc-file', `${cartella}/script.html`);
-await p.click('#salva-documento'); await attendi(1500);
+await p.click('#salva-documento'); await assesta(p, 1500);
 controlla('un file .html non si carica', await p.locator('.riga-documento').filter({ hasText: `Pagina web ${suf}` }).count() === 0);
 await p.keyboard.press('Escape');
 
 const ctxV = await contesto(b);
 const { pagina: v, token: tokV } = await entra(ctxV, n.username, pw);
-await v.goto(BASE + '/documenti.html'); await attendi(2500);
+await v.goto(BASE + '/documenti.html'); await assesta(v, 2500);
 const visti = await v.textContent('#elenco-documenti');
 controlla('il volontario vede il piano e non il documento della segreteria', visti.includes(`Piano comunale ${suf}`) && !visti.includes(`Solo segreteria ${suf}`), visti.slice(0, 200));
 controlla('il volontario non ha "Carica"', !(await v.isVisible('#btn-carica')));

@@ -1,4 +1,4 @@
-// Un MediaMTX finto per le prove del drone: l'API delle dirette e delle connessioni, il WHEP e la
+// Un MediaMTX finto per le prove del drone: l'API delle dirette e delle connessioni, il WHEP, l'HLS e la
 // domanda di autorizzazione a ORION che MediaMTX fa a ogni pilota e a ogni spettatore.
 //   import { avviaMediaMtxFinto } from './mediamtx-finto.mjs'   (porta 3096, come in batteria.mjs)
 
@@ -47,6 +47,18 @@ export function avviaMediaMtxFinto({ porta = 3096, orion, segreto }) {
             sessioni.add(id);
             return res.writeHead(201, { 'Content-Type': 'application/sdp', Location: `/${whep[1]}/whep/${id}` })
                 .end('v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n');
+        }
+        const hls = /^\/(drone\/[^/]+)\/([^/]+\.(?:m3u8|mp4))$/.exec(url.pathname);
+        if (req.method === 'GET' && hls) {
+            const [utente, password] = Buffer.from(String(req.headers.authorization || '').replace(/^Basic /, ''), 'base64').toString().split(':');
+            const stato = await autorizza({ action: 'read', path: hls[1], protocol: 'hls', user: utente || '', password: password || '', ip: '172.20.0.3' });
+            if (stato !== 200) return res.writeHead(401).end();
+            if (!dirette.has(hls[1])) return res.writeHead(404).end();
+            if (hls[2].endsWith('.m3u8')) {
+                return res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' })
+                    .end('#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:1\n#EXT-X-MAP:URI="prova_init.mp4"\n#EXTINF:1.0,\nprova_seg1.mp4\n');
+            }
+            return res.writeHead(200, { 'Content-Type': 'video/mp4' }).end(Buffer.alloc(4096, 9));
         }
         const sessione = /^\/drone\/[^/]+\/whep\/(.+)$/.exec(url.pathname);
         if (sessione && ['DELETE', 'PATCH'].includes(req.method)) {

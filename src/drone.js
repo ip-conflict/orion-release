@@ -4,6 +4,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import express from 'express';
 import logger from './logger.js';
@@ -23,6 +24,7 @@ const impostazione = () => ({
     segreto: process.env.ORION_DRONE_SEGRETO || '',
     api: (process.env.ORION_DRONE_API || 'http://drone:9997').replace(/\/$/, ''),
     webrtc: (process.env.ORION_DRONE_WEBRTC || 'http://drone:8889').replace(/\/$/, ''),
+    hls: (process.env.ORION_DRONE_HLS || 'http://drone:8888').replace(/\/$/, ''),
     host: process.env.ORION_DRONE_HOST || process.env.DOMAIN_NAME || 'localhost',
     porta: parseInt(process.env.ORION_DRONE_RTMP_PORTA, 10) || 1935,
     portaWebrtc: parseInt(process.env.ORION_DRONE_WEBRTC_PORTA, 10) || 8189,
@@ -53,6 +55,50 @@ const uguali = (a, b) => {
 };
 const basic = () => `Basic ${Buffer.from(`orion:${impostazione().segreto}`).toString('base64')}`;
 const esterno = (req) => ruoliDi(req.user).includes('esterno');
+const dallApp = (req) => req.get('x-orion-client') === 'app';
+
+// La squadra del drone è quella del pilota, se c'è un pilota (e lo segue se cambia squadra), altrimenti quella scelta.
+const CHIAVI_EMERGENZA = `
+    SELECT k.id, k.nome, k.creata_il, k.revocata_il, k.ultima_diretta_il, k.impronta,
+           p.id AS pilota_id, p.username AS pilota_username, NULLIF(trim(concat_ws(' ', p.nome, p.cognome)), '') AS pilota_nome,
+           s.id AS squadra_id, s.nome_radio AS squadra_nome_radio, s.nome AS squadra_nome
+      FROM chiavi_drone k
+      LEFT JOIN users p ON p.id = k.pilota_id
+      LEFT JOIN squadra_membri pm ON pm.username = p.username
+      LEFT JOIN squadre s ON s.id = CASE WHEN k.pilota_id IS NOT NULL THEN pm.squadra_id ELSE k.squadra_id END
+     WHERE k.emergency_id = $1`;
+const conSquadraEPilota = ({ pilota_id, pilota_username, pilota_nome, squadra_id, squadra_nome_radio, squadra_nome, ...k }) => ({
+    ...k,
+    pilota: pilota_id ? { id: pilota_id, username: pilota_username, nome: pilota_nome } : null,
+    squadra: squadra_id ? { id: squadra_id, nome_radio: squadra_nome_radio, nome: squadra_nome } : null
+});
+
+// Dall'app la sala (chi apre le emergenze, la squadra COC) e i caposquadra vedono ogni drone; gli altri solo quello della
+// loro squadra. Dal web resta com'è: il centro operativo lo apre ogni interno.
+async function chiVedeDallApp(req) {
+    const { rows } = await pool.query(
+        `SELECT sm.squadra_id, sm.caposquadra, s.coc FROM squadra_membri sm JOIN squadre s ON s.id = sm.squadra_id WHERE sm.username = $1`, [req.user.username]);
+    return {
+        tutto: haPermesso(req, 'emergenze.apertura') || rows.some(r => r.coc || r.caposquadra),
+        squadre: new Set(rows.map(r => r.squadra_id))
+    };
+}
+const vedeDallApp = (chi, k) => chi.tutto || (!!k.squadra && chi.squadre.has(k.squadra.id));
+
+async function leggiPilotaESquadra(corpo) {
+    const numero = (v) => (v === null || v === undefined || v === '' ? null : parseInt(v, 10));
+    let pilota = numero(corpo?.pilota_id);
+    const squadra = numero(corpo?.squadra_id);
+    if (Number.isNaN(pilota) || Number.isNaN(squadra)) return { errore: 'Pilota e squadra si indicano con il loro numero.' };
+    // Il pannello conosce i membri delle squadre per nome utente.
+    if (pilota === null && corpo?.pilota) {
+        pilota = (await pool.query('SELECT id FROM users WHERE username = $1', [String(corpo.pilota).trim().toLowerCase()])).rows[0]?.id ?? NaN;
+        if (Number.isNaN(pilota)) return { errore: 'Il pilota indicato non c\'è.' };
+    }
+    if (pilota !== null && !(await pool.query('SELECT 1 FROM users WHERE id = $1 AND is_active', [pilota])).rowCount) return { errore: 'Il pilota indicato non c\'è o è sospeso.' };
+    if (pilota === null && squadra !== null && !(await pool.query('SELECT 1 FROM squadre WHERE id = $1', [squadra])).rowCount) return { errore: 'La squadra indicata non c\'è.' };
+    return { pilota, squadra: pilota === null ? squadra : null };
+}
 
 async function chiamaMediaMtx(percorso, opzioni = {}) {
     const ferma = new AbortController();
@@ -196,6 +242,26 @@ export function registraRotteDronePubbliche(app) {
 export function registraRotteDrone(app) {
     const sessioni = new Map();
 
+    // Il video in HLS arriva a pezzi da un secondo: la decisione su chi guarda si tiene qualche secondo, non si rifà a ogni pezzo.
+    const visibilita = new Map();
+    async function chiavePerGuardare(req, res, id) {
+        const memoria = `${req.user.id}:${id}:${dallApp(req)}`;
+        const tenuta = visibilita.get(memoria);
+        if (tenuta && tenuta.scade > Date.now() && tenuta.emergenza === activeEmergency?.id) return tenuta.chiave;
+        const riga = (await pool.query(`${CHIAVI_EMERGENZA} AND k.id = $2 AND k.revocata_il IS NULL`, [activeEmergency?.id ?? null, id])).rows[0];
+        if (!riga) { res.status(404).json({ message: 'Questo drone non trasmette per l\'emergenza in corso.' }); return null; }
+        const k = conSquadraEPilota(riga);
+        if (dallApp(req) && !vedeDallApp(await chiVedeDallApp(req), k)) {
+            res.status(403).json({ message: 'Questo drone lo vedono la sua squadra, la sala e i caposquadra.' });
+            return null;
+        }
+        const segreto = decifraTesto((await pool.query('SELECT chiave_cifrata FROM chiavi_drone WHERE id = $1', [id])).rows[0].chiave_cifrata);
+        const chiave = { id: k.id, nome: k.nome, segreto };
+        visibilita.set(memoria, { chiave, scade: Date.now() + 10000, emergenza: activeEmergency?.id });
+        if (visibilita.size > 5000) visibilita.clear();
+        return chiave;
+    }
+
     const prontoPerLaSala = async (req, res) => {
         if (esterno(req)) { res.status(403).json({ message: 'Le riprese del drone le vede la sala.' }); return false; }
         if (!(await moduloAcceso())) { res.status(404).json({ message: 'Il drone non è attivo: si accende dalle Impostazioni, con MediaMTX configurato sul server.', spento: true }); return false; }
@@ -219,9 +285,7 @@ export function registraRotteDrone(app) {
         if (!(await prontoPerLaSala(req, res))) return;
         if (!activeEmergency) return res.json({ chiavi: [], mediamtx: true, max_dirette: await maxDirette() });
         try {
-            const { rows } = await pool.query(
-                `SELECT id, nome, creata_il, revocata_il, ultima_diretta_il, impronta FROM chiavi_drone
-                  WHERE emergency_id = $1 ORDER BY revocata_il IS NOT NULL, creata_il`, [activeEmergency.id]);
+            const { rows } = await pool.query(`${CHIAVI_EMERGENZA} ORDER BY k.revocata_il IS NOT NULL, k.creata_il`, [activeEmergency.id]);
             let inCorso = new Map(), mediamtx = true;
             try { inCorso = await diretteInCorso(); } catch (e) { mediamtx = false; logger.warn(`[Drone] MediaMTX non risponde: ${e.message}`); }
             const respinto = ultimoRespinto?.emergenza === activeEmergency.id && Date.now() - Date.parse(ultimoRespinto.il) < 10 * 60000 ? ultimoRespinto : null;
@@ -229,7 +293,7 @@ export function registraRotteDrone(app) {
                 mediamtx,
                 max_dirette: await maxDirette(),
                 respinto: respinto && { nome: respinto.nome, il: respinto.il, massimo: respinto.massimo },
-                chiavi: rows.map(({ impronta: imp, ...k }) => ({ ...k, in_onda: !k.revocata_il && inCorso.has(imp), in_onda_da: inCorso.get(imp)?.da || null }))
+                chiavi: rows.map(({ impronta: imp, ...k }) => ({ ...conSquadraEPilota(k), in_onda: !k.revocata_il && inCorso.has(imp), in_onda_da: inCorso.get(imp)?.da || null }))
             });
         } catch (e) {
             logger.error('Errore GET /api/drone/dirette:', e);
@@ -245,10 +309,13 @@ export function registraRotteDrone(app) {
         const nome = String(req.body?.nome || '').trim().slice(0, 80);
         if (!nome) return res.status(400).json({ message: 'Scrivi un nome per il drone o il pilota, per esempio "Matrice 4E – Marco".' });
         try {
+            const legame = await leggiPilotaESquadra(req.body);
+            if (legame.errore) return res.status(400).json({ message: legame.errore });
             const chiave = crypto.randomBytes(24).toString('base64url');
             const { rows } = await pool.query(
-                `INSERT INTO chiavi_drone (emergency_id, nome, impronta, chiave_cifrata, creata_da) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, creata_il`,
-                [activeEmergency.id, nome, impronta(chiave), cifraTesto(chiave), req.user.id]);
+                `INSERT INTO chiavi_drone (emergency_id, nome, impronta, chiave_cifrata, creata_da, pilota_id, squadra_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, nome, creata_il`,
+                [activeEmergency.id, nome, impronta(chiave), cifraTesto(chiave), req.user.id, legame.pilota, legame.squadra]);
             const { host, porta } = impostazione();
             registraAudit(req, 'drone.chiave_creata', { tipo: 'emergenza', id: activeEmergency.id, dettagli: { chiave: rows[0].id, nome } });
             avvisaClienti('reload_drone');
@@ -261,6 +328,28 @@ export function registraRotteDrone(app) {
         } catch (e) {
             logger.error('Errore POST /api/drone/chiavi:', e);
             res.status(500).json({ message: 'Errore nel creare la chiave.' });
+        }
+    });
+
+    app.patch('/api/drone/chiavi/:id', async (req, res) => {
+        if (!(await prontoPerLaSala(req, res))) return;
+        if (!haPermesso(req, 'emergenze.apertura')) return res.status(403).json({ message: 'Pilota e squadra del drone li sceglie chi apre le emergenze.' });
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id)) return res.status(400).json({ message: 'Chiave non valida.' });
+        try {
+            const legame = await leggiPilotaESquadra(req.body);
+            if (legame.errore) return res.status(400).json({ message: legame.errore });
+            const { rows } = await pool.query(
+                `UPDATE chiavi_drone SET pilota_id = $3, squadra_id = $4 WHERE id = $1 AND emergency_id = $2 AND revocata_il IS NULL RETURNING nome`,
+                [id, activeEmergency?.id ?? null, legame.pilota, legame.squadra]);
+            if (!rows.length) return res.status(404).json({ message: 'Questa chiave non vale per l\'emergenza in corso.' });
+            visibilita.clear();
+            registraAudit(req, 'drone.chiave_modificata', { tipo: 'emergenza', id: activeEmergency.id, dettagli: { chiave: id, pilota: legame.pilota, squadra: legame.squadra } });
+            avvisaClienti('reload_drone');
+            res.json({ id, ...legame });
+        } catch (e) {
+            logger.error('Errore PATCH /api/drone/chiavi:', e);
+            res.status(500).json({ message: 'Errore nel cambiare pilota o squadra.' });
         }
     });
 
@@ -289,10 +378,9 @@ export function registraRotteDrone(app) {
         const id = parseInt(req.params.id, 10);
         if (!Number.isInteger(id) || typeof req.body !== 'string' || !req.body.startsWith('v=0')) return res.status(400).json({ message: 'Richiesta non valida.' });
         try {
-            const k = (await pool.query(
-                'SELECT chiave_cifrata, nome FROM chiavi_drone WHERE id = $1 AND emergency_id = $2 AND revocata_il IS NULL', [id, activeEmergency?.id ?? null])).rows[0];
-            if (!k) return res.status(404).json({ message: 'Questo drone non trasmette per l\'emergenza in corso.' });
-            const r = await fetch(`${impostazione().webrtc}/drone/${decifraTesto(k.chiave_cifrata)}/whep`, {
+            const k = await chiavePerGuardare(req, res, id);
+            if (!k) return;
+            const r = await fetch(`${impostazione().webrtc}/drone/${k.segreto}/whep`, {
                 method: 'POST', body: req.body, headers: { 'Content-Type': 'application/sdp', Authorization: basic() }
             });
             if (r.status === 404) return res.status(404).json({ message: `${k.nome} non sta trasmettendo.` });
@@ -304,6 +392,48 @@ export function registraRotteDrone(app) {
         } catch (e) {
             logger.error('Errore WHEP drone:', e);
             res.status(502).json({ message: 'MediaMTX non risponde.' });
+        }
+    });
+
+    // I droni che chi usa l'app può guardare, in onda o pronti: il video si apre solo quando la persona lo chiede.
+    app.get('/api/app/drone', async (req, res) => {
+        try {
+            if (esterno(req) || !activeEmergency || !(await moduloAcceso())) return res.json({ attivo: false, mediamtx: true, dirette: [] });
+            const chi = await chiVedeDallApp(req);
+            const { rows } = await pool.query(`${CHIAVI_EMERGENZA} AND k.revocata_il IS NULL ORDER BY k.creata_il`, [activeEmergency.id]);
+            let inCorso = new Map(), mediamtx = true;
+            try { inCorso = await diretteInCorso(); } catch (e) { mediamtx = false; logger.warn(`[Drone] MediaMTX non risponde: ${e.message}`); }
+            const dirette = rows.map(r => ({ ...conSquadraEPilota(r), onda: inCorso.get(r.impronta) })).filter(k => vedeDallApp(chi, k))
+                .map(k => ({ id: k.id, nome: k.nome, in_onda: !!k.onda, in_onda_da: k.onda?.da || null, ultima_diretta_il: k.ultima_diretta_il, squadra: k.squadra, pilota: k.pilota }));
+            res.json({ attivo: true, mediamtx, dirette });
+        } catch (e) {
+            logger.error('Errore GET /api/app/drone:', e);
+            res.status(500).json({ message: 'Errore nel leggere i droni.' });
+        }
+    });
+
+    // HLS passando da ORION, per l'app: solo la porta 443 e la sessione di chi guarda, nessun indirizzo di MediaMTX fuori.
+    const FILE_HLS = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,120}$/;
+    app.get('/api/drone/dirette/:id/hls/:file', async (req, res) => {
+        if (!(await prontoPerLaSala(req, res))) return;
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id) || !FILE_HLS.test(req.params.file) || req.params.file.includes('..')) return res.status(400).json({ message: 'Richiesta non valida.' });
+        const ferma = new AbortController();
+        res.on('close', () => ferma.abort());
+        try {
+            const k = await chiavePerGuardare(req, res, id);
+            if (!k) return;
+            const query = new URL(req.originalUrl, 'http://orion').search;
+            const r = await fetch(`${impostazione().hls}/drone/${k.segreto}/${req.params.file}${query}`, { headers: { Authorization: basic() }, signal: ferma.signal });
+            if (r.status === 404) return res.status(404).json({ message: `${k.nome} non sta trasmettendo.` });
+            if (!r.ok || !r.body) return res.status(502).json({ message: `MediaMTX ha risposto ${r.status}.` });
+            res.status(200).set({ 'Content-Type': r.headers.get('content-type') || 'application/octet-stream', 'Cache-Control': 'no-store' });
+            await pipeline(Readable.fromWeb(r.body), res);
+        } catch (e) {
+            if (ferma.signal.aborted) return;
+            logger.warn(`[Drone] HLS non riuscito: ${e.message}`);
+            if (!res.headersSent) res.status(502).json({ message: 'MediaMTX non risponde.' });
+            else res.destroy();
         }
     });
 

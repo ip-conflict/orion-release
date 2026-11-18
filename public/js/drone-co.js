@@ -33,6 +33,9 @@
         .dr-chiave code { word-break: break-all; font-size: .85rem; background: var(--secondary-bg-color); padding: 4px 6px; border-radius: 4px; }
         .dr-qr { display: flex; justify-content: center; padding: 6px; background: #fff; border-radius: 6px; width: fit-content; }
         .dr-nota { font-size: .85rem; color: var(--text-muted); margin: 6px 0; }
+        .dr-legame { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .dr-legame label { display: grid; gap: 3px; font-size: .85rem; }
+        .dr-modifica { display: grid; gap: 8px; padding: 8px 0 10px; }
     `;
     const $ = (id) => document.getElementById(id);
     function el(tag, attr = {}, ...figli) {
@@ -48,7 +51,7 @@
     const ora = (d) => (d ? new Date(d).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '');
     const stile = () => { if (!$('dr-stile')) document.head.append(el('style', { id: 'dr-stile', testo: STILE })); };
 
-    let stato = null, pannello = null, chiaveMostrata = null, ultimiDati = null;
+    let stato = null, pannello = null, chiaveMostrata = null, ultimiDati = null, squadreSala = [], inModifica = null;
     let primoPiano = 2610, cascata = 0;
     // Ogni drone guardato ha la sua sessione WebRTC: nel pannello o in una finestra sua, mai in due posti.
     const visioni = new Map();
@@ -80,6 +83,7 @@
         if (!visibile) { chiudi(); for (const id of [...visioni.keys()]) smetti(id); return; }
         let dati = null;
         try { dati = await fetchApi('/api/drone/dirette'); } catch { dati = null; }
+        if (pannello && stato?.puo_creare) squadreSala = await fetchApi('/api/squadre').catch(() => squadreSala);
         const inOnda = (dati?.chiavi || []).filter(k => k.in_onda);
         if (dati) {
             ultimiDati = dati;
@@ -104,6 +108,7 @@
         stile();
         pannello = el('div', { class: 'dr-pannello', role: 'dialog', 'aria-label': 'Drone' });
         document.body.append(pannello);
+        if (stato?.puo_creare) squadreSala = await fetchApi('/api/squadre').catch(() => []);
         try { disegna(await fetchApi('/api/drone/dirette')); } catch (e) { pannello.replaceChildren(el('p', { testo: e.message })); }
     }
 
@@ -221,16 +226,22 @@
         if (inFinestra) parti.push(el('p', { class: 'dr-nota', testo: inFinestra === 1 ? 'Una diretta è in una finestra a parte.' : `${inFinestra} dirette sono in finestre a parte.` }));
         if (inOnda.length > 1 || visioni.size) parti.push(el('p', { class: 'dr-nota', testo: 'Ogni diretta guardata pesa sulla rete della sala, circa 3 Mbit/s l\'una.' }));
         for (const k of chiavi) {
-            const statoTesto = k.revocata_il ? 'tolta' : k.in_onda ? `in onda dalle ${ora(k.in_onda_da)}` : k.ultima_diretta_il ? `ultima diretta alle ${ora(k.ultima_diretta_il)}` : 'mai trasmesso';
+            let statoTesto = k.revocata_il ? 'tolta' : k.in_onda ? `in onda dalle ${ora(k.in_onda_da)}` : k.ultima_diretta_il ? `ultima diretta alle ${ora(k.ultima_diretta_il)}` : 'mai trasmesso';
             const guardata = visioni.get(k.id);
+            const legame = [k.squadra ? `squadra ${k.squadra.nome_radio}` : null, k.pilota ? `pilota ${k.pilota.nome || ''}`.trim() : null].filter(Boolean).join(' · ');
+            if (legame) statoTesto = `${statoTesto} · ${legame}`;
             parti.push(el('div', { class: 'dr-voce', 'data-chiave': k.id },
                 el('span', { class: `dr-stato${k.in_onda ? ' onda' : ''}`, testo: k.in_onda ? 'IN ONDA' : k.revocata_il ? 'TOLTA' : 'SPENTO' }),
                 el('span', { class: 'dr-nome' }, el('strong', { testo: k.nome }), el('small', { testo: guardata ? `${statoTesto} · ${guardata.dove === 'finestra' ? 'in finestra' : 'nel pannello'}` : statoTesto })),
                 k.in_onda && !guardata ? el('button', { type: 'button', class: 'button-style button-small', testo: 'Guarda', title: 'Nel pannello, accanto alle altre', suClick: () => guarda(k) }) : null,
                 k.in_onda && !guardata ? el('button', { type: 'button', class: 'button-style button-secondary button-small', title: 'In una finestra da spostare sopra la mappa', 'aria-label': `Guarda ${k.nome} in una finestra`, suClick: () => guarda(k, 'finestra') },
                     el('i', { class: 'fas fa-up-right-from-square', 'aria-hidden': 'true' })) : null,
+                stato?.puo_creare && !k.revocata_il ? el('button', { type: 'button', class: 'button-style button-secondary button-small', testo: 'Squadra',
+                    title: "Chi lo vede dall'app oltre alla sala e ai caposquadra: la squadra del pilota, o una squadra scelta",
+                    suClick: () => { inModifica = inModifica === k.id ? null : k.id; disegna(ultimiDati); } }) : null,
                 stato?.puo_creare && !k.revocata_il ? el('button', { type: 'button', class: 'button-style button-secondary button-small', testo: 'Togli', title: 'La chiave smette di valere e la diretta si ferma',
                     suClick: () => togli(k) }) : null));
+            if (inModifica === k.id && !k.revocata_il) parti.push(moduloLegame(k));
         }
         if (stato?.puo_creare) parti.push(moduloNuova());
         if (chiaveMostrata) parti.push(chiaveMostrata);
@@ -248,17 +259,57 @@
         } catch (e) { notifica(e.message, 'errore'); }
     }
 
+    // Pilota tra i membri delle squadre (conta la sua squadra), oppure una squadra scelta: decide chi lo vede dall'app.
+    function sceltaLegame(k = null) {
+        const pilota = el('select', { 'aria-label': 'Pilota' }, el('option', { value: '', testo: 'Nessuno' }));
+        for (const s of squadreSala.filter(s => (s.membri || []).length)) {
+            const gruppo = el('optgroup', { label: s.nome_radio || s.nome || 'Squadra' });
+            for (const m of s.membri) gruppo.append(el('option', { value: m.username, testo: `${m.nome || ''} ${m.cognome || ''}`.trim() || m.username }));
+            pilota.append(gruppo);
+        }
+        const squadra = el('select', { 'aria-label': 'Squadra' }, el('option', { value: '', testo: 'Nessuna' }),
+            squadreSala.filter(s => !s.coc).map(s => el('option', { value: String(s.id), testo: s.nome_radio || s.nome })));
+        pilota.value = k?.pilota?.username || '';
+        squadra.value = !k?.pilota && k?.squadra ? String(k.squadra.id) : '';
+        const allinea = () => { squadra.disabled = !!pilota.value; };
+        pilota.addEventListener('change', allinea);
+        allinea();
+        return {
+            nodo: el('div', { class: 'dr-legame' }, el('label', {}, el('span', { testo: 'Pilota (facoltativo)' }), pilota), el('label', {}, el('span', { testo: 'Squadra, se non c\'è il pilota' }), squadra)),
+            valore: () => (pilota.value ? { pilota: pilota.value, squadra_id: null } : { pilota_id: null, squadra_id: squadra.value ? Number(squadra.value) : null })
+        };
+    }
+
+    function moduloLegame(k) {
+        const scelta = sceltaLegame(k);
+        const salva = el('button', { type: 'submit', class: 'button-style button-small', testo: 'Salva' });
+        const f = el('form', { class: 'dr-modifica' },
+            el('p', { class: 'dr-nota', testo: "Dall'app lo vedono sempre la sala e i caposquadra; con un pilota anche la sua squadra, altrimenti la squadra scelta." }),
+            scelta.nodo, salva);
+        f.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            salva.disabled = true;
+            try {
+                await fetchApi(`/api/drone/chiavi/${k.id}`, { method: 'PATCH', body: JSON.stringify(scelta.valore()) });
+                inModifica = null;
+                await aggiorna();
+            } catch (err) { notifica(err.message, 'errore'); salva.disabled = false; }
+        });
+        return f;
+    }
+
     function moduloNuova() {
         const nome = el('input', { type: 'text', maxlength: 80, placeholder: 'Matrice 4E – Marco', 'aria-label': 'Nome del drone o del pilota' });
+        const legame = sceltaLegame();
         const crea = el('button', { type: 'submit', class: 'button-style', testo: 'Dai una chiave al pilota' });
         const f = el('form', { class: 'dr-nuova' }, el('strong', { testo: 'Nuovo collegamento' }),
-            el('p', { class: 'dr-nota', testo: "Vale per questa emergenza (o simulazione) e smette di valere alla chiusura. Il pilota la inserisce una volta in DJI Pilot 2." }),
-            nome, crea);
+            el('p', { class: 'dr-nota', testo: "Vale per questa emergenza (o simulazione) e smette di valere alla chiusura. Il pilota la inserisce una volta in DJI Pilot 2. Dall'app lo vedono la sala, i caposquadra e la squadra del pilota o quella scelta." }),
+            nome, legame.nodo, crea);
         f.addEventListener('submit', async (e) => {
             e.preventDefault();
             crea.disabled = true;
             try {
-                const k = await fetchApi('/api/drone/chiavi', { method: 'POST', body: JSON.stringify({ nome: nome.value }) });
+                const k = await fetchApi('/api/drone/chiavi', { method: 'POST', body: JSON.stringify({ nome: nome.value, ...legame.valore() }) });
                 chiaveMostrata = schedaChiave(k);
                 await aggiorna();
             } catch (err) { notifica(err.message, 'errore'); crea.disabled = false; }

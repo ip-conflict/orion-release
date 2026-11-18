@@ -387,7 +387,7 @@ app.use((err, req, res, next) => {
         setInterval(runDailyExpiryCheck, 3600000);
         setInterval(controllaSegnalazioniInRitardo, 60000);
         setInterval(() => raccogliRegistrazioni().catch(e => logger.error('[Drone] Raccolta non riuscita:', e)), parseInt(process.env.ORION_DRONE_RACCOLTA_MS, 10) || 60000);
-        setInterval(controllaDirette, 10000);
+        setInterval(controllaDirette, parseInt(process.env.ORION_DRONE_CONTROLLO_MS, 10) || 10000);
         cleanupRevokedTokens();
         setInterval(cleanupRevokedTokens, 24 * 3600000);
         notifiche.pulisci();

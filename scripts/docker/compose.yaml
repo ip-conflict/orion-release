@@ -47,6 +47,7 @@ services:
       ORION_DRONE_SEGRETO: ${ORION_DRONE_SEGRETO:-}
       ORION_DRONE_RTMP_PORTA: ${ORION_DRONE_PORTA_RTMP:-1935}
       ORION_DRONE_WEBRTC_PORTA: ${ORION_DRONE_PORTA_WEBRTC:-8189}
+      ORION_DRONE_HLS: http://drone:8888
       ORION_DRONE_REGISTRAZIONI: /drone-registrazioni
     volumes:
       - ./dati:/dati

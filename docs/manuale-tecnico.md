@@ -2142,7 +2142,31 @@ guarda niente. Il video passa invece direttamente fra il browser e MediaMTX,
 sulla porta UDP di WebRTC annunciata con il dominio dell'istanza
 (`webrtcAdditionalHosts`). Ogni diretta guardata, nel pannello o in una
 finestra staccata (`drone-co.js`), è una sessione WHEP sua, che si chiude
-quando la si smette di guardare o il drone esce di onda. Lo schermo a parete apre da solo il primo drone in
+quando la si smette di guardare o il drone esce di onda.
+
+**L'app.** L'app non usa WebRTC ma HLS: MediaMTX produce lo stesso video in
+LL-HLS (`hls: yes` in `mediamtx.yml`, porta 8888 solo nella rete dei
+container, `ORION_DRONE_HLS`) e ORION lo gira all'app da `GET
+/api/drone/dirette/:id/hls/:file`, con le credenziali di MediaMTX come per il
+WHEP. Così passa dalla 443 con la sessione dell'app, senza porte né UDP in
+più, al prezzo di due o tre secondi di ritardo. Il nome del file è controllato
+(niente barre né `..`) e la decisione su chi guarda si tiene dieci secondi,
+perché i pezzi arrivano ogni secondo. `GET /api/app/drone` dà all'app i droni
+che quella persona può vedere, con lo stato in onda, la squadra e il pilota,
+mai la chiave. La regola vale per le richieste con `X-Orion-Client: app`, sia
+HLS sia WHEP: vedono tutto chi ha `emergenze.apertura`, chi è nella squadra
+COC e i caposquadra; gli altri solo il drone della loro squadra. Dal web resta
+la regola di prima, ogni interno, perché il centro operativo lo apre ogni
+interno. La squadra del drone sta in `chiavi_drone` (migrazione
+`drone-squadra`): `pilota_id` e, solo senza pilota, `squadra_id`; con il
+pilota conta la squadra in cui si trova lui in quel momento. Si scelgono alla
+creazione della chiave (`pilota_id`, o `pilota` come nome utente, e
+`squadra_id`) e si cambiano con `PATCH /api/drone/chiavi/:id`, solo con
+`emergenze.apertura`. Nell'app la capacità `drone` c'è a modulo acceso,
+emergenza aperta e per chi è in una squadra, in sala o apre le emergenze; il
+lettore è Media3 (ExoPlayer) con lo stesso client OkHttp delle altre
+richieste, quindi token e `X-Orion-Client` arrivano anche ai pezzi del
+video. Lo schermo a parete apre da solo il primo drone in
 onda in un riquadro.
 
 **Le registrazioni.** MediaMTX registra ogni diretta in spezzoni MP4 da
@@ -2203,7 +2227,9 @@ non risponde, il pilota passa: il limite è sulla banda, non sull'accesso. Fuori
 (almeno 16 caratteri, senza il modulo non parte), `ORION_DRONE_API` e
 `ORION_DRONE_WEBRTC` (di serie `http://drone:9997` e `http://drone:8889`),
 `ORION_DRONE_HOST` e `ORION_DRONE_RTMP_PORTA` per l'indirizzo dato al
-pilota, `ORION_DRONE_WEBRTC_PORTA` per mostrare la porta UDP nelle Impostazioni, `ORION_DRONE_REGISTRAZIONI` per la cartella degli spezzoni.
+pilota, `ORION_DRONE_WEBRTC_PORTA` per mostrare la porta UDP nelle Impostazioni,
+`ORION_DRONE_CONTROLLO_MS` per ogni quanto il server guarda chi è in onda
+(di serie 10 secondi; le prove lo accorciano), `ORION_DRONE_REGISTRAZIONI` per la cartella degli spezzoni.
 
 **Il Matrice 4E.** In DJI Pilot 2: Diretta (Live Stream), RTMP
 personalizzato, l'indirizzo completo dato da ORION (o inquadrato dal QR). Il
@@ -2213,10 +2239,24 @@ collegamento a un hotspot.
 
 `npm run test:drone` prova chiavi, autorizzazioni, visione, sessioni,
 raccolta, cifratura e permessi con un MediaMTX finto
-(`tests/mediamtx-finto.mjs`); il video vero si prova con MediaMTX e un flusso
-mandato da `ffmpeg` (`ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30
--c:v libx264 -preset veryfast -tune zerolatency -f flv
-rtmp://<dominio>/drone/<chiave>`).
+(`tests/mediamtx-finto.mjs`), che però non manda video.
+
+**Provare senza volare.** Con MediaMTX vero sul server, una diretta si
+simula in tre modi, tutti con una chiave data dal pannello Drone come per un
+pilota vero, quindi con autorizzazione, pannello, parete e registrazione
+nell'archivio come in emergenza. Dal computer, `scripts/drone-finto.sh
+<indirizzo completo> [video] [minuti]` manda con `ffmpeg` quello che manda
+DJI Pilot 2: video H.264 a 720p e 30 fotogrammi, senza B-frame, 3 Mbit/s,
+un fotogramma chiave ogni due secondi, audio AAC muto. Senza video manda
+l'immagine di prova con l'orologio, che fa vedere a occhio il ritardo della
+sala; con un video, per esempio una ripresa scaricata dall'archivio, lo
+ripete finché non si ferma con Ctrl+C. Dal telefono, un'app che trasmette in
+RTMP (Larix Broadcaster, gratuita per Android e iPhone) con l'indirizzo
+completo come destinazione prova anche la rete mobile, come il radiocomando
+con la SIM; va impostata in H.264, 720p, 2-4 Mbit/s. Da OBS Studio si sceglie
+un servizio personalizzato con server `rtmp://<dominio>[:porta]/drone` e la
+chiave come chiave dello stream, e nelle impostazioni dell'uscita un
+fotogramma chiave ogni 2 secondi e il profilo baseline, che non usa B-frame.
 
 
 ## 10. L'app Android
@@ -2372,13 +2412,29 @@ batteria vuole le stesse variabili del server (`DB_*`, `JWT_SECRET`,
 stanno fuori dal codice, anche dal `.env`) più `ORION_ADMIN_PASSWORD`, e un
 database di prova: rifiuta `orion_db`, il nome del database delle istanze in
 container. Avvia lei il server, e lo riavvia prima di ogni prova perché i
-limiti di frequenza stanno in memoria; crea l'amministratore se il database
+limiti di frequenza stanno in memoria. L'amministratore entra con la verifica
+in due passaggi, e un codice non vale due volte: ogni accesso aspetterebbe il
+codice successivo, fino a 30 secondi. Per questo le prove tengono la sessione
+dell'amministratore nella cartella temporanea, accanto al segreto della
+verifica (`tests/accesso-prova.mjs`), e la riusano finché il server la
+accetta; i giri con i clic rimettono nel browser i suoi cookie. Nei giri con
+i clic non ci sono attese fisse: `assesta()` di `tests/clic/aiuto.mjs`
+aspetta finché la pagina chiede dati o cambia, mai oltre un massimo, e dove
+si aspetta il server si aspetta la cosa precisa (un pulsante, una richiesta).
+La batteria accorcia i due controlli periodici del server che le prove
+aspettano, con `ORION_DRONE_CONTROLLO_MS` e `ORION_CONTROLLO_COLLEGAMENTI_MS`
+(di serie 10 e 60 secondi); crea l'amministratore se il database
 è vuoto e un volontario di prova per la prova del WebSocket; apre
 un'emergenza per le prove che la vogliono e chiude quella rimasta aperta da
 una prova caduta a metà. Alla fine stampa una riga per prova ed esce con 0
 solo se sono tutte verdi; l'uscita di ognuna va in `ORION_BATTERIA_DIR`, o
 in una cartella temporanea nuova. `npm run test:tutto -- voce allerta`
-lancia solo le prove nominate. Con Chromium in un posto diverso da quello di
+lancia solo le prove nominate. `npm run test:tutto -- --rapida` salta le
+quattro più lente, che insieme fanno due terzi del tempo: i giri con i clic
+(`clic-aree`, `clic-sala`), che aprono il browser su tutte le pagine, e `mfa`
+e `sospensione`, che aspettano davvero codici e sessioni che scadono. Su
+GitHub, a ogni push e pull request gira la batteria rapida; prima di
+pubblicare un'immagine, dalla release o lanciata a mano, quella intera. Con Chromium in un posto diverso da quello di
 Playwright, `ORION_CHROMIUM` dice dove.
 
 Fra quelle con il server, `npm run test:smoke` percorre l'applicazione da

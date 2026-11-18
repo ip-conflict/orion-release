@@ -1,7 +1,7 @@
 // Calendario con i clic: attività con convocazione, risposta del volontario, presenze, assenza, corner case.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/calendario.mjs (di solito da tests/clic-aree.mjs)
-import { CARTELLA_FOTO, browser, contesto, entra, api, BASE } from './aiuto.mjs';
-const OUT = CARTELLA_FOTO; const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
 const { pagina: p, token: admin } = await entra(await contesto(b), 'admin', process.env.ORION_ADMIN_PASSWORD);
@@ -13,20 +13,20 @@ const q = new URL(n.magicLink).searchParams; const pw = `Cal!${suf}Faro9`;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 const locale = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
-await p.goto(BASE + '/calendario.html'); await attendi(2500);
-await p.click('#btn-nuova'); await attendi(800);
+await p.goto(BASE + '/calendario.html'); await assesta(p, 2500);
+await p.click('#btn-nuova'); await assesta(p, 800);
 const tipi = await p.locator('#f-tipo option').evaluateAll(o => o.map(x => x.value).filter(Boolean));
 await p.selectOption('#f-tipo', tipi[0]);
 await p.fill('#f-titolo', `Esercitazione argini ${suf}`);
 await p.fill('#f-inizio', await p.evaluate(() => { const d = new Date(Date.now() - 3600000); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }));
 await p.fill('#f-fine', await p.evaluate(() => { const d = new Date(Date.now() + 3600000); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }));
 await p.fill('#f-luogo', 'Argine del Piave');
-await p.check('input[name="convocazione"][value="scelti"]'); await attendi(400);
-await p.fill('#cerca-persone', `Cal${suf}`); await attendi(400);
+await p.check('input[name="convocazione"][value="scelti"]'); await assesta(p, 400);
+await p.fill('#cerca-persone', `Cal${suf}`); await assesta(p, 400);
 await p.locator('#elenco-scelta input[type=checkbox]').first().check();
 controlla('scelta una persona da convocare', /1 persona scelta/.test(await p.textContent('#conta-scelti')), await p.textContent('#conta-scelti'));
 await p.screenshot({ path: `${OUT}/cal-nuova.png` });
-await p.click('#salva-attivita'); await attendi(2500);
+await p.click('#salva-attivita'); await assesta(p, 2500);
 const elenco = (await api(admin, `/api/attivita?da=${new Date(Date.now() - 86400000).toISOString().slice(0, 10)}&a=${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}`)).corpo;
 const att = (elenco?.attivita || elenco || []).find?.(a => a.titolo === `Esercitazione argini ${suf}`);
 controlla("l'attività è creata", !!att, JSON.stringify(elenco).slice(0, 200));
@@ -34,27 +34,27 @@ controlla("compare nel calendario", await p.locator('.voce-attivita').filter({ h
 
 const ctxV = await contesto(b);
 const { pagina: v } = await entra(ctxV, n.username, pw);
-await v.goto(BASE + '/calendario.html'); await attendi(2500);
+await v.goto(BASE + '/calendario.html'); await assesta(v, 2500);
 controlla('il volontario convocato vede "aspetta la tua risposta"', await v.isVisible('#da-rispondere') && /argini/.test(await v.textContent('#da-rispondere')));
-await v.locator('#da-rispondere a').first().click(); await attendi(1200);
-await v.click('#att-si'); await attendi(1500);
+await v.locator('#da-rispondere a').first().click(); await assesta(v, 1200);
+await v.click('#att-si'); await assesta(v, 1500);
 controlla('risponde "sì" e la risposta resta', /sì|si\b/i.test(await v.textContent('#att-risposta-attuale').catch(() => '')) || (await api(admin, `/api/attivita/${att?.id}`)).corpo?.persone?.find(x => x.id === n.id)?.risposta === 'si');
 await v.screenshot({ path: `${OUT}/cal-risposta.png` });
 await v.keyboard.press('Escape');
-await v.click('#btn-assenza'); await attendi(600);
+await v.click('#btn-assenza'); await assesta(v, 600);
 const dopodomani = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
 await v.fill('#as-dal', dopodomani); await v.fill('#as-al', dopodomani); await v.fill('#as-nota', 'Turno di lavoro');
-await v.locator('#form-assenza button[type=submit]').click(); await attendi(1500);
+await v.locator('#form-assenza button[type=submit]').click(); await assesta(v, 1500);
 controlla("l'assenza si segna e compare nell'elenco", /Turno di lavoro|\d{2}\/\d{2}/.test(await v.textContent('#as-elenco')), await v.textContent('#as-elenco'));
 
-await p.reload(); await attendi(2500);
-await p.locator('.voce-attivita').filter({ hasText: `argini ${suf}` }).first().click(); await attendi(1500);
+await p.reload(); await assesta(p, 2500);
+await p.locator('.voce-attivita').filter({ hasText: `argini ${suf}` }).first().click(); await assesta(p, 1500);
 controlla('nella scheda i conteggi dicono un sì', /1/.test(await p.textContent('#att-conteggi')), await p.textContent('#att-conteggi'));
 controlla('iniziata, si può chiudere con i presenti', await p.isVisible('#att-concludi'));
-await p.click('#att-concludi'); await attendi(1000);
+await p.click('#att-concludi'); await assesta(p, 1000);
 const spuntata = await p.locator('#elenco-presenti .riga-presente').filter({ hasText: `Cal${suf}` }).locator('input[type=checkbox]').isChecked();
 controlla('chi ha detto sì è già spuntato fra i presenti', spuntata);
-await p.locator('#form-presenze button[type=submit]').click(); await attendi(2000);
+await p.locator('#form-presenze button[type=submit]').click(); await assesta(p, 2000);
 const chiusa = (await api(admin, `/api/attivita/${att?.id}`)).corpo;
 controlla("l'attività è conclusa con un presente", chiusa?.stato === 'conclusa' && (chiusa?.presenze || []).some(x => x.user_id === n.id), { stato: chiusa?.stato, presenze: chiusa?.presenze?.length });
 await p.screenshot({ path: `${OUT}/cal-presenze.png` });

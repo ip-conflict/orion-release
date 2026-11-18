@@ -1,7 +1,7 @@
 // Funzioni di supporto con i clic: membro aggiunto, incarico dato dalla scheda, preso e concluso dal membro.
 //   ORION_URL=http://localhost:3010 ORION_ADMIN_PASSWORD=... [ORION_CHROMIUM=...] [ORION_FOTO=cartella] node tests/clic/funzioni.mjs (di solito da tests/clic-aree.mjs)
-import { CARTELLA_FOTO, browser, contesto, entra, api, BASE } from './aiuto.mjs';
-const OUT = CARTELLA_FOTO; const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+import { CARTELLA_FOTO, browser, contesto, entra, api, BASE, assesta } from './aiuto.mjs';
+const OUT = CARTELLA_FOTO;
 const esiti = []; const controlla = (d, ok, x = '') => { esiti.push(ok); console.log(`${ok ? 'OK  ' : 'FAIL'} ${d}${ok ? '' : ` -> ${typeof x === 'string' ? x : JSON.stringify(x)}`}`); };
 const b = await browser();
 const ctx = await contesto(b);
@@ -15,27 +15,27 @@ const n = (await api(admin, '/api/users', { method: 'POST', body: { nome: 'Fede'
 const q = new URL(n.magicLink).searchParams; const pw = `Fz!${suf}Faro9`;
 await api(admin, '/api/auth/reset-password', { method: 'POST', body: { token: q.get('token'), id: Number(q.get('id')), newPassword: pw } });
 
-await p.goto(BASE + '/admin/funzioni.html'); await attendi(2500);
+await p.goto(BASE + '/admin/funzioni.html'); await assesta(p, 2500);
 const schede = p.locator('#fz-elenco > *');
 controlla('ci sono le funzioni di supporto', await schede.count() > 0, await schede.count());
 const prima = p.locator('.fz-funzione:not(.spenta)').first();
 const sigla = (await prima.locator('.fz-sigla').textContent()).trim();
 const casella = prima.locator('input[list="fz-utenti"]');
-await casella.fill(`Fede Funz${suf}`); await attendi(300);
+await casella.fill(`Fede Funz${suf}`); await assesta(casella, 300);
 const opzione = await p.locator('#fz-utenti option').evaluateAll((o, s) => o.map(x => x.value).find(v => v.includes(s)), `Funz${suf}`);
 if (opzione) await casella.fill(opzione);
-await prima.locator('button').filter({ hasText: 'Aggiungi' }).click(); await attendi(1500);
+await prima.locator('button').filter({ hasText: 'Aggiungi' }).click(); await assesta(prima, 1500);
 controlla(`il volontario entra nella ${sigla}`, (await prima.textContent()).includes(`Funz${suf}`), (await prima.textContent()).slice(0, 200));
 await p.screenshot({ path: `${OUT}/fz-membri.png` });
 
 await api(admin, '/api/emergencies/open', { method: 'POST', body: { external_code: `FZ-${suf}` } });
 const seg = (await api(admin, '/api/reports', { method: 'POST', body: { title: `Famiglia da ricollocare ${suf}`, tipo: 'persona' } })).corpo;
-await p.goto(BASE + '/centro-operativo.html'); await attendi(2500);
-await p.click(`.inbox-card[data-report-id="${seg.id}"]`); await attendi(1500);
-await p.locator('button').filter({ hasText: '+ Assegna a una funzione' }).click(); await attendi(600);
+await p.goto(BASE + '/centro-operativo.html'); await assesta(p, 2500);
+await p.click(`.inbox-card[data-report-id="${seg.id}"]`); await assesta(p, 1500);
+await p.locator('button').filter({ hasText: '+ Assegna a una funzione' }).click(); await assesta(p, 600);
 await p.locator(`button[aria-pressed]`).filter({ hasText: sigla }).first().click();
 await p.locator('textarea[placeholder^="Perché se ne deve occupare"]').fill('Due anziani senza casa: serve una sistemazione per stanotte.');
-await p.locator('button.fz-primario').filter({ hasText: 'Assegna' }).click(); await attendi(1500);
+await p.locator('button.fz-primario').filter({ hasText: 'Assegna' }).click(); await assesta(p, 1500);
 const incarichi = (await api(admin, `/api/reports/${seg.id}`)).corpo?.report?.incarichi || [];
 controlla(`l'incarico alla ${sigla} è nella scheda`, incarichi.some(i => i.sigla === sigla && i.stato === 'aperto'), incarichi);
 await p.screenshot({ path: `${OUT}/fz-incarico.png` });
@@ -44,14 +44,14 @@ const ctxV = await contesto(b);
 await ctxV.route(/tile\.openstreetmap\.org|arcgisonline/, r => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }));
 const { pagina: v, token: tokV } = await entra(ctxV, n.username, pw);
 controlla('il membro riceve la notifica dell\'incarico', ((await api(tokV, '/api/notifiche')).corpo?.notifiche || []).some(x => x.tipo === 'incarico_funzione'));
-await v.goto(BASE + '/centro-operativo.html'); await attendi(3000);
+await v.goto(BASE + '/centro-operativo.html'); await assesta(v, 3000);
 controlla('il membro trova il pulsante Funzioni in sala', await v.isVisible('#funzioni-btn'));
-await v.click('#funzioni-btn'); await attendi(1500);
+await v.click('#funzioni-btn'); await assesta(v, 1500);
 controlla('nel pannello c\'è il suo incarico', /ricollocare/.test(await v.textContent('body')));
-await v.locator('button.fz-primario').filter({ hasText: 'Prendo in carico' }).first().click(); await attendi(1200);
-await v.locator('button').filter({ hasText: /^Concludi$/ }).first().click(); await attendi(600);
+await v.locator('button.fz-primario').filter({ hasText: 'Prendo in carico' }).first().click(); await assesta(v, 1200);
+await v.locator('button').filter({ hasText: /^Concludi$/ }).first().click(); await assesta(v, 600);
 await v.locator('textarea[placeholder^="Com\'è andata"]').first().fill('Sistemati in albergo convenzionato.');
-await v.locator('button.fz-primario').filter({ hasText: "Concludi l'incarico" }).first().click(); await attendi(1500);
+await v.locator('button.fz-primario').filter({ hasText: "Concludi l'incarico" }).first().click(); await assesta(v, 1500);
 await v.screenshot({ path: `${OUT}/fz-concluso.png` });
 const dopo = (await api(admin, `/api/reports/${seg.id}`)).corpo;
 controlla("l'incarico è concluso con l'esito", (dopo?.report?.incarichi || []).some(i => i.stato === 'concluso'), dopo?.report?.incarichi);
